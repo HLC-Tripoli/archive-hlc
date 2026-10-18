@@ -2,7 +2,36 @@
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
+    <meta name="theme-color" content="#f4f6f9" />
+    <script>
+      /* تطبيق المظهر المحفوظ قبل الرسم الأول لمنع وميض السمة الخاطئة. */
+      (function () {
+        var mode = "system";
+        try {
+          var stored = localStorage.getItem("hlc-theme");
+          if (stored === "dark" || stored === "light" || stored === "system") {
+            mode = stored;
+          }
+        } catch (error) {
+          /* التخزين غير متاح: نستخدم وضع النظام. */
+        }
+        var dark =
+          mode === "dark" ||
+          (mode === "system" &&
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+        var theme = dark ? "dark" : "light";
+        var root = document.documentElement;
+        root.setAttribute("data-theme", theme);
+        root.setAttribute("data-theme-mode", mode);
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) {
+          meta.setAttribute("content", dark ? "#10151c" : "#f4f6f9");
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="./css/style.css" />
     <link rel="icon" href="./img/logo.svg" />
   </head>
@@ -40,11 +69,14 @@
             <h1 id="pageTitle">لوحة التحكم</h1>
             <p id="today"></p>
           </div>
-          <div class="user-badge">
-            <span class="avatar">م</span>
-            <div>
-              <strong>مدير النظام</strong>
-              <small>نسخة تجريبية</small>
+          <div class="topbar-actions">
+            <div class="theme-toggle-slot" data-theme-toggle></div>
+            <div class="user-badge">
+              <span class="avatar">م</span>
+              <div>
+                <strong>مدير النظام</strong>
+                <small>نسخة تجريبية</small>
+              </div>
             </div>
           </div>
         </header>
@@ -222,6 +254,10 @@
               استعادة النسخة الاحتياطية
             </button>
             <hr />
+            <h3>المظهر</h3>
+            <p>اختر مظهر الواجهة: النظام أو الداكن أو الفاتح.</p>
+            <div class="theme-toggle-slot" data-theme-toggle></div>
+            <hr />
             <h3>مسح البيانات التجريبية</h3>
             <p class="danger-text">
               سيؤدي ذلك إلى حذف المعاملات والإدارات من هذا المتصفح.
@@ -294,6 +330,7 @@
     </div>
     <div id="toast" class="toast"></div>
     <div id="loginScreen" class="login-screen">
+      <div class="login-theme-toggle" data-theme-toggle></div>
       <div class="login-box">
         <div class="login-logo">H</div>
         <h1>هاتف ليبيا</h1>
@@ -321,6 +358,7 @@
         <small>واجهة دخول تجريبية للتطوير فقط</small>
       </div>
     </div>
+    <script src="./js/theme.js"></script>
     <script src="./js/script.js"></script>
   </body>
 </html>
