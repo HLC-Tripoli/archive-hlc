@@ -641,6 +641,20 @@ tbody tr:hover {
   background: var(--input-bg);
   color: var(--input-text);
 }
+input[type="file"]::file-selector-button {
+  font-family: inherit;
+  font-size: inherit;
+  margin-inline-end: 12px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--btn-neutral-bg);
+  color: var(--btn-neutral-text);
+  cursor: pointer;
+}
+input[type="file"]::file-selector-button:hover {
+  background: var(--btn-neutral-hover-bg);
+}
 .hint {
   display: block;
   color: var(--muted);
@@ -1011,4 +1025,5 @@ hr,
   border: 0;
   padding: 10px 14px;
   border-radius: 8px;
+  white-space: nowrap;
 }
