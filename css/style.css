@@ -224,10 +224,16 @@ button {
   display: grid;
   place-items: center;
   background: var(--accent);
-  color: white;
   border-radius: 13px;
-  font-size: 27px;
-  font-weight: bold;
+}
+/* شعار الهوية الفعلي (logo.svg): ملف الشعار أحمر داكن، لذا نعرضه أبيض داخل الشارة الحمراء */
+.logo img,
+.login-logo img {
+  display: block;
+  width: 66%;
+  height: 66%;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
 }
 .brand h2 {
   margin: 0 0 7px;
@@ -978,9 +984,6 @@ hr,
   place-items: center;
   border-radius: 18px;
   background: var(--accent);
-  color: white;
-  font-size: 36px;
-  font-weight: bold;
 }
 .login-box h1 {
   margin-bottom: 8px;
