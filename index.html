@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Untitled</title>
+    <link rel="stylesheet" href="./style.css" />
+    <link rel="icon" href="./logo.svg" />
+  </head>
+
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="logo">H</div>
+          <div>
+            <h2>هاتف ليبيا</h2>
+            <p>الأرشيف الإلكتروني</p>
+          </div>
+        </div>
+        <div class="menu-title">القائمة الرئيسية</div>
+        <button class="menu active" data-page="dashboard">
+          🏠 لوحة التحكم
+        </button>
+        <button class="menu" data-page="incoming">📥 المراسلات الواردة</button>
+        <button class="menu" data-page="outgoing">📤 المراسلات الصادرة</button>
+        <button class="menu" data-page="archive">🗄️ الأرشيف الإلكتروني</button>
+        <button class="menu" data-page="departments">
+          🏢 الإدارات والأقسام
+        </button>
+        <button class="menu" data-page="reports">📊 التقارير</button>
+        <button class="menu" data-page="settings">⚙️ الإعدادات</button>
+        <div class="sidebar-footer">
+          منظومة إدارة الوثائق<br />
+          الإصدار التجريبي 1.0
+        </div>
+      </aside>
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <h1 id="pageTitle">لوحة التحكم</h1>
+            <p id="today"></p>
+          </div>
+          <div class="user-badge">
+            <span class="avatar">م</span>
+            <div>
+              <strong>مدير النظام</strong>
+              <small>نسخة تجريبية</small>
+            </div>
+          </div>
+        </header>
+        <section id="dashboard" class="page active">
+          <div class="welcome">
+            <div>
+              <h2>مرحباً بك في الأرشيف الإلكتروني</h2>
+              <p>إدارة المراسلات والوثائق من مكان واحد.</p>
+            </div>
+            <button class="button white-button" onclick="openForm('incoming')">
+              + تسجيل معاملة
+            </button>
+          </div>
+          <div class="stats">
+            <div class="stat-card">
+              <div class="stat-top"><span>الوارد</span><span>📥</span></div>
+              <h2 id="incomingCount">0</h2>
+              <small>إجمالي المراسلات الواردة</small>
+            </div>
+            <div class="stat-card">
+              <div class="stat-top"><span>الصادر</span><span>📤</span></div>
+              <h2 id="outgoingCount">0</h2>
+              <small>إجمالي المراسلات الصادرة</small>
+            </div>
+            <div class="stat-card">
+              <div class="stat-top"><span>الأرشيف</span><span>🗄️</span></div>
+              <h2 id="totalCount">0</h2>
+              <small>إجمالي الوثائق المسجلة</small>
+            </div>
+            <div class="stat-card">
+              <div class="stat-top">
+                <span>قيد الإجراء</span><span>⏳</span>
+              </div>
+              <h2 id="pendingCount">0</h2>
+              <small>معاملات تحتاج إلى متابعة</small>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>أحدث المعاملات</h2>
+              <input
+                id="dashboardSearch"
+                class="search"
+                placeholder="ابحث عن معاملة..."
+              />
+            </div>
+            <div id="dashboardTable"></div>
+          </div>
+        </section>
+        <section id="incoming" class="page">
+          <div class="panel">
+            <div class="panel-heading">
+              <div>
+                <h2>المراسلات الواردة</h2>
+                <p>تسجيل ومتابعة المراسلات المستلمة.</p>
+              </div>
+              <button class="button" onclick="openForm('incoming')">
+                + إضافة وارد
+              </button>
+            </div>
+            <div id="incomingTable"></div>
+          </div>
+        </section>
+        <section id="outgoing" class="page">
+          <div class="panel">
+            <div class="panel-heading">
+              <div>
+                <h2>المراسلات الصادرة</h2>
+                <p>تسجيل ومتابعة المراسلات المرسلة.</p>
+              </div>
+              <button class="button" onclick="openForm('outgoing')">
+                + إضافة صادر
+              </button>
+            </div>
+            <div id="outgoingTable"></div>
+          </div>
+        </section>
+        <section id="archive" class="page">
+          <div class="panel">
+            <div class="panel-heading">
+              <div>
+                <h2>الأرشيف الإلكتروني</h2>
+                <p>جميع الوثائق المسجلة في المنظومة.</p>
+              </div>
+              <button class="button" onclick="exportCSV()">تصدير CSV</button>
+            </div>
+            <div class="filters">
+              <input
+                id="archiveSearch"
+                class="search"
+                placeholder="رقم المعاملة أو العنوان أو الجهة..."
+              />
+              <select id="typeFilter">
+                <option value="">جميع الأنواع</option>
+                <option value="incoming">وارد</option>
+                <option value="outgoing">صادر</option>
+              </select>
+              <select id="statusFilter">
+                <option value="">جميع الحالات</option>
+                <option value="جديدة">جديدة</option>
+                <option value="قيد الإجراء">قيد الإجراء</option>
+                <option value="مكتملة">مكتملة</option>
+                <option value="مؤرشفة">مؤرشفة</option>
+              </select>
+            </div>
+            <div id="archiveTable"></div>
+          </div>
+        </section>
+        <section id="departments" class="page">
+          <div class="panel">
+            <h2>الإدارات والأقسام</h2>
+            <p>إضافة الإدارات المستخدمة في تصنيف المعاملات.</p>
+            <form id="departmentForm" class="department-form">
+              <input
+                id="departmentName"
+                placeholder="اسم الإدارة أو القسم"
+                required
+                maxlength="100"
+              />
+              <button class="button" type="submit">إضافة الإدارة</button>
+            </form>
+            <div id="departmentList"></div>
+          </div>
+        </section>
+        <section id="reports" class="page">
+          <div class="panel">
+            <h2>التقارير والإحصائيات</h2>
+            <p>ملخص المعاملات المسجلة في النسخة الحالية.</p>
+            <div class="report-grid">
+              <div class="report-box">
+                <span>إجمالي الوثائق</span>
+                <strong id="reportTotal">0</strong>
+              </div>
+              <div class="report-box">
+                <span>المعاملات المكتملة</span>
+                <strong id="reportCompleted">0</strong>
+              </div>
+              <div class="report-box">
+                <span>المعاملات قيد الإجراء</span>
+                <strong id="reportPending">0</strong>
+              </div>
+              <div class="report-box">
+                <span>الوثائق المؤرشفة</span>
+                <strong id="reportArchived">0</strong>
+              </div>
+            </div>
+            <button class="button print-button" onclick="window.print()">
+              🖨️ طباعة التقرير
+            </button>
+            <button class="button secondary-button" onclick="exportCSV()">
+              تصدير البيانات CSV
+            </button>
+          </div>
+        </section>
+        <section id="settings" class="page">
+          <div class="panel">
+            <h2>إعدادات المنظومة</h2>
+            <p>اسم النظام: منظومة الأرشيف الإلكتروني</p>
+            <p>الجهة: هاتف ليبيا</p>
+            <p>نوع النسخة: نموذج أولي يعمل داخل المتصفح.</p>
+            <hr />
+            <h3>نسخ بيانات النموذج الأولي</h3>
+            <p>يمكنك تنزيل ملف JSON يحتوي على بيانات المعاملات والإدارات.</p>
+            <button class="button" onclick="backupData()">
+              تنزيل نسخة احتياطية JSON
+            </button>
+            <hr />
+            <h3>استعادة بيانات</h3>
+            <input
+              type="file"
+              id="restoreFile"
+              accept=".json,application/json"
+            />
+            <button class="button secondary-button" onclick="restoreData()">
+              استعادة النسخة الاحتياطية
+            </button>
+            <hr />
+            <h3>مسح البيانات التجريبية</h3>
+            <p class="danger-text">
+              سيؤدي ذلك إلى حذف المعاملات والإدارات من هذا المتصفح.
+            </p>
+            <button class="button danger-button" onclick="clearAllData()">
+              مسح جميع البيانات
+            </button>
+          </div>
+        </section>
+      </main>
+    </div>
+    <div class="modal" id="documentModal">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h2 id="formTitle">تسجيل معاملة جديدة</h2>
+          <button type="button" class="close-button" onclick="closeForm()">
+            ✕
+          </button>
+        </div>
+        <form id="documentForm">
+          <label for="reference">رقم المعاملة *</label>
+          <input id="reference" required maxlength="100" />
+          <label for="title">عنوان المعاملة *</label>
+          <input id="title" required maxlength="200" />
+          <label for="type">نوع المعاملة *</label>
+          <select id="type" required>
+            <option value="incoming">وارد</option>
+            <option value="outgoing">صادر</option>
+          </select>
+          <label for="date">تاريخ المعاملة *</label>
+          <input id="date" type="date" required />
+          <label for="sender">الجهة المرسلة</label>
+          <input id="sender" maxlength="200" />
+          <label for="recipient">الجهة المستلمة</label>
+          <input id="recipient" maxlength="200" />
+          <label for="department">الإدارة المختصة</label>
+          <select id="department">
+            <option value="">غير محددة</option>
+          </select>
+          <label for="status">حالة المعاملة</label>
+          <select id="status">
+            <option value="جديدة">جديدة</option>
+            <option value="قيد الإجراء">قيد الإجراء</option>
+            <option value="مكتملة">مكتملة</option>
+            <option value="مؤرشفة">مؤرشفة</option>
+          </select>
+          <label for="attachment">ملف مرفق</label>
+          <input
+            id="attachment"
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+          />
+          <small class="hint"
+            >النسخة الحالية تسجل اسم الملف فقط، ولا تحفظ محتوياته.</small
+          >
+          <label for="notes">ملاحظات</label>
+          <textarea id="notes" rows="3" maxlength="2000"></textarea>
+          <div class="form-actions">
+            <button type="submit" class="button">حفظ المعاملة</button>
+            <button
+              type="button"
+              class="button secondary-button"
+              onclick="closeForm()"
+            >
+              إلغاء
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div id="toast" class="toast"></div>
+    <div id="loginScreen" class="login-screen">
+      <div class="login-box">
+        <div class="login-logo">H</div>
+        <h1>هاتف ليبيا</h1>
+        <p>منظومة الأرشيف الإلكتروني</p>
+        <form id="loginForm">
+          <label for="loginUsername">اسم المستخدم</label>
+          <input
+            id="loginUsername"
+            type="text"
+            placeholder="أدخل اسم المستخدم"
+            required
+          />
+          <label for="loginPassword">كلمة المرور</label>
+          <input
+            id="loginPassword"
+            type="password"
+            placeholder="أدخل كلمة المرور"
+            required
+          />
+          <button type="submit" class="button login-button">
+            تسجيل الدخول
+          </button>
+          <p id="loginMessage" class="login-message"></p>
+        </form>
+        <small>واجهة دخول تجريبية للتطوير فقط</small>
+      </div>
+    </div>
+    <script src="./script.js"></script>
+  </body>
+</html>
