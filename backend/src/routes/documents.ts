@@ -34,7 +34,9 @@ const BODY_PROPERTIES = {
   date: { type: 'string', maxLength: 10 },
   sender: { type: 'string', maxLength: 200 },
   recipient: { type: 'string', maxLength: 200 },
-  departmentId: { anyOf: [{ type: 'string', maxLength: 64 }, { type: 'null' }] },
+  // ملاحظة: استخدام مصفوفة الأنواع (بدل anyOf) ضروري لأن Fastify/Ajv مع coerceTypes
+  // يحوّل null إلى "" عند مطابقة فرع string في anyOf، فيفشل إدراج uuid لفارغ.
+  departmentId: { type: ['string', 'null'], maxLength: 64 },
   status: { type: 'string', enum: DOCUMENT_STATUSES as unknown as string[] },
   notes: { type: 'string', maxLength: 4000 },
 } as const;

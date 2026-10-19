@@ -125,6 +125,38 @@ test('employee creates a document; invalid payloads are rejected with Arabic val
   assert.equal(audit.rows.length, 1);
 });
 
+test('departmentId: null is accepted on create and update without coercion to an empty string', async () => {
+  const created = await createDocument({
+    reference: 'REF-NULL-DEPT',
+    title: 'بدون إدارة',
+    type: 'incoming',
+    date: '2026-05-20',
+    departmentId: null,
+  });
+  const detail = await apiRequest(context.app, employeeClient, 'GET', `/documents/${created.id}`);
+  assert.equal(detail.statusCode, 200);
+  assert.equal((detail.json() as { document: { department: unknown } }).document.department, null);
+
+  const departmentId = await createDepartment('إدارة الاختبار');
+  const withDepartment = await createDocument({
+    reference: 'REF-WITH-DEPT',
+    title: 'مع إدارة',
+    type: 'incoming',
+    date: '2026-05-20',
+    departmentId,
+  });
+
+  const cleared = await apiRequest(
+    context.app,
+    employeeClient,
+    'PATCH',
+    `/documents/${withDepartment.id}`,
+    { payload: { departmentId: null } },
+  );
+  assert.equal(cleared.statusCode, 200, cleared.body);
+  assert.equal((cleared.json() as { document: { department: unknown } }).document.department, null);
+});
+
 test('duplicate references are rejected regardless of letter case', async () => {
   await createDocument({ reference: 'INV-100', title: 'مرجع فريد', type: 'incoming', date: '2026-01-10' });
 
