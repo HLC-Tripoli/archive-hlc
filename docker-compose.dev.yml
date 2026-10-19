@@ -1,0 +1,130 @@
+# =============================================================================
+# منظومة الأرشيف الإلكتروني — هاتف ليبيا
+# ملف Compose للتطوير المحلي من المستودع المصدري (بناء محلي للصور) — ليس للنشر.
+#
+# الاستخدام:
+#   cp .env.example .env        # مرة واحدة، وعدّل القيم (COOKIE_SECURE=false محلياً)
+#   docker compose -f docker-compose.dev.yml up -d --build
+#
+# ملاحظات مهمة:
+#   - هذا الملف يبني الصور محلياً من المصدر:
+#       archive-hlc-api:local  (من ./backend)
+#       archive-hlc-web:local  (من جذر المستودع عبر deploy/angie/Dockerfile)
+#     أما النشر الإنتاجي فيستخدم ملف docker-compose.yml الجذري الذي يسحب صوراً
+#     جاهزة من GHCR ولا يبني شيئاً محلياً.
+#   - اسم المشروع `archive-hlc-dev` مختلف عن اسم مشروع الإنتاج `archive-hlc`
+#     كي لا تتشارك بيئات التطوير والإنتاج نفس الحجم/البيانات على الجهاز نفسه.
+#   - قاعدة البيانات لا تُنشر خارج الشبكة الداخلية إطلاقاً.
+# =============================================================================
+name: archive-hlc-dev
+
+services:
+  # ---------------------------------------------------------------------------
+  # قاعدة البيانات (PostgreSQL 18) — حجم دائم خاص بالتطوير، بلا نشر منافذ خارجي
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hlc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?يجب ضبط POSTGRES_PASSWORD في ملف .env}
+      POSTGRES_DB: ${POSTGRES_DB:-archive_hlc}
+    volumes:
+      # تخطيط PostgreSQL 18: يُوصَل المجلد الأعلى /var/lib/postgresql
+      - pgdata:/var/lib/postgresql
+    networks:
+      - backend
+    healthcheck:
+      # فحص عبر TCP (127.0.0.1) وليس المقبس المحلي: أثناء تهيئة الصورة الأولية
+      # يعمل خادم مؤقت على المقبس فقط، ما يجعل الفحص السطحي "سليماً" قبل جهوزية
+      # الخادم الفعلي على الشبكة — وهذا يسبب فشل خدمة الترحيلات بـ ECONNREFUSED.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # خدمة الترحيلات: تعمل مرة واحدة ثم تتوقف بنجاح قبل تشغيل الخادم
+  # ---------------------------------------------------------------------------
+  migrate:
+    build:
+      context: ./backend
+    image: archive-hlc-api:local
+    command: ["node", "dist/db/migrate-cli.js"]
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - backend
+
+  # ---------------------------------------------------------------------------
+  # خادم واجهة برمجة التطبيقات (Fastify) — بناء محلي من ./backend
+  # المرفقات تُخزَّن على مجلد المضيف المرتبط (ARCHIVE_UPLOADS_PATH) ضمن حجم دائم،
+  # ويصل إليه الخادم وحده عبر المسار الداخلي /data/uploads.
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: ./backend
+    image: archive-hlc-api:local
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # المرفقات تبقى على المضيف: تصمد أمام إعادة إنشاء الحاوية وترقية الصور.
+      # يجب إنشاء المجلد مسبقاً بملكية مستخدم التشغيل (uid=1000) — راجع README.
+      - "${ARCHIVE_UPLOADS_PATH:-./archive/files/uploads}:/data/uploads"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - backend
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # ---------------------------------------------------------------------------
+  # الواجهة الأمامية + الوكيل العكسي (Angie) — بناء محلي من جذر المستودع
+  # المنفذ المنشور الوحيد للخارج هو منفذ الواجهة (افتراضياً 8080).
+  # ---------------------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: deploy/angie/Dockerfile
+    image: archive-hlc-web:local
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local

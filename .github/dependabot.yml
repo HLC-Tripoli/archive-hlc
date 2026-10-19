@@ -1,0 +1,17 @@
+# تحديثات أسبوعية مثبّتة: إجراءات GitHub Actions المثبّتة على SHA، وصور
+# Dockerfiles. لا تحديثات npm تلقائية هنا حتى لا تفتح طلبات سحب غير مراجعة على
+# اعتماديات الخادم — تُحدَّث يدوياً عند الحاجة.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /deploy/angie
+    schedule:
+      interval: weekly

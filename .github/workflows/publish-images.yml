@@ -1,0 +1,189 @@
+# =============================================================================
+# منظومة الأرشيف الإلكتروني — سير عمل البناء والنشر
+#
+# المهام:
+#   - backend:  تثبيت اعتماديات الخادم عبر lockfile، فحص TypeScript، وتشغيل كامل
+#               حزمة اختبارات الخادم على PostgreSQL 18 (حاوية خدمة مؤقتة).
+#   - validate: التحقق من ملفات Compose عبر scripts/validate-compose.sh
+#               (الإنتاج: بلا أي build: وبصور GHCR فقط — التطوير: بناء محلي).
+#   - images:   بناء صورة api وصورة web على مصفوفة، ونشرهما إلى GHCR فقط بعد
+#               نجاح المهمتين السابقتين وعند الدفع إلى main أو وسم إصدار v*.
+#               طلبات السحب تبني الصور للتحقق دون نشر.
+#
+# الوسوم المنشورة (حزمة GHCR واحدة باسم المستودع):
+#   ghcr.io/mohandl3g/archive-hlc:api-latest            — أحدث بناء ناجح على main
+#   ghcr.io/mohandl3g/archive-hlc:web-latest            — أحدث بناء ناجح على main
+#   ghcr.io/mohandl3g/archive-hlc:api-sha-<short-sha>   — تثبيت التزام محدد
+#   ghcr.io/mohandl3g/archive-hlc:web-sha-<short-sha>
+#   ghcr.io/mohandl3g/archive-hlc:api-v1.2.3            — وسم إصدار (v*)
+#   ghcr.io/mohandl3g/archive-hlc:web-v1.2.3
+#
+# ملاحظة: الإجراءات الخارجية مثبّتة على SHA التزامات المراجَعة مع تعليق الإصدار
+# (يحدّثها Dependabot أسبوعياً — راجع .github/dependabot.yml).
+# =============================================================================
+name: CI — بناء الصور ونشرها إلى GHCR
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: images-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# صلاحيات دنيا على مستوى السير كله: قراءة الشيفرة فقط.
+# صلاحية كتابة حزم GHCR تُمنح لمهمة النشر وحدها أدناه.
+permissions:
+  contents: read
+
+env:
+  IMAGE_REPO: ghcr.io/mohandl3g/archive-hlc
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) اختبارات الخادم وفحص الأنواع
+  # ---------------------------------------------------------------------------
+  backend:
+    name: اختبارات الخادم وفحص الأنواع
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: hlc
+          POSTGRES_PASSWORD: ci-only-postgres-password
+          POSTGRES_DB: hlc_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -p 5432 -U hlc -d hlc_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+          --health-start-period 10s
+    steps:
+      - name: جلب الشيفرة
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: تهيئة Node.js مع تخزين npm مؤقت
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: تثبيت اعتماديات الخادم عبر lockfile (npm ci)
+        working-directory: backend
+        run: npm ci
+      - name: فحص TypeScript بلا إخراج
+        working-directory: backend
+        run: npm run typecheck
+      - name: تشغيل حزمة اختبارات الخادم كاملة
+        working-directory: backend
+        env:
+          DATABASE_URL: postgres://hlc:ci-only-postgres-password@127.0.0.1:5432/hlc_test
+        run: npm test
+
+  # ---------------------------------------------------------------------------
+  # 2) التحقق من إعدادات النشر (Compose الإنتاجي والتطويري + الاستبعادات)
+  # ---------------------------------------------------------------------------
+  validate:
+    name: التحقق من إعدادات Compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: جلب الشيفرة
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: التحقق من ملفات Compose وإعدادات النشر
+        run: ./scripts/validate-compose.sh
+
+  # ---------------------------------------------------------------------------
+  # 3) بناء الصور (مصفوفة: api وweb) ونشرها إلى GHCR
+  # ---------------------------------------------------------------------------
+  images:
+    name: صورة ${{ matrix.component }}
+    needs: [backend, validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # خادم API — سياق البناء هو مجلد backend (نفس صورة الإنتاج)
+          - component: api
+            context: ./backend
+            file: backend/Dockerfile
+          # الواجهة + Angie — سياق البناء جذر المستودع (الملفات الثابتة + deploy/angie)
+          - component: web
+            context: .
+            file: deploy/angie/Dockerfile
+    steps:
+      - name: جلب الشيفرة
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: تهيئة Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: حساب أوسمة الصورة
+        id: meta
+        env:
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA:0:7}"
+          version="main-${short_sha}"
+          tags="${IMAGE_REPO}:${COMPONENT}-sha-${short_sha}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME}"
+            tags="${tags},${IMAGE_REPO}:${COMPONENT}-${GITHUB_REF_NAME}"
+          elif [ "${GITHUB_REF_TYPE}" = "branch" ] && [ "${GITHUB_REF_NAME}" = "main" ]; then
+            tags="${tags},${IMAGE_REPO}:${COMPONENT}-latest"
+          fi
+          {
+            echo "tags=${tags}"
+            echo "version=${version}"
+            echo "short_sha=${short_sha}"
+          } >> "$GITHUB_OUTPUT"
+      - name: تسجيل الدخول إلى GHCR (يُتخطى في طلبات السحب)
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: بناء الصورة (ونشرها عند main أو وسوم الإصدار)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            VCS_REF=${{ github.sha }}
+            IMAGE_VERSION=${{ steps.meta.outputs.version }}
+          # تخزين مؤقت منفصل لكل مكوّن كي لا تتلوث ذاكرات البناء إحداهما بالأخرى
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+      - name: ملخص البناء في سجل السير
+        run: |
+          {
+            echo "### الصورة: ${{ matrix.component }}"
+            echo ""
+            echo "- المستودع: \`${IMAGE_REPO}\`"
+            echo "- الالتزام: \`${{ github.sha }}\`"
+            echo "- إصدار الصورة: \`${{ steps.meta.outputs.version }}\`"
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "- الوضع: بناء تحقق فقط — طلبات السحب لا تنشر صوراً إلى GHCR"
+            else
+              echo "- الوضع: نُشرت إلى GHCR"
+              echo ""
+              echo "الوسوم المنشورة:"
+              echo '```'
+              printf '%s' "${{ steps.meta.outputs.tags }}" | tr ',' '\n'
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
