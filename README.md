@@ -1,70 +1,306 @@
-# archive-hlc
+# منظومة الأرشيف الإلكتروني — هاتف ليبيا
 
-## أرشيف هاتف ليبيا الإلكتروني — Archive System for HLC
+نظام أرشيف مراسلات ووثائق كامل، بواجهة عربية RTL، يتكوّن من واجهة أمامية ثابتة
+(HTML/CSS/JS بدون أطر عمل) وخادم REST مكتوب بـ TypeScript (Fastify) وقاعدة بيانات
+PostgreSQL 18 وتخزين كائني متوافق مع S3 (RustFS)، تعمل جميعها عبر Docker Compose
+خلف خادم Angie الذي يقدّم الواجهة ويوكّل طلبات `/api/` إلى الخادم.
 
-نظام أرشيف إلكتروني ثابت (Static) بواجهة عربية تدعم الاتجاه من اليمين إلى اليسار (RTL)،
-مبني بـ HTML وCSS وJavaScript فقط دون أي إطار عمل أو خطوة بناء أو طلبات خارجية.
+An Arabic RTL correspondence archive for Hatif Libya: static frontend served by Angie,
+a Fastify (TypeScript) REST API, PostgreSQL 18 and S3-compatible object storage (RustFS),
+orchestrated with Docker Compose. All application data lives on the server; the browser
+keeps only the theme preference and optional legacy demo data awaiting migration.
 
-A plain static Arabic RTL single-page app for archiving Hatif Libya correspondence
-and documents. No frameworks, no build step, no CDN — it runs fully offline.
+---
 
-## Project structure
+## 1) البنية العامة
+
+```
+المتصفح (RTL، عربي)
+   │  HTTPS (يُنهى خارجياً أو في Angie — انظر قسم TLS)
+   ▼
+Angie (المنافذ: 80 داخل الحاوية، يُنشر على WEB_PORT)
+   ├── ملفات ثابتة: index.html, css/, js/, img/
+   └── /api/  ⇢  خادم Fastify (api:3000, غير منشور خارجياً)
+                     │
+                     ├── PostgreSQL 18 (db:5432، داخل شبكة Compose فقط)
+                     └── RustFS (S3، خارج شبكة Compose عبر host.docker.internal أو عنوان S3_ENDPOINT)
+```
+
+- **الواجهة الأمامية**: `index.html` + `css/style.css` + `js/` — بدون أي إطار عمل، بدون
+  خطوة بناء، بدون موارد خارجية (لا CDN، لا خطوط خارجية). الاتصال بالخادم عبر `js/api.js`
+  الذي يضيف ترويسة CSRF ويعالج الأخطاء العربية وانتهاء الجلسة.
+- **الخادم**: `backend/` — Fastify 5، TypeScript صارم (ESM/NodeNext)، مخططات JSON لكل
+  المدخلات، تحقق من الصلاحيات على كل مسار، تسجيل تدقيق لكل العمليات الحساسة.
+- **قاعدة البيانات**: `backend/migrations/0001_init.sql` — تُدار بمرحّل خاص
+  (`src/db/migrate.ts`) يتحقق من بصمات الملفات (SHA-256) ويرفض أي تعديل على ترحيل مطبَّق.
+- **التخزين**: بروتوكول S3 عبر `@aws-sdk/client-s3` — الملفات تُخزَّن في دلو S3،
+  وقاعدة البيانات تحتفظ بالمفاتيح والأحجام والبصمات فقط (لا تُخزَّن الملفات في PostgreSQL).
+
+## 2) هيكل المستودع
 
 ```
 .
-├── index.html      # Application markup (all pages, modal, login screen)
-├── css/
-│   └── style.css   # Styles: light/dark themes via CSS custom properties
+├── index.html                 # هيكل الواجهة (كل الصفحات والنوافذ)
+├── css/style.css              # الأنماط (مظهر فاتح/داكن عبر متغيرات CSS)
 ├── js/
-│   ├── theme.js    # Theme controller (System / Dark / Light segmented toggle)
-│   └── script.js   # App logic (documents, departments, login, export)
-├── img/
-│   └── logo.svg    # Logo / favicon
+│   ├── theme-pre.js           # تطبيق المظهر قبل الرسم الأول (في <head>)
+│   ├── theme.js               # وحدة تحكم المظهر (نظام/داكن/فاتح)
+│   ├── api.js                 # عميل fetch موحّد (CSRF، أخطاء عربية، تنزيلات)
+│   └── script.js              # منطق التطبيق بكامله
+├── img/logo.svg
+├── docker-compose.yml         # db + migrate + api + web
+├── .env.example               # نموذج الإعدادات (انسخه إلى .env)
+├── deploy/angie/              # صورة Angie: الإعدادات + رؤوس الأمان
+├── backend/
+│   ├── Dockerfile             # بناء متعدد المراحل، تشغيل بمستخدم غير جذري
+│   ├── migrations/            # ترحيلات SQL مرقّمة
+│   ├── src/
+│   │   ├── app.ts             # تجميع التطبيق (Plugin/Route registration)
+│   │   ├── config.ts          # قراءة والتحقق من متغيرات البيئة
+│   │   ├── index.ts           # نقطة التشغيل
+│   │   ├── db/                # pool + مرحّل الترحيلات + واجهة CLI
+│   │   ├── lib/               # أدوات: أخطاء، أمان، تحقق، CSV، تواريخ، SQL
+│   │   ├── plugins/auth.ts    # حراس الصلاحيات (requireAuth / requireAdmin) + CSRF
+│   │   ├── routes/            # المسارات: auth, users, departments, documents,
+│   │   │                      #   files, imports, stats, audit, health
+│   │   ├── services/          # منطق الأعمال لكل كيان + storage (S3 / معطّل)
+│   │   └── scripts/           # create-admin (تهيئة أول مدير)
+│   └── test/                  # اختبارات آلية (node:test) — 01..09
 └── README.md
 ```
 
-## Run locally
+## 3) المتطلبات المسبقة
 
-Serve the folder with any static file server, for example:
+- Docker Engine مع إضافة Compose v2 على مضيف النشر.
+- إمكانية سحب الصور: `postgres:18`، `node:24-bookworm-slim` (بناء)،
+  `docker.angie.software/angie:1.12.4-alpine`.
+- خدمة تخزين S3 (RustFS أو غيرها) جاهزة مع مفتاح وصول وسري.
+- (اختياري) طرفية TLS أمام Angie أو شهادة داخل إعداد Angie للإنتاج — انظر قسم TLS.
+- للتطوير المحلي للخادم: Node.js ≥ 20.19 (يُفضَّل 24) و npm.
+
+## 4) الإعداد (‎.env‎)
+
+انسخ `.env.example` إلى `.env` بجانب `docker-compose.yml` وعدّل القيم. لا تُودِع `.env` في Git.
+
+المتغيرات الأساسية:
+
+| المتغيّر | الوصف |
+| --- | --- |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | بيانات قاعدة البيانات (تُنشأ عند أول تشغيل). |
+| `DATABASE_URL` | رابط الاتصال؛ يجب أن يطابق الثلاثة أعلاه ويشير إلى المضيف `db`. |
+| `NODE_ENV=production` | يفعّل: إلزام إعداد S3، كوكي Secure افتراضي، وثوق الوكيل العكسي. |
+| `PUBLIC_ORIGIN` | الأصل العام للمنظومة (مثل `https://archive.example.com`). عند ضبطه يُفرض على كل الطلبات المتغيّرة. اتركه فارغاً خلف وكيل عكسي موحّد. |
+| `TRUST_PROXY=true` | خلف Angie يجب أن يبقى `true` (يُفعّل احترام `X-Forwarded-*`). |
+| `SESSION_TTL_HOURS` | مدة الجلسة بالساعات (افتراضي 12). |
+| `COOKIE_SECURE` | `true` في الإنتاج مع HTTPS. اضبطها `false` مؤقتاً فقط للاختبار على HTTP. |
+| `UPLOAD_MAX_MB` | أقصى حجم للمرفق الواحد (افتراضي 25). عند رفعه فوق 25 عدّل `client_max_body_size` في `deploy/angie/angie.conf` وأعد بناء صورة الواجهة. |
+| `WEB_PORT` | المنفذ المنشور للواجهة (افتراضي 8080). |
+| `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` | إعدادات التخزين؛ تُلزم مجتمعةً في الإنتاج. من داخل الحاويات استخدم `http://host.docker.internal:9000` للوصول إلى تخزين على مضيف Docker. |
+| `S3_FORCE_PATH_STYLE` | `true` لمعظم خدمات S3 المحلية (بما فيها RustFS). |
+| `S3_KEY_PREFIX` | بادئة المفاتيح داخل الدلو (افتراضي `archive`). |
+| `RATE_LIMIT_*` | حدود المعدّل: دخول/عمليات حساسة/عام. |
+
+> ملاحظة أمنية: جميع الأسرار تبقى في `.env` على المضيف فقط؛ الصور لا تحتوي أي أسرار.
+
+## 5) النشر عبر Docker Compose
 
 ```bash
-python3 -m http.server 8080
+# 1) الإعداد
+cp .env.example .env
+nano .env                        # عدّل كلمات المرور وبيانات S3
+
+# 2) البناء والتشغيل (db → migrate → api → web)
+docker compose up -d --build
+
+# 3) التحقق
+docker compose ps                # يجب أن تكون db/api/web بحالة healthy
+curl -s http://localhost:8080/healthz          # ok
+curl -s http://localhost:8080/api/v1/health    # {"status":"ok",...}
 ```
 
-Then open `http://localhost:8080/`.
+الترتيب محكوم بالصحة: `migrate` يعمل مرة واحدة بعد جهوزية قاعدة البيانات ثم يتوقف بنجاح،
+ولا يبدأ `api` إلا بعد نجاحه، ولا يبدأ `web` إلا بعد جهوزية `api`.
 
-> Opening `index.html` directly via `file://` also works for browsing, but a local
-> server is recommended so relative asset paths behave exactly as in production.
+### إنشاء أول مدير (إلزامي — لا توجد حسابات افتراضية)
 
-## Theme (Dark / Light)
+```bash
+docker compose run --rm api node dist/scripts/create-admin.js --username admin --display-name "مدير النظام"
+# سيطلب كلمة المرور تفاعلياً (أو مرّرها عبر --password-stdin / ADMIN_PASSWORD للأتمتة)
+```
 
-- Three modes: **النظام** (System) / **داكن** (Dark) / **فاتح** (Light); default is System.
-- The choice is stored in `localStorage` under the key `hlc-theme` and persists across
-  reloads and login/logout.
-- In System mode the app follows `prefers-color-scheme` and updates live when the
-  operating system setting changes.
-- An inline script in `<head>` applies the saved theme before first paint (no flash).
-- The toggle appears on the login screen, in the top bar, and in the Settings page;
-  all instances stay in sync.
-- Printing always uses a light scheme regardless of the active theme.
+بعدها سجّل الدخول من الواجهة، وأنشئ بقية المستخدمين من صفحة «إدارة المستخدمين».
 
-## Demo login
+### الترحيلات
 
-This prototype uses a demo-only login (no real security): the login screen is always
-shown on page load. Demo accounts:
+- تعمل تلقائياً عبر خدمة `migrate` عند كل `docker compose up`.
+- يدوياً: `docker compose run --rm migrate` (أو `npm run db:migrate` في بيئة تطوير).
+- الترحيلات المطبَّقة غير قابلة للتعديل: أي تغيير في ملف مطبَّق يُرفض عمداً؛ أضف ترحيلاً جديداً بدلاً من ذلك.
 
-| Username   | Password | Role             |
-| ---------- | -------- | ---------------- |
-| `admin`    | `1234`   | مدير النظام      |
-| `employee` | `1234`   | موظف الأرشيف     |
+### التخزين S3 (RustFS)
 
-## Data storage
+1. أنشئ دلو التخزين (مثلاً `archive-hlc`) من واجهة RustFS أو أدوات S3.
+2. اضبط `S3_*` في `.env` بمفتاح وصول وسري.
+3. أعد تشغيل `api`: `docker compose up -d api`.
+4. تحقق من جاهزية التخزين: `curl -s http://localhost:8080/api/v1/ready`.
 
-All data lives in the browser's `localStorage`:
+الخادم يستخدم `host.docker.internal` للوصول إلى تخزين منشور على مضيف Docker
+(مضبوط عبر `extra_hosts: host.docker.internal:host-gateway` في compose).
 
-- `hl_archive_data_v1` — documents (المعاملات)
-- `hl_archive_departments_v1` — departments (الإدارات)
-- `hlc-theme` — theme preference
+### تحديث نسخة منشورة
 
-Backup/restore of documents and departments is available from the Settings page
-(JSON export/import).
+```bash
+git pull
+docker compose up -d --build     # يعيد البناء، يشغّل الترحيلات الجديدة، ثم يبدّل الحاويات
+```
+
+## 6) Angie والوكيل العكسي
+
+- صورة `web` مبنية من `docker.angie.software/angie:1.12.4-alpine` مع:
+  - `deploy/angie/angie.conf` — الإعداد الرئيسي (ضغط gzip، حدود الجسم، سجلات).
+  - `deploy/angie/http.d/archive.conf` — الموقع: ملفات ثابتة + توكيل `/api/`.
+- تمرير ترويسات الوكيل: `Host` (بالمنفذ الأصلي `$http_host`)، `X-Real-IP`،
+  `X-Forwarded-For`، `X-Forwarded-Proto` — مطلوبة لمطابقة فحص المصدر وتحديد IP في التدقيق.
+- رؤوس أمان على كل الاستجابات: CSP صارمة (بدون سكربتات مضمّنة)، `X-Frame-Options: DENY`،
+  `nosniff`، `Referrer-Policy`، `Permissions-Policy`.
+- استجابات `/api/` تُوسم `Cache-Control: no-store` — لا تخزين مؤقت للبيانات الحساسة.
+- ملفات الأصول تُخزَّن ساعة واحدة مع إعادة تحقق؛ `index.html` بدون تخزين مؤقت.
+
+### TLS
+
+Angie في هذا الإعداد يستمع HTTP على المنفذ 80 داخل الشبكة. للإنتاج اختر أحد الخيارين:
+
+- **موصى به**: إنهاء TLS على طرفية موجودة (مثل Nginx Proxy Manager أو موازن حِمل) ثم
+  تمرير الطلبات إلى `WEB_PORT`، مع ضبط `PUBLIC_ORIGIN` بالعنوان العام و`COOKIE_SECURE=true`.
+- أو أضف شهادة TLS داخل Angie (تعديل `archive.conf` بإضافة `listen 443 ssl` ومسارات
+  الشهادة) مع إعادة توجيه 80 → 443.
+
+## 7) الصلاحيات
+
+| العملية | موظف الأرشيف | مدير النظام |
+| --- | :---: | :---: |
+| عرض/بحث/تصفية المعاملات والتقارير | ✔ | ✔ |
+| تسجيل وتعديل المعاملات | ✔ | ✔ |
+| رفع/تنزيل المرفقات | ✔ | ✔ |
+| حذف مرفق | ✖ | ✔ |
+| حذف معاملة (نقل للمحذوفات) واستعادتها | ✖ | ✔ |
+| إدارة الإدارات (إضافة/تعديل/تعطيل) | ✖ | ✔ |
+| إدارة المستخدمين (إنشاء/أدوار/كلمات مرور/تعطيل) | ✖ | ✔ |
+| ترحيل بيانات المتصفح، النسخ الاحتياطي الاستيراد/التصدير | ✖ | ✔ |
+| سجلّ التدقيق | ✖ | ✔ |
+
+قواعد أساسية مطبَّقة على الخادم دائماً (إخفاء عناصر الواجهة تجميلي فقط):
+
+- لا توجد حسابات أو كلمات مرور افتراضية؛ أول مدير يُنشأ بأمر CLI.
+- كلمات المرور تُخزَّن بـ Argon2id، والتغيير/التعطيل يُبطل كل جلسات المستخدم.
+- الجلسات عبر كوكي HTTP-only (`hlc_session`، Secure في الإنتاج) + رمز CSRF لكل الطلبات المتغيّرة.
+- فحص Origin/Referer لكل الطلبات المتغيّرة، وحدود معدّل على الدخول والعمليات الحساسة.
+- أخطاء عامة غير كاشفة لوجود الحسابات، وكل العمليات الحساسة تُسجَّل في سجل التدقيق
+  (لا يمكن لأي مستخدم تعديله أو حذفه من التطبيق).
+
+## 8) واجهة برمجة التطبيقات (مختصر)
+
+كل المسارات تحت `/api/v1`. الأخطاء بالشكل `{"error":{"code":"...","message":"...","details":...}}`.
+
+| المسار | الوصف | الصلاحية |
+| --- | --- | --- |
+| `GET /health` • `GET /ready` | فحص صحة/جاهزية (جاهزية تتضمن قاعدة البيانات والتخزين) | عام |
+| `POST /auth/login` • `POST /auth/logout` | دخول/خروج | عام / جلسة |
+| `GET /auth/session` | جلسة حالية + رمز CSRF | عام (401 بدون جلسة) |
+| `POST /auth/password` | تغيير كلمة المرور الشخصية | جلسة |
+| `GET/POST /users` • `PATCH /users/:id` • `POST /users/:id/password` | إدارة المستخدمين | مدير |
+| `GET /departments` | قائمة الإدارات | جلسة |
+| `POST /departments` • `PATCH/DELETE /departments/:id` | إدارة الإدارات | مدير |
+| `GET /documents` | بحث/تصفية/ترتيب/ترقيم صفحات من الخادم | جلسة |
+| `GET /documents/:id` | تفاصيل معاملة | جلسة |
+| `POST /documents` • `PATCH /documents/:id` | تسجيل/تعديل معاملة | جلسة |
+| `DELETE /documents/:id` • `POST /documents/:id/restore` | حذف منطقي/استعادة | مدير |
+| `POST /documents/:id/files` | رفع مرفق (multipart) إلى S3 | جلسة |
+| `GET /files/:id/download` • `DELETE /files/:id` | تنزيل مرفق / حذفه | جلسة / مدير |
+| `GET /stats/dashboard` • `GET /reports/summary` • `GET /reports/documents.csv` | إحصائيات وتقارير (CSV بـ BOM لدعم Excel العربي) | جلسة |
+| `POST /imports/legacy` • `POST /imports/backup` • `GET /exports/backup` | ترحيل بيانات المتصفح، استيراد/تصدير نسخة JSON | مدير |
+| `GET /audit` | سجل التدقيق | مدير |
+
+## 9) ترحيل بيانات النسخة التجريبية (localStorage)
+
+الواجهة القديمة كانت تحفظ كل شيء في المتصفح تحت مفتاحي `hl_archive_data_v1` (المعاملات)
+و`hl_archive_departments_v1` (الإدارات). لترحيلها:
+
+1. سجّل الدخول كمدير من **نفس المتصفح** الذي يحتوي البيانات القديمة.
+2. افتح «الإعدادات» → «استيراد بيانات النسخة التجريبية من المتصفح».
+3. راجع العدّادات واضغط «ترحيل بيانات المتصفح إلى الخادم» ثم أكّد.
+
+الخصائص: التحقق والتنظيف على الخادم، خريطة إدارات (قديمة → جديدة تُنشأ تلقائياً)،
+كشف التكرار برقم المعاملة (لا استبدال صامت)، تقرير بالسجلات المرفوضة مع السبب،
+استيراد متكرر آمن (idempotent)، ولا تُنقل محتويات المرفقات القديمة (تنبيه بذلك فقط).
+تبقى نسخة المتصفح كما هي حتى تؤكد نجاح الترحيل، ثم يمكنك حذفها بزر «حذف نسخة المتصفح بعد النجاح».
+
+كما يتوفر من صفحة الإعدادات **تصدير/استيراد نسخة JSON كاملة** (للمدير) بنفس قواعد التحقق.
+
+## 10) التطوير المحلي
+
+```bash
+cd backend
+npm ci
+npm run dev          # تشغيل التطوير مع إعادة التحميل (يتطلب DATABASE_URL)
+npm run typecheck    # فحص TypeScript
+```
+
+تشغيل الواجهة محلياً: اخدم جذر المستودع بأي خادم ثابت ثم وجّه `/api/` إلى الخادم:
+
+```bash
+python3 -m http.server 8081
+# أو شغّل docker compose كاملاً وهو الأقرب لبيئة الإنتاج
+```
+
+## 11) الاختبارات
+
+الاختبارات مكتوبة بـ `node:test` وتعمل مقابل قاعدة بيانات PostgreSQL معزولة
+(تنشئ المخطط من الصفر في أول ملف):
+
+```bash
+cd backend
+npm ci
+export DATABASE_URL=postgres://user:pass@localhost:5432/hlc_test
+npm test
+```
+
+- الملفات `01..09` تغطي بالترتيب: الترحيلات، المصادقة/الجلسات/CSRF/حدود المعدّل،
+  المستخدمين والأدوار، الإدارات، المعاملات CRUD والحذف/الاستعادة، المرفقات
+  (رفع/تنزيل/قيود الحجم والنوع/فشل التخزين)، الترحيل والنسخ الاحتياطي، التقارير،
+  واختبار تكامل حقيقي مع S3.
+- اختبار S3 الحقيقي (اختياري) يُفعَّل بـ `S3_LIVE_TEST=1` مع `S3_*` صحيحة — ينفّذ
+  دورة رفع/تنزيل/حذف كاملة على تخزين فعلي.
+- آخر تشغيل كامل: **49 اختباراً — 48 ناجحاً، 0 فاشل، 1 متجاهل (اختبار S3 الحقيقي غير مُفعَّل)**،
+  إضافةً إلى تشغيل منفصل ناجح لاختبار S3 الحقيقي على RustFS، وفحص E2E كامل
+  (41 فحصاً عبر curl + جلسات كاملة في المتصفح) على منظومة Compose.
+
+## 12) استكشاف الأخطاء
+
+| العَرَض | السبب المرجَّح | الحل |
+| --- | --- | --- |
+| `origin_not_allowed` عند الدخول من المتصفح | الوكيل لا يمرّر `Host` الأصلي بالمنفذ، أو `PUBLIC_ORIGIN` غير مطابق | تأكد من `proxy_set_header Host $http_host;` في Angie، أو اضبط `PUBLIC_ORIGIN` بالأصل الفعلي |
+| الكوكي لا يُحفظ بعد الدخول على HTTP | `COOKIE_SECURE=true` مع اتصال غير مشفّر | اضبطها `false` مؤقتاً للاختبار، أو فعّل HTTPS (المستحسن) |
+| `413` عند رفع مرفق كبير | `client_max_body_size` في Angie أصغر من الملف | ارفع الحد في `deploy/angie/angie.conf` وأعد بناء `web`، مع مواءمته مع `UPLOAD_MAX_MB` |
+| `api` لا يقلع: `Missing required environment variable` | متغيّر ناقص في `.env` | راجع السجل `docker compose logs api` وأكمل القيم؛ في الإنتاج تُلزم متغيرات S3 مجتمعةً |
+| `ready` يرجع فشلاً مع أن `health` سليم | تعذّر الوصول إلى التخزين S3 | تحقق من `S3_ENDPOINT` وبيانات المفتاح ووجود الدلو |
+| «Applied migrations are immutable» | تعديل ملف ترحيل مطبَّق سابقاً | أعِد الملف الأصلي، وأنشئ ترحيلاً جديداً للتغييرات |
+| الجلسات تنتهي فوراً | تغيّر `DATABASE_URL` أو أُعيد إنشاء الحجم | سجّل الدخول مجدداً؛ راجع أن الحجم `pgdata` لم يُحذف |
+| خطأ `401` متكرر بعد تعديل المستخدم | كلمة المرور/التعطيل يُبطلان جلسات المستخدم (بالتصميم) | أعد تسجيل الدخول |
+
+## 13) ملاحظات وحدود معروفة
+
+- **مُنفَّذ ومُختبر داخل هذا المستودع**: الخادم، قاعدة البيانات والترحيلات، المصادقة
+  والصلاحيات، المرفقات على S3، التقارير، الترحيل والنسخ الاحتياطي، الاختبارات الآلية،
+  صورة Angie وإعداداتها، وسكربتات Compose و‎.env.example‎.
+- **يوفّره مسؤول النشر (خارج نطاق المستودع)**: شهادة TLS والاسم العام والدخول من
+  الإنترنت، خدمة RustFS نفسها وإدارة نسخها الاحتياطية، نسخ PostgreSQL الاحتياطي
+  الدوري، المراقبة الخارجية، وإدارة المضيف وتحديثاته.
+- الواجهة تخدم ملفاتها باسم الإصدار «1.0»؛ لا توجد بصمات ملفات، والتخزين المؤقت
+  المضبوط قصير مع إعادة تحقق لتصل التحديثات.
+- لا تُنقل محتويات المرفقات من النسخة التجريبية القديمة (لا يوجد تخزين مرفقات سابق)؛
+  تُرحَّل البيانات النصية فقط.
+- المعمارية أحادية العقدة (بلا توزيع/توسّع أفقي)؛ مناسبة لحجم استخدام إدارة واحدة.
+
+## 14) الترخيص والحقوق
+
+منظومة داخلية لهاتف ليبيا. جميع الحقوق محفوظة للمالك.

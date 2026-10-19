@@ -5,39 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
-    <script>
-      /* تطبيق المظهر المحفوظ قبل الرسم الأول لمنع وميض السمة الخاطئة. */
-      (function () {
-        var mode = "system";
-        try {
-          var stored = localStorage.getItem("hlc-theme");
-          if (stored === "dark" || stored === "light" || stored === "system") {
-            mode = stored;
-          }
-        } catch (error) {
-          /* التخزين غير متاح: نستخدم وضع النظام. */
-        }
-        var dark =
-          mode === "dark" ||
-          (mode === "system" &&
-            window.matchMedia &&
-            window.matchMedia("(prefers-color-scheme: dark)").matches);
-        var theme = dark ? "dark" : "light";
-        var root = document.documentElement;
-        root.setAttribute("data-theme", theme);
-        root.setAttribute("data-theme-mode", mode);
-        var meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) {
-          meta.setAttribute("content", dark ? "#10151c" : "#f4f6f9");
-        }
-      })();
-    </script>
+    <script src="./js/theme-pre.js"></script>
     <link rel="stylesheet" href="./css/style.css" />
     <link rel="icon" href="./img/logo.svg" />
+    <meta name="referrer" content="same-origin" />
   </head>
 
   <body>
-    <div class="app">
+    <!-- شاشة الإقلاع: تظهر حتى ينتهي التحقق من الجلسة، لتجنّب وميض الواجهة. -->
+    <div id="bootScreen" class="boot-screen">
+      <div class="boot-box">
+        <div class="spinner" aria-hidden="true"></div>
+        <p>جارٍ التحقق من الجلسة…</p>
+      </div>
+    </div>
+
+    <div class="app" id="app" hidden>
       <aside class="sidebar">
         <div class="brand">
           <div class="logo"><img src="./img/logo.svg" alt="" /></div>
@@ -47,22 +30,39 @@
           </div>
         </div>
         <div class="menu-title">القائمة الرئيسية</div>
-        <button class="menu active" data-page="dashboard">
+        <button class="menu active" data-page="dashboard" type="button">
           🏠 لوحة التحكم
         </button>
-        <button class="menu" data-page="incoming">📥 المراسلات الواردة</button>
-        <button class="menu" data-page="outgoing">📤 المراسلات الصادرة</button>
-        <button class="menu" data-page="archive">🗄️ الأرشيف الإلكتروني</button>
-        <button class="menu" data-page="departments">
+        <button class="menu" data-page="incoming" type="button">
+          📥 المراسلات الواردة
+        </button>
+        <button class="menu" data-page="outgoing" type="button">
+          📤 المراسلات الصادرة
+        </button>
+        <button class="menu" data-page="archive" type="button">
+          🗄️ الأرشيف الإلكتروني
+        </button>
+        <button class="menu" data-page="departments" type="button">
           🏢 الإدارات والأقسام
         </button>
-        <button class="menu" data-page="reports">📊 التقارير</button>
-        <button class="menu" data-page="settings">⚙️ الإعدادات</button>
+        <button class="menu" data-page="reports" type="button">
+          📊 التقارير
+        </button>
+        <button class="menu admin-only is-hidden" data-page="users" type="button">
+          👥 إدارة المستخدمين
+        </button>
+        <button class="menu admin-only is-hidden" data-page="audit" type="button">
+          📜 سجل التدقيق
+        </button>
+        <button class="menu" data-page="settings" type="button">
+          ⚙️ الإعدادات
+        </button>
         <div class="sidebar-footer">
           منظومة إدارة الوثائق<br />
-          الإصدار التجريبي 1.0
+          الإصدار 1.0
         </div>
       </aside>
+
       <main class="main">
         <header class="topbar">
           <div>
@@ -72,21 +72,26 @@
           <div class="topbar-actions">
             <div class="theme-toggle-slot" data-theme-toggle></div>
             <div class="user-badge">
-              <span class="avatar">م</span>
-              <div>
-                <strong>مدير النظام</strong>
-                <small>نسخة تجريبية</small>
+              <span class="avatar" id="userAvatar">؟</span>
+              <div class="user-meta">
+                <strong id="userName">—</strong>
+                <small id="userRoleLabel">—</small>
               </div>
+              <button type="button" class="logout-button" id="logoutButton">
+                تسجيل الخروج
+              </button>
             </div>
           </div>
         </header>
+
+        <!-- لوحة التحكم -->
         <section id="dashboard" class="page active">
           <div class="welcome">
             <div>
               <h2>مرحباً بك في الأرشيف الإلكتروني</h2>
               <p>إدارة المراسلات والوثائق من مكان واحد.</p>
             </div>
-            <button class="button white-button" onclick="openForm('incoming')">
+            <button class="button white-button" id="addDocumentButton" type="button">
               + تسجيل معاملة
             </button>
           </div>
@@ -121,11 +126,15 @@
                 id="dashboardSearch"
                 class="search"
                 placeholder="ابحث عن معاملة..."
+                type="search"
               />
             </div>
             <div id="dashboardTable"></div>
+            <div class="pager" id="dashboardPager"></div>
           </div>
         </section>
+
+        <!-- المراسلات الواردة -->
         <section id="incoming" class="page">
           <div class="panel">
             <div class="panel-heading">
@@ -133,13 +142,24 @@
                 <h2>المراسلات الواردة</h2>
                 <p>تسجيل ومتابعة المراسلات المستلمة.</p>
               </div>
-              <button class="button" onclick="openForm('incoming')">
+              <button class="button" id="addIncomingButton" type="button">
                 + إضافة وارد
               </button>
             </div>
+            <div class="filters">
+              <input
+                id="incomingSearch"
+                class="search"
+                placeholder="رقم المعاملة أو العنوان أو الجهة..."
+                type="search"
+              />
+            </div>
             <div id="incomingTable"></div>
+            <div class="pager" id="incomingPager"></div>
           </div>
         </section>
+
+        <!-- المراسلات الصادرة -->
         <section id="outgoing" class="page">
           <div class="panel">
             <div class="panel-heading">
@@ -147,27 +167,41 @@
                 <h2>المراسلات الصادرة</h2>
                 <p>تسجيل ومتابعة المراسلات المرسلة.</p>
               </div>
-              <button class="button" onclick="openForm('outgoing')">
+              <button class="button" id="addOutgoingButton" type="button">
                 + إضافة صادر
               </button>
             </div>
+            <div class="filters">
+              <input
+                id="outgoingSearch"
+                class="search"
+                placeholder="رقم المعاملة أو العنوان أو الجهة..."
+                type="search"
+              />
+            </div>
             <div id="outgoingTable"></div>
+            <div class="pager" id="outgoingPager"></div>
           </div>
         </section>
+
+        <!-- الأرشيف الإلكتروني -->
         <section id="archive" class="page">
           <div class="panel">
             <div class="panel-heading">
               <div>
                 <h2>الأرشيف الإلكتروني</h2>
-                <p>جميع الوثائق المسجلة في المنظومة.</p>
+                <p>جميع الوثائق المسجلة في المنظومة مع البحث والتصفية.</p>
               </div>
-              <button class="button" onclick="exportCSV()">تصدير CSV</button>
+              <button class="button secondary-button" id="exportArchiveCsvButton" type="button">
+                تصدير CSV
+              </button>
             </div>
             <div class="filters">
               <input
                 id="archiveSearch"
                 class="search"
                 placeholder="رقم المعاملة أو العنوان أو الجهة..."
+                type="search"
               />
               <select id="typeFilter">
                 <option value="">جميع الأنواع</option>
@@ -176,19 +210,50 @@
               </select>
               <select id="statusFilter">
                 <option value="">جميع الحالات</option>
-                <option value="جديدة">جديدة</option>
-                <option value="قيد الإجراء">قيد الإجراء</option>
-                <option value="مكتملة">مكتملة</option>
-                <option value="مؤرشفة">مؤرشفة</option>
+                <option value="new">جديدة</option>
+                <option value="in_progress">قيد الإجراء</option>
+                <option value="completed">مكتملة</option>
+                <option value="archived">مؤرشفة</option>
               </select>
+              <select id="departmentFilter">
+                <option value="">جميع الإدارات</option>
+              </select>
+              <input id="dateFromFilter" type="date" aria-label="من تاريخ" />
+              <input id="dateToFilter" type="date" aria-label="إلى تاريخ" />
+              <select id="sortFilter" aria-label="ترتيب النتائج">
+                <option value="date:desc">التاريخ (الأحدث أولاً)</option>
+                <option value="date:asc">التاريخ (الأقدم أولاً)</option>
+                <option value="createdAt:desc">تاريخ التسجيل (الأحدث)</option>
+                <option value="updatedAt:desc">آخر تعديل</option>
+                <option value="reference:asc">رقم المعاملة</option>
+                <option value="title:asc">العنوان</option>
+              </select>
+              <label class="checkbox-field admin-only is-hidden" id="includeDeletedField">
+                <input type="checkbox" id="includeDeletedFilter" />
+                <span>إظهار المحذوفة</span>
+              </label>
+              <button class="button secondary-button" id="clearArchiveFilters" type="button">
+                مسح الفلاتر
+              </button>
             </div>
             <div id="archiveTable"></div>
+            <div class="pager" id="archivePager"></div>
           </div>
         </section>
+
+        <!-- الإدارات -->
         <section id="departments" class="page">
           <div class="panel">
-            <h2>الإدارات والأقسام</h2>
-            <p>إضافة الإدارات المستخدمة في تصنيف المعاملات.</p>
+            <div class="panel-heading">
+              <div>
+                <h2>الإدارات والأقسام</h2>
+                <p>إدارة الإدارات المستخدمة في تصنيف المعاملات.</p>
+              </div>
+              <label class="checkbox-field admin-only is-hidden" id="includeInactiveDepartmentsField">
+                <input type="checkbox" id="includeInactiveDepartments" />
+                <span>إظهار المعطّلة</span>
+              </label>
+            </div>
             <form id="departmentForm" class="department-form">
               <input
                 id="departmentName"
@@ -201,10 +266,24 @@
             <div id="departmentList"></div>
           </div>
         </section>
+
+        <!-- التقارير -->
         <section id="reports" class="page">
           <div class="panel">
-            <h2>التقارير والإحصائيات</h2>
-            <p>ملخص المعاملات المسجلة في النسخة الحالية.</p>
+            <div class="panel-heading">
+              <div>
+                <h2>التقارير والإحصائيات</h2>
+                <p>ملخص المعاملات المسجلة في المنظومة.</p>
+              </div>
+              <div class="panel-actions">
+                <button class="button secondary-button" id="printReportButton" type="button">
+                  🖨️ طباعة
+                </button>
+                <button class="button" id="exportReportsCsvButton" type="button">
+                  تصدير CSV
+                </button>
+              </div>
+            </div>
             <div class="report-grid">
               <div class="report-box">
                 <span>إجمالي الوثائق</span>
@@ -223,61 +302,152 @@
                 <strong id="reportArchived">0</strong>
               </div>
             </div>
-            <button class="button print-button" onclick="window.print()">
-              🖨️ طباعة التقرير
-            </button>
-            <button class="button secondary-button" onclick="exportCSV()">
-              تصدير البيانات CSV
-            </button>
+            <div class="report-details">
+              <div class="report-list">
+                <h3>حسب النوع</h3>
+                <div id="reportByType"></div>
+              </div>
+              <div class="report-list">
+                <h3>حسب الإدارة</h3>
+                <div id="reportByDepartment"></div>
+              </div>
+              <div class="report-list">
+                <h3>حسب الشهر (آخر 12 شهراً)</h3>
+                <div id="reportByMonth"></div>
+              </div>
+            </div>
           </div>
         </section>
+
+        <!-- إدارة المستخدمين (للمدير فقط) -->
+        <section id="users" class="page">
+          <div class="panel">
+            <div class="panel-heading">
+              <div>
+                <h2>إدارة المستخدمين</h2>
+                <p>إنشاء الحسابات وتعديل الأدوار والتعطيل وإعادة تعيين كلمات المرور.</p>
+              </div>
+              <button class="button" id="addUserButton" type="button">
+                + إضافة مستخدم
+              </button>
+            </div>
+            <div class="filters">
+              <input id="usersSearch" class="search" placeholder="اسم المستخدم أو الاسم الكامل..." type="search" />
+              <select id="usersRoleFilter">
+                <option value="">جميع الأدوار</option>
+                <option value="admin">مدير النظام</option>
+                <option value="employee">موظف الأرشيف</option>
+              </select>
+              <select id="usersStatusFilter">
+                <option value="">الجميع</option>
+                <option value="true">نشِط</option>
+                <option value="false">معطَّل</option>
+              </select>
+            </div>
+            <div id="usersTable"></div>
+            <div class="pager" id="usersPager"></div>
+          </div>
+        </section>
+
+        <!-- سجل التدقيق (للمدير فقط) -->
+        <section id="audit" class="page">
+          <div class="panel">
+            <div class="panel-heading">
+              <div>
+                <h2>سجل التدقيق</h2>
+                <p>تتبّع عمليات الدخول وإدارة المعاملات والمستخدمين والإدارات.</p>
+              </div>
+            </div>
+            <div class="filters">
+              <input id="auditActionFilter" class="search" placeholder="نوع العملية (مثال: document.created)" />
+              <input id="auditEntityFilter" placeholder="نوع الكيان (مثال: document)" />
+              <input id="auditDateFrom" type="date" aria-label="من تاريخ" />
+              <input id="auditDateTo" type="date" aria-label="إلى تاريخ" />
+              <button class="button secondary-button" id="auditRefreshButton" type="button">
+                تحديث
+              </button>
+            </div>
+            <div id="auditTable"></div>
+            <div class="pager" id="auditPager"></div>
+          </div>
+        </section>
+
+        <!-- الإعدادات -->
         <section id="settings" class="page">
           <div class="panel">
-            <h2>إعدادات المنظومة</h2>
-            <p>اسم النظام: منظومة الأرشيف الإلكتروني</p>
-            <p>الجهة: هاتف ليبيا</p>
-            <p>نوع النسخة: نموذج أولي يعمل داخل المتصفح.</p>
-            <hr />
-            <h3>نسخ بيانات النموذج الأولي</h3>
-            <p>يمكنك تنزيل ملف JSON يحتوي على بيانات المعاملات والإدارات.</p>
-            <button class="button" onclick="backupData()">
-              تنزيل نسخة احتياطية JSON
-            </button>
-            <hr />
-            <h3>استعادة بيانات</h3>
-            <input
-              type="file"
-              id="restoreFile"
-              accept=".json,application/json"
-            />
-            <button class="button secondary-button" onclick="restoreData()">
-              استعادة النسخة الاحتياطية
-            </button>
+            <h2>حسابي</h2>
+            <p>تغيير كلمة المرور الخاصة بحسابك. سيؤدي ذلك إلى إنهاء الجلسات الأخرى.</p>
+            <form id="changePasswordForm" class="stacked-form">
+              <label for="currentPassword">كلمة المرور الحالية</label>
+              <input id="currentPassword" type="password" autocomplete="current-password" required />
+              <label for="newPassword">كلمة المرور الجديدة</label>
+              <input id="newPassword" type="password" autocomplete="new-password" minlength="8" required />
+              <div id="changePasswordError" class="alert alert-error" hidden></div>
+              <div class="form-actions">
+                <button class="button" type="submit">تغيير كلمة المرور</button>
+              </div>
+            </form>
             <hr />
             <h3>المظهر</h3>
             <p>اختر مظهر الواجهة: النظام أو الداكن أو الفاتح.</p>
             <div class="theme-toggle-slot" data-theme-toggle></div>
+          </div>
+
+          <div class="panel admin-only is-hidden">
+            <h2>النسخ الاحتياطي والاستيراد</h2>
+            <p>تنزيل نسخة JSON من بيانات المنظومة، أو استيراد نسخة سابقة.</p>
+            <div class="form-actions">
+              <button class="button" id="exportBackupButton" type="button">
+                تنزيل نسخة احتياطية JSON
+              </button>
+            </div>
             <hr />
-            <h3>مسح البيانات التجريبية</h3>
-            <p class="danger-text">
-              سيؤدي ذلك إلى حذف المعاملات والإدارات من هذا المتصفح.
+            <h3>استيراد نسخة احتياطية</h3>
+            <input type="file" id="backupFileInput" accept=".json,application/json" />
+            <div class="form-actions">
+              <button class="button secondary-button" id="importBackupButton" type="button">
+                استيراد النسخة الاحتياطية
+              </button>
+            </div>
+            <div id="backupImportResult" class="import-result" hidden></div>
+            <hr />
+            <h3>استيراد بيانات النسخة التجريبية من المتصفح</h3>
+            <p>
+              إن كانت بيانات الإصدار التجريبي السابق ما زالت محفوظة في هذا المتصفح،
+              فيمكن ترحيلها إلى الخادم. تُنقل المعاملات والإدارات، ويُتجاهل تكرار
+              السجلات، ولا تُنقل محتويات المرفقات.
             </p>
-            <button class="button danger-button" onclick="clearAllData()">
-              مسح جميع البيانات
-            </button>
+            <div id="legacyStatus" class="hint"></div>
+            <div class="form-actions">
+              <button class="button" id="importLegacyButton" type="button">
+                ترحيل بيانات المتصفح إلى الخادم
+              </button>
+              <button class="button danger-button" id="clearLegacyButton" type="button" hidden>
+                حذف نسخة المتصفح بعد النجاح
+              </button>
+            </div>
+            <div id="legacyResult" class="import-result" hidden></div>
+          </div>
+
+          <div class="panel">
+            <h2>حول المنظومة</h2>
+            <p>اسم النظام: منظومة الأرشيف الإلكتروني</p>
+            <p>الجهة: هاتف ليبيا</p>
+            <p>الواجهة: عربية بالكامل (RTL)، نسخة الواجهة 1.0</p>
           </div>
         </section>
       </main>
     </div>
-    <div class="modal" id="documentModal">
+
+    <!-- نموذج تسجيل/تعديل معاملة -->
+    <div class="modal" id="documentModal" role="dialog" aria-modal="true">
       <div class="modal-box">
         <div class="modal-header">
           <h2 id="formTitle">تسجيل معاملة جديدة</h2>
-          <button type="button" class="close-button" onclick="closeForm()">
-            ✕
-          </button>
+          <button type="button" class="close-button" id="closeDocumentModal">✕</button>
         </div>
         <form id="documentForm">
+          <div id="documentFormError" class="alert alert-error" hidden></div>
           <label for="reference">رقم المعاملة *</label>
           <input id="reference" required maxlength="100" />
           <label for="title">عنوان المعاملة *</label>
@@ -299,36 +469,130 @@
           </select>
           <label for="status">حالة المعاملة</label>
           <select id="status">
-            <option value="جديدة">جديدة</option>
-            <option value="قيد الإجراء">قيد الإجراء</option>
-            <option value="مكتملة">مكتملة</option>
-            <option value="مؤرشفة">مؤرشفة</option>
+            <option value="new">جديدة</option>
+            <option value="in_progress">قيد الإجراء</option>
+            <option value="completed">مكتملة</option>
+            <option value="archived">مؤرشفة</option>
           </select>
-          <label for="attachment">ملف مرفق</label>
-          <input
-            id="attachment"
-            type="file"
-            accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-          />
-          <small class="hint"
-            >النسخة الحالية تسجل اسم الملف فقط، ولا تحفظ محتوياته.</small
-          >
           <label for="notes">ملاحظات</label>
           <textarea id="notes" rows="3" maxlength="2000"></textarea>
+
+          <div id="attachmentsSection" hidden>
+            <hr />
+            <h3>المرفقات</h3>
+            <div id="attachmentList" class="attachment-list"></div>
+            <div class="attachment-upload">
+              <input
+                type="file"
+                id="attachmentInput"
+                multiple
+                accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.odt,.ods,.rtf,.txt,.csv"
+              />
+              <button class="button secondary-button" id="attachmentUploadButton" type="button">
+                رفع المرفقات المحددة
+              </button>
+            </div>
+            <small class="hint">
+              يتم رفع الملفات فوراً إلى الخادم. الحد الأقصى لحجم الملف يحدده
+              إعداد الخادم (UPLOAD_MAX_MB).
+            </small>
+          </div>
+
           <div class="form-actions">
-            <button type="submit" class="button">حفظ المعاملة</button>
-            <button
-              type="button"
-              class="button secondary-button"
-              onclick="closeForm()"
-            >
+            <button type="submit" class="button" id="saveDocumentButton">
+              حفظ المعاملة
+            </button>
+            <button type="button" class="button secondary-button" id="cancelDocumentButton">
               إلغاء
             </button>
           </div>
         </form>
       </div>
     </div>
+
+    <!-- تفاصيل معاملة -->
+    <div class="modal" id="detailModal" role="dialog" aria-modal="true">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h2 id="detailTitle">تفاصيل المعاملة</h2>
+          <button type="button" class="close-button" id="closeDetailModal">✕</button>
+        </div>
+        <div id="detailContent"></div>
+        <div class="form-actions" id="detailActions"></div>
+      </div>
+    </div>
+
+    <!-- نموذج مستخدم (للمدير) -->
+    <div class="modal" id="userModal" role="dialog" aria-modal="true">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h2 id="userModalTitle">إضافة مستخدم</h2>
+          <button type="button" class="close-button" id="closeUserModal">✕</button>
+        </div>
+        <form id="userForm">
+          <div id="userFormError" class="alert alert-error" hidden></div>
+          <div id="userUsernameField">
+            <label for="userUsername">اسم المستخدم *</label>
+            <input id="userUsername" minlength="3" maxlength="32" autocomplete="off" />
+          </div>
+          <label for="userDisplayName">الاسم الكامل *</label>
+          <input id="userDisplayName" maxlength="200" />
+          <label for="userRole">الدور *</label>
+          <select id="userRole">
+            <option value="employee">موظف الأرشيف</option>
+            <option value="admin">مدير النظام</option>
+          </select>
+          <div id="userPasswordField">
+            <label for="userPassword">كلمة المرور *</label>
+            <input id="userPassword" type="password" minlength="8" maxlength="200" autocomplete="new-password" />
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="button" id="saveUserButton">حفظ المستخدم</button>
+            <button type="button" class="button secondary-button" id="cancelUserButton">إلغاء</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- نافذة إدخال نصي عامة (إعادة التسمية / كلمات المرور) -->
+    <div class="modal" id="promptModal" role="dialog" aria-modal="true">
+      <div class="modal-box modal-box-small">
+        <div class="modal-header">
+          <h2 id="promptTitle">إدخال</h2>
+          <button type="button" class="close-button" id="promptCancelX">✕</button>
+        </div>
+        <form id="promptForm">
+          <div id="promptError" class="alert alert-error" hidden></div>
+          <label for="promptInput" id="promptLabel">القيمة</label>
+          <input id="promptInput" />
+          <div class="form-actions">
+            <button type="submit" class="button" id="promptOk">تأكيد</button>
+            <button type="button" class="button secondary-button" id="promptCancel">
+              إلغاء
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- نافذة تأكيد -->
+    <div class="modal" id="confirmModal" role="dialog" aria-modal="true">
+      <div class="modal-box modal-box-small">
+        <div class="modal-header">
+          <h2>تأكيد العملية</h2>
+          <button type="button" class="close-button" id="confirmCancelX">✕</button>
+        </div>
+        <p id="confirmMessage"></p>
+        <div class="form-actions">
+          <button type="button" class="button danger-button" id="confirmOk">تأكيد</button>
+          <button type="button" class="button secondary-button" id="confirmCancel">إلغاء</button>
+        </div>
+      </div>
+    </div>
+
     <div id="toast" class="toast"></div>
+
+    <!-- شاشة تسجيل الدخول -->
     <div id="loginScreen" class="login-screen">
       <div class="login-theme-toggle" data-theme-toggle></div>
       <div class="login-box">
@@ -341,6 +605,7 @@
             id="loginUsername"
             type="text"
             placeholder="أدخل اسم المستخدم"
+            autocomplete="username"
             required
           />
           <label for="loginPassword">كلمة المرور</label>
@@ -348,17 +613,19 @@
             id="loginPassword"
             type="password"
             placeholder="أدخل كلمة المرور"
+            autocomplete="current-password"
             required
           />
-          <button type="submit" class="button login-button">
+          <button type="submit" class="button login-button" id="loginSubmit">
             تسجيل الدخول
           </button>
           <p id="loginMessage" class="login-message"></p>
         </form>
-        <small>واجهة دخول تجريبية للتطوير فقط</small>
       </div>
     </div>
+
     <script src="./js/theme.js"></script>
+    <script src="./js/api.js"></script>
     <script src="./js/script.js"></script>
   </body>
 </html>
