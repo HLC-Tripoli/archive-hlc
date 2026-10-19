@@ -2,14 +2,25 @@ import { loadConfig } from './config.js';
 import { createPool } from './db/pool.js';
 import { buildApp } from './app.js';
 import { purgeExpiredSessions } from './services/sessions.js';
-import { DisabledStorageProvider } from './services/storage/disabled.js';
-import { S3StorageProvider } from './services/storage/s3.js';
+import { LocalFilesystemStorageProvider } from './services/storage/local.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
   const pool = createPool(config.databaseUrl);
-  const storage = config.s3 ? new S3StorageProvider(config.s3) : new DisabledStorageProvider();
+  const storage = new LocalFilesystemStorageProvider(config.uploadsDir);
   const app = await buildApp({ config, pool, storage });
+
+  // تهيئة مجلد المرفقات عند الإقلاع: إنشاؤه إن لزم والتحقق من قابلية الكتابة.
+  // لا نُسقط الخادم عند الفشل: بقية الوظائف تبقى متاحة، وفحص الجاهزية يكشف المشكلة.
+  try {
+    await storage.init();
+    app.log.info({ uploadsDir: config.uploadsDir }, 'local attachment storage initialized');
+  } catch (error) {
+    app.log.error(
+      { err: error, uploadsDir: config.uploadsDir },
+      'local attachment storage is not usable; uploads and downloads will fail until it is fixed',
+    );
+  }
 
   const purgeTimer = setInterval(
     () => {

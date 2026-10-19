@@ -14,9 +14,8 @@ export function registerHealthRoutes(
   }));
 
   /**
-   * فحص الجاهزية: قاعدة البيانات شرط أساسي للجاهزية؛
-   * حالة التخزين تُعاد كمعلومة إضافية دون أن تُفشل الفحص
-   * (يبقى النظام قادراً على خدمة بقية الوظائف إذا تعطّل التخزين).
+   * فحص الجاهزية: قاعدة البيانات ومجلد تخزين المرفقات المحلي شرطان أساسيان
+   * لخدمة الأرشيف كاملاً؛ فشل أحدهما يعني 503 كي تكتشف المراقبة المشكلة فوراً.
    */
   app.get('/ready', async (request, reply) => {
     let databaseOk = false;
@@ -27,18 +26,17 @@ export function registerHealthRoutes(
       request.log.error({ err: error }, 'readiness: database check failed');
     }
 
-    let storageOk: boolean | null = null;
-    if (deps.storage.name !== 'disabled') {
-      try {
-        storageOk = await deps.storage.health();
-      } catch {
-        storageOk = false;
-      }
+    let storageOk = false;
+    try {
+      storageOk = await deps.storage.health();
+    } catch {
+      storageOk = false;
     }
 
-    if (!databaseOk) reply.code(503);
+    const ready = databaseOk && storageOk;
+    if (!ready) reply.code(503);
     return {
-      status: databaseOk ? 'ready' : 'not_ready',
+      status: ready ? 'ready' : 'not_ready',
       database: databaseOk,
       storage: storageOk,
     };

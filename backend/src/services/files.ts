@@ -63,9 +63,13 @@ export function resolveMimeType(filename: string): { extension: string; mimeType
   return { extension, mimeType };
 }
 
-export function buildStorageKey(keyPrefix: string, documentId: string, fileId: string, extension: string): string {
-  const prefix = keyPrefix ? `${keyPrefix}/` : '';
-  return `${prefix}documents/${documentId}/${fileId}.${extension}`;
+/**
+ * مفتاح التخزين الداخلي: مسار نسبي مولَّد بالكامل من الخادم
+ * (لا يدخل اسم الملف الأصلي في المسار إطلاقاً)، وهو نفس الشكل لمزوّد
+ * التخزين المحلي والنسخة الوهمية في الاختبارات.
+ */
+export function buildStorageKey(documentId: string, fileId: string, extension: string): string {
+  return `documents/${documentId}/${fileId}.${extension}`;
 }
 
 export function attachmentContentDisposition(filename: string): string {
@@ -123,19 +127,20 @@ export async function listFilesForDocument(db: Queryable, documentId: string): P
 }
 
 export interface StoredFileWithDocument {
-  file: FileRecordPublic & { storageKey: string; documentId: string };
+  file: FileRecordPublic & { storageKey: string; storageProvider: string; documentId: string };
   document: { id: string; reference: string; deletedAt: Date | null };
 }
 
 export async function getFileWithDocument(db: Queryable, fileId: string): Promise<StoredFileWithDocument | null> {
   const { rows } = await db.query<FileRow & {
     storage_key: string;
+    storage_provider: string;
     document_id: string;
     doc_reference: string;
     doc_deleted_at: Date | null;
   }>(
     `SELECT f.id, f.original_name, f.mime_type, f.size_bytes, f.checksum_sha256, f.created_at,
-            f.storage_key, f.document_id,
+            f.storage_key, f.storage_provider, f.document_id,
             uploader.display_name AS uploaded_by_name,
             doc.reference AS doc_reference, doc.deleted_at AS doc_deleted_at
        FROM document_files f
@@ -150,6 +155,7 @@ export async function getFileWithDocument(db: Queryable, fileId: string): Promis
     file: {
       ...toFileRecord(row),
       storageKey: row.storage_key,
+      storageProvider: row.storage_provider,
       documentId: row.document_id,
     },
     document: { id: row.document_id, reference: row.doc_reference, deletedAt: row.doc_deleted_at },
@@ -208,12 +214,7 @@ export async function storeAttachment(
 
   const originalName = sanitizeOriginalName(input.filename);
   const fileId = randomUUID();
-  const storageKey = buildStorageKey(
-    deps.config.s3?.keyPrefix ?? '',
-    input.documentId,
-    fileId,
-    extension,
-  );
+  const storageKey = buildStorageKey(input.documentId, fileId, extension);
   const maxBytes = deps.config.uploadMaxMb * 1024 * 1024;
 
   const tempDir = await mkdtemp(path.join(tmpdir(), 'hlc-upload-'));

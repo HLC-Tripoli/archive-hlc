@@ -28,6 +28,10 @@ COPY --from=production-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/migrations ./migrations
 COPY package.json ./
+# مجلد المرفقات الافتراضي داخل الحاوية. عند التشغيل عبر Compose يُستبدل بمجلد
+# المضيف المرتبط (ARCHIVE_UPLOADS_PATH) وترث الملكية من المضيف؛ هذا المجلد
+# يخدم فقط التشغيل المباشر بدون Compose.
+RUN mkdir -p /data/uploads && chown node:node /data/uploads
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

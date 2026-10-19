@@ -25,21 +25,21 @@ after(async () => {
   await pool.end();
 });
 
-test('production config rejects a missing S3 storage configuration', () => {
-  assert.throws(
-    () => loadConfig({ NODE_ENV: 'production', DATABASE_URL: 'postgres://x/y' }),
-    (error: unknown) => error instanceof ConfigError,
-  );
+test('production config works without any S3 settings and defaults to the local uploads directory', () => {
+  const config = loadConfig({ NODE_ENV: 'production', DATABASE_URL: 'postgres://x/y' });
+  assert.equal(config.uploadsDir, '/data/uploads');
 });
 
-test('partial S3 configuration is rejected', () => {
+test('UPLOADS_DIR is resolved to an absolute path and validated', () => {
+  const config = loadConfig({
+    NODE_ENV: 'test',
+    DATABASE_URL: 'postgres://x/y',
+    UPLOADS_DIR: './relative/uploads',
+  });
+  assert.equal(config.uploadsDir, path.resolve('./relative/uploads'));
+
   assert.throws(
-    () =>
-      loadConfig({
-        NODE_ENV: 'test',
-        DATABASE_URL: 'postgres://x/y',
-        S3_ENDPOINT: 'http://localhost:9000',
-      }),
+    () => loadConfig({ NODE_ENV: 'test', DATABASE_URL: 'postgres://x/y', UPLOADS_DIR: '/' }),
     (error: unknown) => error instanceof ConfigError,
   );
 });

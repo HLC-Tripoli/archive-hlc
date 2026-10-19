@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { Readable } from 'node:stream';
 import test from 'node:test';
 import type { FastifyInstance, HTTPMethods } from 'fastify';
@@ -30,7 +32,7 @@ async function streamToBuffer(source: Readable): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-/** مزوّد تخزين في الذاكرة يحاكي سلوك مزوّد S3 (بما فيها أخطاء الخدمة). */
+/** مزوّد تخزين في الذاكرة يحاكي سلوك مزوّد التخزين (بما فيها أخطاء الخدمة). */
 export class MemoryStorageProvider implements StorageProvider {
   readonly name = 'memory';
   readonly objects = new Map<string, { data: Buffer; contentType: string }>();
@@ -90,7 +92,7 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     sessionTtlHours: 1,
     cookieSecure: false,
     uploadMaxMb: 1,
-    s3: null,
+    uploadsDir: path.join(tmpdir(), 'hlc-test-uploads'),
     rateLimits: { loginMax: 50, sensitiveMax: 50, globalMax: 100000 },
     ...overrides,
   };

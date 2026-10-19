@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import type { AppConfig } from '../config.js';
 import { ApiError } from '../lib/errors.js';
@@ -10,6 +10,7 @@ import {
   deleteFileRow,
   getFileWithDocument,
   storeAttachment,
+  type StoredFileWithDocument,
 } from '../services/files.js';
 import type { StorageProvider } from '../services/storage/types.js';
 
@@ -25,6 +26,27 @@ const ID_PARAMS_SCHEMA = {
   required: ['id'],
   properties: { id: { type: 'string', maxLength: 64 } },
 } as const;
+
+/**
+ * حماية من سجلات قديمة تشير إلى مزوّد تخزين آخر (مثل s3 من نسخة سابقة):
+ * نرفض العملية برسالة واضحة بدلاً من تفسير مفتاحها القديم كمسار محلي
+ * أو حذف سطر قاعدة البيانات دون حذف الكائن الفعلي.
+ */
+function assertSupportedProvider(
+  request: FastifyRequest,
+  file: StoredFileWithDocument['file'],
+  storage: StorageProvider,
+): void {
+  if (file.storageProvider === storage.name) return;
+  request.log.warn(
+    { fileId: file.id, storedProvider: file.storageProvider, activeProvider: storage.name },
+    'attachment references an unsupported storage provider',
+  );
+  throw ApiError.conflict(
+    'unsupported_storage_provider',
+    'هذا المرفق مخزَّن بمزوّد تخزين غير مدعوم في هذه النسخة من النظام. راجع مسؤول النظام.',
+  );
+}
 
 export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): void {
   const { pool, guards, storage, config } = deps;
@@ -109,6 +131,7 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
       if (found.document.deletedAt && request.authUser!.role !== 'admin') {
         throw ApiError.notFound('الملف غير موجود.');
       }
+      assertSupportedProvider(request, found.file, storage);
 
       const object = await storage.getObject(found.file.storageKey);
 
@@ -143,6 +166,7 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
 
       const found = await getFileWithDocument(pool, id);
       if (!found) throw ApiError.notFound('الملف غير موجود.');
+      assertSupportedProvider(request, found.file, storage);
 
       // نحذف الكائن من التخزين أولاً؛ إذا فشل الحذف نُبقي السجل كي لا يبقى الكائن يتيماً.
       await storage.deleteObject(found.file.storageKey);

@@ -2,13 +2,15 @@
 
 نظام أرشيف مراسلات ووثائق كامل، بواجهة عربية RTL، يتكوّن من واجهة أمامية ثابتة
 (HTML/CSS/JS بدون أطر عمل) وخادم REST مكتوب بـ TypeScript (Fastify) وقاعدة بيانات
-PostgreSQL 18 وتخزين كائني متوافق مع S3 (RustFS)، تعمل جميعها عبر Docker Compose
-خلف خادم Angie الذي يقدّم الواجهة ويوكّل طلبات `/api/` إلى الخادم.
+PostgreSQL 18 ومرفقات تُخزَّن محلياً على نظام ملفات المضيف (دون أي اعتماد على S3)،
+تعمل جميعها عبر Docker Compose خلف خادم Angie الذي يقدّم الواجهة ويوكّل طلبات
+`/api/` إلى الخادم.
 
 An Arabic RTL correspondence archive for Hatif Libya: static frontend served by Angie,
-a Fastify (TypeScript) REST API, PostgreSQL 18 and S3-compatible object storage (RustFS),
-orchestrated with Docker Compose. All application data lives on the server; the browser
-keeps only the theme preference and optional legacy demo data awaiting migration.
+a Fastify (TypeScript) REST API, PostgreSQL 18 and private attachments stored on the
+host filesystem (no S3 dependency), orchestrated with Docker Compose. All application
+data lives on the server; the browser keeps only the theme preference and optional
+legacy demo data awaiting migration.
 
 ---
 
@@ -23,7 +25,8 @@ Angie (المنافذ: 80 داخل الحاوية، يُنشر على WEB_PORT)
    └── /api/  ⇢  خادم Fastify (api:3000, غير منشور خارجياً)
                      │
                      ├── PostgreSQL 18 (db:5432، داخل شبكة Compose فقط)
-                     └── RustFS (S3، خارج شبكة Compose عبر host.docker.internal أو عنوان S3_ENDPOINT)
+                     └── مجلد المرفقات على المضيف (bind mount إلى /data/uploads داخل
+                         حاوية api وحدها؛ غير مرئي لحاوية الواجهة Angie إطلاقاً)
 ```
 
 - **الواجهة الأمامية**: `index.html` + `css/style.css` + `js/` — بدون أي إطار عمل، بدون
@@ -33,8 +36,10 @@ Angie (المنافذ: 80 داخل الحاوية، يُنشر على WEB_PORT)
   المدخلات، تحقق من الصلاحيات على كل مسار، تسجيل تدقيق لكل العمليات الحساسة.
 - **قاعدة البيانات**: `backend/migrations/0001_init.sql` — تُدار بمرحّل خاص
   (`src/db/migrate.ts`) يتحقق من بصمات الملفات (SHA-256) ويرفض أي تعديل على ترحيل مطبَّق.
-- **التخزين**: بروتوكول S3 عبر `@aws-sdk/client-s3` — الملفات تُخزَّن في دلو S3،
-  وقاعدة البيانات تحتفظ بالمفاتيح والأحجام والبصمات فقط (لا تُخزَّن الملفات في PostgreSQL).
+- **التخزين**: مزوّد محلي (`LocalFilesystemStorageProvider`) يكتب المرفقات تحت
+  `UPLOADS_DIR` (افتراضياً `/data/uploads` داخل الحاوية، مربوط بمجلد دائم على المضيف)،
+  خلف واجهة `StorageProvider` تبقى بقية طبقات التطبيق مستقلة عن آلية التخزين.
+  قاعدة البيانات تحتفظ بالمفاتيح النسبية والأحجام والبصمات فقط، ولا تُخزَّن أي ملفات ثنائية في PostgreSQL.
 
 ## 2) هيكل المستودع
 
@@ -63,9 +68,10 @@ Angie (المنافذ: 80 داخل الحاوية، يُنشر على WEB_PORT)
 │   │   ├── plugins/auth.ts    # حراس الصلاحيات (requireAuth / requireAdmin) + CSRF
 │   │   ├── routes/            # المسارات: auth, users, departments, documents,
 │   │   │                      #   files, imports, stats, audit, health
-│   │   ├── services/          # منطق الأعمال لكل كيان + storage (S3 / معطّل)
+│   │   ├── services/          # منطق الأعمال لكل كيان + storage (مزوّد محلي / في الذاكرة للاختبارات)
 │   │   └── scripts/           # create-admin (تهيئة أول مدير)
 │   └── test/                  # اختبارات آلية (node:test) — 01..09
+├── archive/files/uploads/     # (يُنشأ على المضيف) مجلد المرفقات الافتراضي — مستبعَد من Git والصور
 └── README.md
 ```
 
@@ -74,7 +80,8 @@ Angie (المنافذ: 80 داخل الحاوية، يُنشر على WEB_PORT)
 - Docker Engine مع إضافة Compose v2 على مضيف النشر.
 - إمكانية سحب الصور: `postgres:18`، `node:24-bookworm-slim` (بناء)،
   `docker.angie.software/angie:1.12.4-alpine`.
-- خدمة تخزين S3 (RustFS أو غيرها) جاهزة مع مفتاح وصول وسري.
+- مساحة تخزين دائمة على المضيف لمجلد المرفقات (قرص مخصّص إن أمكن) مع صلاحيات
+  مستخدم تشغيل الحاوية — راجع قسم «التخزين المحلي للمرفقات».
 - (اختياري) طرفية TLS أمام Angie أو شهادة داخل إعداد Angie للإنتاج — انظر قسم TLS.
 - للتطوير المحلي للخادم: Node.js ≥ 20.19 (يُفضَّل 24) و npm.
 
@@ -88,16 +95,15 @@ Angie (المنافذ: 80 داخل الحاوية، يُنشر على WEB_PORT)
 | --- | --- |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | بيانات قاعدة البيانات (تُنشأ عند أول تشغيل). |
 | `DATABASE_URL` | رابط الاتصال؛ يجب أن يطابق الثلاثة أعلاه ويشير إلى المضيف `db`. |
-| `NODE_ENV=production` | يفعّل: إلزام إعداد S3، كوكي Secure افتراضي، وثوق الوكيل العكسي. |
+| `NODE_ENV=production` | يفعّل: كوكي Secure افتراضياً، وثوق الوكيل العكسي. (لا تُشترط أي إعدادات S3 في أي بيئة.) |
 | `PUBLIC_ORIGIN` | الأصل العام للمنظومة (مثل `https://archive.example.com`). عند ضبطه يُفرض على كل الطلبات المتغيّرة. اتركه فارغاً خلف وكيل عكسي موحّد. |
 | `TRUST_PROXY=true` | خلف Angie يجب أن يبقى `true` (يُفعّل احترام `X-Forwarded-*`). |
 | `SESSION_TTL_HOURS` | مدة الجلسة بالساعات (افتراضي 12). |
 | `COOKIE_SECURE` | `true` في الإنتاج مع HTTPS. اضبطها `false` مؤقتاً فقط للاختبار على HTTP. |
 | `UPLOAD_MAX_MB` | أقصى حجم للمرفق الواحد (افتراضي 25). عند رفعه فوق 25 عدّل `client_max_body_size` في `deploy/angie/angie.conf` وأعد بناء صورة الواجهة. |
 | `WEB_PORT` | المنفذ المنشور للواجهة (افتراضي 8080). |
-| `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` | إعدادات التخزين؛ تُلزم مجتمعةً في الإنتاج. من داخل الحاويات استخدم `http://host.docker.internal:9000` للوصول إلى تخزين على مضيف Docker. |
-| `S3_FORCE_PATH_STYLE` | `true` لمعظم خدمات S3 المحلية (بما فيها RustFS). |
-| `S3_KEY_PREFIX` | بادئة المفاتيح داخل الدلو (افتراضي `archive`). |
+| `ARCHIVE_UPLOADS_PATH` | مجلد المرفقات على مضيف Docker (افتراضي `./archive/files/uploads` بجانب ملف compose). يقبل مساراً نسبياً أو مطلقاً (قرص مخصّص، مثال `/srv/archive-hlc/uploads`). يُربط إلى `/data/uploads` في حاوية `api` وحدها. |
+| `UPLOADS_DIR` | مسار تخزين المرفقات داخل الحاوية (افتراضي `/data/uploads`)؛ اتركه كما هو إلا لحالات خاصة. |
 | `RATE_LIMIT_*` | حدود المعدّل: دخول/عمليات حساسة/عام. |
 
 > ملاحظة أمنية: جميع الأسرار تبقى في `.env` على المضيف فقط؛ الصور لا تحتوي أي أسرار.
@@ -107,15 +113,21 @@ Angie (المنافذ: 80 داخل الحاوية، يُنشر على WEB_PORT)
 ```bash
 # 1) الإعداد
 cp .env.example .env
-nano .env                        # عدّل كلمات المرور وبيانات S3
+nano .env                        # عدّل كلمات المرور ومسار المرفقات إن لزم
 
-# 2) البناء والتشغيل (db → migrate → api → web)
+# 2) جهّز مجلد المرفقات الدائم (مرة واحدة قبل أول تشغيل)
+mkdir -p ./archive/files/uploads
+sudo chown 1000:1000 ./archive/files/uploads   # مستخدم تشغيل حاوية الخادم (uid=1000)
+sudo chmod 750 ./archive/files/uploads
+
+# 3) البناء والتشغيل (db → migrate → api → web)
 docker compose up -d --build
 
-# 3) التحقق
+# 4) التحقق
 docker compose ps                # يجب أن تكون db/api/web بحالة healthy
 curl -s http://localhost:8080/healthz          # ok
 curl -s http://localhost:8080/api/v1/health    # {"status":"ok",...}
+curl -s http://localhost:8080/api/v1/ready     # {"status":"ready","database":true,"storage":true}
 ```
 
 الترتيب محكوم بالصحة: `migrate` يعمل مرة واحدة بعد جهوزية قاعدة البيانات ثم يتوقف بنجاح،
@@ -136,15 +148,82 @@ docker compose run --rm api node dist/scripts/create-admin.js --username admin -
 - يدوياً: `docker compose run --rm migrate` (أو `npm run db:migrate` في بيئة تطوير).
 - الترحيلات المطبَّقة غير قابلة للتعديل: أي تغيير في ملف مطبَّق يُرفض عمداً؛ أضف ترحيلاً جديداً بدلاً من ذلك.
 
-### التخزين S3 (RustFS)
+### التخزين المحلي للمرفقات (لا يوجد أي اعتماد على S3)
 
-1. أنشئ دلو التخزين (مثلاً `archive-hlc`) من واجهة RustFS أو أدوات S3.
-2. اضبط `S3_*` في `.env` بمفتاح وصول وسري.
-3. أعد تشغيل `api`: `docker compose up -d api`.
-4. تحقق من جاهزية التخزين: `curl -s http://localhost:8080/api/v1/ready`.
+المرفقات (PDF ومستندات ممسوحة ضوئياً) تُخزَّن على مجلد دائم في **مضيف Docker**:
 
-الخادم يستخدم `host.docker.internal` للوصول إلى تخزين منشور على مضيف Docker
-(مضبوط عبر `extra_hosts: host.docker.internal:host-gateway` في compose).
+- **المسار على المضيف**: `ARCHIVE_UPLOADS_PATH` في `.env` (افتراضياً
+  `./archive/files/uploads` بجانب `docker-compose.yml`). يمكن جعله مساراً مطلقاً
+  على قرص مخصّص دون إعادة بناء أي صورة، مثال:
+  `ARCHIVE_UPLOADS_PATH=/srv/archive-hlc/uploads`.
+- **المسار داخل الحاوية**: `/data/uploads` (`UPLOADS_DIR`) — مربوط فقط بحاوية `api`
+  بصلاحية قراءة/كتابة. **حاوية الواجهة Angie لا ترى هذا المجلد إطلاقاً** ولا يوجد أي
+  مسار عام يقود إليه؛ محاولة الوصول إلى `/uploads/...` ترجع 404 عمداً.
+- **مستخدم التشغيل**: الحاوية تعمل بمستخدم غير جذري `node` بمعرّف **uid=1000, gid=1000**
+  (مُتحقَّق منه داخل الصورة). أنشئ المجلد قبل أول تشغيل وامنحه ملكية هذا المستخدم:
+
+  ```bash
+  mkdir -p ./archive/files/uploads
+  sudo chown 1000:1000 ./archive/files/uploads
+  sudo chmod 750 ./archive/files/uploads
+  ```
+
+  إن أُنشئ المجلد تلقائياً بواسطة Docker فسيكون مملوكاً لـ `root` ولن يستطيع الخادم
+  الكتابة فيه؛ حينها يسجّل الخادم خطأ `EACCES` واضحاً عند الإقلاع، وترجع جاهزية
+  الخادم `503` مع `"storage":false`، وتفشل عمليات الرفع برسالة عربية واضحة
+  *بدون* أن يُسجَّل أي سطر في قاعدة البيانات. الإصلاح: طبّق أمرَي `chown`/`chmod`
+  أعلاه (لا حاجة لإعادة تشغيل الحاوية — الفحص حيّ).
+
+- **أول تشغيل**: قاعدة البيانات أولاً (`db` → `migrate` → `api` → `web`) ثم تحقق:
+
+  ```bash
+  curl -s http://localhost:8080/api/v1/ready   # {"status":"ready","database":true,"storage":true}
+  ```
+
+- **اختبار استمرارية المرفقات** (مثال كامل):
+
+  ```bash
+  # 1) ارفع مرفقاً من الواجهة أو عبر API، ثم:
+  ls -l ./archive/files/uploads/documents/<docId>/<fileId>.pdf   # owner 1000:1000
+  # 2) أعد تشغيل الحاوية أو أعد بناء الصورة واستبدل الحاوية
+  docker compose restart api
+  # docker compose up -d --build && docker compose up -d --force-recreate api
+  # 3) نزّل المرفق نفسه من الواجهة — يجب أن يتطابق المحتوى (sha256) والبصمة في قاعدة البيانات.
+  ```
+
+  المرفقات تصمد أمام إعادة تشغيل Compose، وإعادة إنشاء الحاوية، وترقية الصور، لأن
+  المحتوى ليس داخل طبقات الصورة ولا داخل حاويات مؤقتة، بل في مجلد المضيف المرتبط.
+
+- **الخصوصية والصلاحيات**: لا يُشتق أي مسار على القرص من اسم ملف قدّمه العميل — المفاتيح
+  الداخلية مثل `documents/<معرّف المعاملة>/<معرّف الملف>.<امتداد>` يولّدها الخادم وحده
+  وتُخزَّن نسبيةً في `document_files.storage_key` (لا تُخزَّن مسارات المضيف المطلقة في
+  قاعدة البيانات، ولا تُعرض أي مفاتيح تخزين عبر الواجهة البرمجية). التنزيل يمر حصراً عبر
+  `GET /api/v1/files/:id/download` بعد التحقق من الجلسة والصلاحية، مع ترويسات
+  `Content-Disposition` آمنة، `Cache-Control: private, no-store`، و`X-Content-Type-Options: nosniff`.
+  رفض المسارات المتسلّلة (`..` أو المطلقة أو روابط رمزية) وعدم استبدال ملفات قائمة
+  وعدم ترك ملفات مؤقتة عند الفشل — كلها مطبَّقة داخل المزوّد المحلي ومغطاة بالاختبارات.
+
+- **الانتقال من النسخة السابقة (S3)**: لم يُنشر أي نظام إنتاجي سابق يعتمد S3 — استُخدمت
+  خدمة S3 فقط في بيئة اختبار مؤقتة أُزيلت مع أدواتها، ولا توجد أي سجلات تشغيلية
+  تشير إلى كائنات S3. جميع عمليات الرفع الجديدة تذهب إلى التخزين المحلي. كإجراء وقائي،
+  أي سطر قديم في `document_files` يحمل مزوّد تخزين مختلفاً (مثل `s3`) يُرفض الوصول إليه
+  (تنزيلاً وحذفاً) برسالة عربية واضحة `unsupported_storage_provider` بدل تفسير مفتاحه
+  القديم كمسار محلي — ولا يُحذف السطر ولا أي كائن تلقائياً. لا توجد في هذا الإصدار أداة
+  ترحيل تلقائية من S3 لأنها غير لازمة لحالة هذا النظام، وأي بيانات كهذه (إن وُجدت
+  لدى طرف ثالث) تحتاج معالجة يدوية موثّقة.
+
+- **النسخ الاحتياطي (مهم)**: الأرشيف القابل للاستعادة يتطلب **نسختين معاً**: مجلد
+  المرفقات (`ARCHIVE_UPLOADS_PATH` كاملاً) ونسخة `pg_dump` من قاعدة البيانات. نسخ
+  أحدهما دون الآخر لا يكفي لاستعادة المرفقات.
+
+**English summary**: attachments are stored on a persistent host directory
+(`ARCHIVE_UPLOADS_PATH`, default `./archive/files/uploads`) bind-mounted read/write
+into the **api** container only, as `/data/uploads`. The container runs as non-root
+uid/gid `1000:1000`, so the host directory must be pre-created and owned by that user.
+The Angie container never sees the directory and `/uploads/...` is explicitly 404.
+Downloads go exclusively through the authenticated API endpoint. No S3 endpoint,
+bucket, or keys are required or read. Back up both the uploads directory and
+PostgreSQL — one without the other is not a recoverable archive.
 
 ### تحديث نسخة منشورة
 
@@ -214,7 +293,7 @@ Angie في هذا الإعداد يستمع HTTP على المنفذ 80 داخل
 | `GET /documents/:id` | تفاصيل معاملة | جلسة |
 | `POST /documents` • `PATCH /documents/:id` | تسجيل/تعديل معاملة | جلسة |
 | `DELETE /documents/:id` • `POST /documents/:id/restore` | حذف منطقي/استعادة | مدير |
-| `POST /documents/:id/files` | رفع مرفق (multipart) إلى S3 | جلسة |
+| `POST /documents/:id/files` | رفع مرفق (multipart) إلى التخزين المحلي | جلسة |
 | `GET /files/:id/download` • `DELETE /files/:id` | تنزيل مرفق / حذفه | جلسة / مدير |
 | `GET /stats/dashboard` • `GET /reports/summary` • `GET /reports/documents.csv` | إحصائيات وتقارير (CSV بـ BOM لدعم Excel العربي) | جلسة |
 | `POST /imports/legacy` • `POST /imports/backup` • `GET /exports/backup` | ترحيل بيانات المتصفح، استيراد/تصدير نسخة JSON | مدير |
@@ -242,6 +321,7 @@ Angie في هذا الإعداد يستمع HTTP على المنفذ 80 داخل
 cd backend
 npm ci
 npm run dev          # تشغيل التطوير مع إعادة التحميل (يتطلب DATABASE_URL)
+                     # للتطوير المحلي اضبط UPLOADS_DIR=./.local-uploads كي لا يُستخدم /data/uploads
 npm run typecheck    # فحص TypeScript
 ```
 
@@ -264,15 +344,23 @@ export DATABASE_URL=postgres://user:pass@localhost:5432/hlc_test
 npm test
 ```
 
-- الملفات `01..09` تغطي بالترتيب: الترحيلات، المصادقة/الجلسات/CSRF/حدود المعدّل،
-  المستخدمين والأدوار، الإدارات، المعاملات CRUD والحذف/الاستعادة، المرفقات
-  (رفع/تنزيل/قيود الحجم والنوع/فشل التخزين)، الترحيل والنسخ الاحتياطي، التقارير،
-  واختبار تكامل حقيقي مع S3.
-- اختبار S3 الحقيقي (اختياري) يُفعَّل بـ `S3_LIVE_TEST=1` مع `S3_*` صحيحة — ينفّذ
-  دورة رفع/تنزيل/حذف كاملة على تخزين فعلي.
-- آخر تشغيل كامل: **49 اختباراً — 48 ناجحاً، 0 فاشل، 1 متجاهل (اختبار S3 الحقيقي غير مُفعَّل)**،
-  إضافةً إلى تشغيل منفصل ناجح لاختبار S3 الحقيقي على RustFS، وفحص E2E كامل
-  (41 فحصاً عبر curl + جلسات كاملة في المتصفح) على منظومة Compose.
+- الملفات `01..09` تغطي بالترتيب: الترحيلات وإعدادات التخزين المحلي، المصادقة/الجلسات/
+  CSRF/حدود المعدّل، المستخدمين والأدوار، الإدارات، المعاملات CRUD والحذف/الاستعادة،
+  المرفقات عبر الواجهة (رفع/تنزيل/قيود الحجم والنوع/فشل التخزين)، الترحيل والنسخ
+  الاحتياطي، التقارير، ثم اختبارات المزوّد المحلي (09): الكتابة/القراءة الثنائية،
+  الاستمرارية بإعادة إنشاء المزوّد، البثّ لملفات كبيرة، رفض المسارات المتسلّلة/المطلقة/
+  المشفّرة/بنمط Windows، منع الاستبدال والروابط الرمزية، الحذف الآمن، فحوص الصحة،
+  وتكامل كامل عبر الواجهة (رفع → قرص → إعادة «تشغيل» التطبيق → تنزيل → حذف) بما يشمل
+  رفض سجلات مزوّد تخزين قديم (409) وفشل الجاهزية عند تعذّر استخدام مجلد التخزين.
+- آخر تشغيل كامل (على PostgreSQL 18.6): **59 اختباراً — 59 ناجحاً، 0 فاشل، 0 متجاهل**.
+- فحوص النشر الفعلية: بناء صورتَي `api`/`web`، فحص إعداد Angie (`angie -t` داخل الشبكة)،
+  `docker compose config`، وE2E كامل عبر curl على منظومة Compose حقيقية:
+  **35 فحصاً — 35 ناجحاً** (رفع 2MiB → القرص بملكية 1000:1000 → تنزيل متطابق البصمة →
+  استمرارية بعد `restart` وبعد إعادة إنشاء الحاوية → حجب `/uploads/` بـ404 →
+  صلاحيات (403/401) → حذف ملف+سطر+تنظيف المجلد → أحداث التدقيق)، إضافة إلى دورة
+  كاملة من المتصفح (تسجيل دخول، رفع مرفق من الواجهة، تنزيل متطابق sha256).
+- ما لم يُشغَّل في هذه الجولة: لا يوجد — جرت جميع الفحوص أعلاه فعلياً؛ الاختبارات جرت
+  على قاعدة بيانات اختبار معزولة ومجلدات مؤقتة، ثم أُزيلت البنية المؤقتة كاملة.
 
 ## 12) استكشاف الأخطاء
 
@@ -281,8 +369,9 @@ npm test
 | `origin_not_allowed` عند الدخول من المتصفح | الوكيل لا يمرّر `Host` الأصلي بالمنفذ، أو `PUBLIC_ORIGIN` غير مطابق | تأكد من `proxy_set_header Host $http_host;` في Angie، أو اضبط `PUBLIC_ORIGIN` بالأصل الفعلي |
 | الكوكي لا يُحفظ بعد الدخول على HTTP | `COOKIE_SECURE=true` مع اتصال غير مشفّر | اضبطها `false` مؤقتاً للاختبار، أو فعّل HTTPS (المستحسن) |
 | `413` عند رفع مرفق كبير | `client_max_body_size` في Angie أصغر من الملف | ارفع الحد في `deploy/angie/angie.conf` وأعد بناء `web`، مع مواءمته مع `UPLOAD_MAX_MB` |
-| `api` لا يقلع: `Missing required environment variable` | متغيّر ناقص في `.env` | راجع السجل `docker compose logs api` وأكمل القيم؛ في الإنتاج تُلزم متغيرات S3 مجتمعةً |
-| `ready` يرجع فشلاً مع أن `health` سليم | تعذّر الوصول إلى التخزين S3 | تحقق من `S3_ENDPOINT` وبيانات المفتاح ووجود الدلو |
+| `api` لا يقلع: `Missing required environment variable` | متغيّر ناقص في `.env` | راجع السجل `docker compose logs api` وأكمل القيم؛ `DATABASE_URL` إلزامي دائماً، ولا توجد أي متغيّرات S3 إلزامية |
+| `ready` يرجع `503` مع `"storage":false` | مجلد المرفقات غير قابل للاستخدام: مملوك لـ root (أُنشئ تلقائياً بعد `up`)، أو غير موجود، أو مسار لا يقبل الكتابة | على المضيف: `ls -ld ./archive/files/uploads` ثم `sudo chown 1000:1000 ...` و`sudo chmod 750 ...`؛ الفحص حيّ فلا حاجة لإعادة تشغيل الحاوية |
+| فشل الرفع بخطأ تخزين مع أن المجلد سليم | نفدت مساحة القرص أو انقطع الربط | تحقق من `df -h` على المضيف ومن ربط `/data/uploads` عبر `docker inspect` لحاوية `api` |
 | «Applied migrations are immutable» | تعديل ملف ترحيل مطبَّق سابقاً | أعِد الملف الأصلي، وأنشئ ترحيلاً جديداً للتغييرات |
 | الجلسات تنتهي فوراً | تغيّر `DATABASE_URL` أو أُعيد إنشاء الحجم | سجّل الدخول مجدداً؛ راجع أن الحجم `pgdata` لم يُحذف |
 | خطأ `401` متكرر بعد تعديل المستخدم | كلمة المرور/التعطيل يُبطلان جلسات المستخدم (بالتصميم) | أعد تسجيل الدخول |
@@ -290,15 +379,19 @@ npm test
 ## 13) ملاحظات وحدود معروفة
 
 - **مُنفَّذ ومُختبر داخل هذا المستودع**: الخادم، قاعدة البيانات والترحيلات، المصادقة
-  والصلاحيات، المرفقات على S3، التقارير، الترحيل والنسخ الاحتياطي، الاختبارات الآلية،
-  صورة Angie وإعداداتها، وسكربتات Compose و‎.env.example‎.
+  والصلاحيات، المرفقات على التخزين المحلي (المزوّد المحلي وواجهته)، التقارير، الترحيل
+  والنسخ الاحتياطي، الاختبارات الآلية، صورة Angie وإعداداتها، وسكربتات Compose و‎.env.example‎.
 - **يوفّره مسؤول النشر (خارج نطاق المستودع)**: شهادة TLS والاسم العام والدخول من
-  الإنترنت، خدمة RustFS نفسها وإدارة نسخها الاحتياطية، نسخ PostgreSQL الاحتياطي
-  الدوري، المراقبة الخارجية، وإدارة المضيف وتحديثاته.
+  الإنترنت، القرص/الوحدة المخصّصة لمجلد المرفقات ونسخه الاحتياطية الدورية **مع** نسخ
+  PostgreSQL الاحتياطي (الاثنان مطلوبان معاً لاستعادة كاملة)، المراقبة الخارجية،
+  وإدارة المضيف وتحديثاته.
 - الواجهة تخدم ملفاتها باسم الإصدار «1.0»؛ لا توجد بصمات ملفات، والتخزين المؤقت
   المضبوط قصير مع إعادة تحقق لتصل التحديثات.
 - لا تُنقل محتويات المرفقات من النسخة التجريبية القديمة (لا يوجد تخزين مرفقات سابق)؛
   تُرحَّل البيانات النصية فقط.
+- لا توجد أداة ترحيل تلقائية من S3: لم يعمل النظام إنتاجياً على S3 قط (استُخدم S3 في
+  بيئة اختبار مؤقتة أُزيلت)، وسجلات قديمة بمزوّد مختلف — إن ظهرت يوماً — يُرفض الوصول
+  إليها برسالة واضحة وتُعالج يدوياً.
 - المعمارية أحادية العقدة (بلا توزيع/توسّع أفقي)؛ مناسبة لحجم استخدام إدارة واحدة.
 
 ## 14) الترخيص والحقوق

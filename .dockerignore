@@ -4,6 +4,7 @@
 node_modules
 **/node_modules
 backend
+archive
 deploy/angie/Dockerfile
 .env
 .env.*

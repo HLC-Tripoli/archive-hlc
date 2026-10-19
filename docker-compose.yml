@@ -22,7 +22,10 @@ services:
     networks:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      # فحص عبر TCP (127.0.0.1) وليس المقبس المحلي: أثناء تهيئة الصورة الأولية
+      # يعمل خادم مؤقت على المقبس فقط، ما يجعل الفحص السطحي "سليماً" قبل جهوزية
+      # الخادم الفعلي على الشبكة — وهذا يسبب فشل خدمة الترحيلات بـ ECONNREFUSED.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -47,7 +50,8 @@ services:
 
   # ---------------------------------------------------------------------------
   # خادم واجهة برمجة التطبيقات (Fastify)
-  # extra_hosts يتيح الوصول إلى تخزين RustFS على مضيف Docker عبر host.docker.internal
+  # المرفقات تُخزَّن على مجلد المضيف المرتبط (ARCHIVE_UPLOADS_PATH) ضمن حجم دائم،
+  # ويصل إليه الخادم وحده عبر المسار الداخلي /data/uploads.
   # ---------------------------------------------------------------------------
   api:
     build:
@@ -56,8 +60,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    volumes:
+      # المرفقات تبقى على المضيف: تصمد أمام إعادة إنشاء الحاوية وترقية الصور.
+      # يجب إنشاء المجلد مسبقاً بملكية مستخدم التشغيل (uid=1000) — راجع README.
+      - "${ARCHIVE_UPLOADS_PATH:-./archive/files/uploads}:/data/uploads"
     depends_on:
       db:
         condition: service_healthy

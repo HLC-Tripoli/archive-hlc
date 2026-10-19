@@ -1,16 +1,10 @@
+import path from 'node:path';
 import { ConfigError } from './lib/errors.js';
 
 export type NodeEnv = 'development' | 'production' | 'test';
 
-export interface S3Config {
-  endpoint: string;
-  region: string;
-  bucket: string;
-  accessKey: string;
-  secretKey: string;
-  forcePathStyle: boolean;
-  keyPrefix: string;
-}
+/** المسار الداخلي الافتراضي لمجلد تخزين المرفقات داخل حاوية api. */
+export const DEFAULT_UPLOADS_DIR = '/data/uploads';
 
 export interface AppConfig {
   nodeEnv: NodeEnv;
@@ -23,7 +17,8 @@ export interface AppConfig {
   sessionTtlHours: number;
   cookieSecure: boolean;
   uploadMaxMb: number;
-  s3: S3Config | null;
+  /** المجلد الجذري لتخزين المرفقات على نظام الملفات (يُوصَل إليه Compose بحجم دائم). */
+  uploadsDir: string;
   rateLimits: {
     loginMax: number;
     sensitiveMax: number;
@@ -71,29 +66,20 @@ function normalizeOrigin(value: string, name: string): string {
   return `${parsed.protocol}//${parsed.host}`;
 }
 
-function readS3Config(env: NodeJS.ProcessEnv): S3Config | null {
-  const endpoint = (env.S3_ENDPOINT ?? '').trim();
-  const bucket = (env.S3_BUCKET ?? '').trim();
-  const accessKey = (env.S3_ACCESS_KEY ?? '').trim();
-  const secretKey = (env.S3_SECRET_KEY ?? '').trim();
-  const provided = [endpoint, bucket, accessKey, secretKey].filter((v) => v !== '');
-  if (provided.length === 0) return null;
-  if (provided.length !== 4) {
-    throw new ConfigError(
-      'Incomplete S3 configuration: S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY and S3_SECRET_KEY must all be set (or all omitted)',
-    );
+/**
+ * مسار تخزين المرفقات المحلي: يُحلَّل إلى مسار مطلق (أو الافتراضي داخل الحاوية)،
+ * وتُرفض القيم الفارغة وجذر نظام الملفات وكأي محتوى يحتوي بايت NUL.
+ */
+function readUploadsDir(value: string | undefined): string {
+  const raw = (value ?? '').trim() || DEFAULT_UPLOADS_DIR;
+  if (raw.includes('\0')) {
+    throw new ConfigError('UPLOADS_DIR must not contain NUL bytes');
   }
-  const normalizedEndpoint = normalizeOrigin(endpoint, 'S3_ENDPOINT');
-  const keyPrefixRaw = (env.S3_KEY_PREFIX ?? 'archive').trim().replace(/^\/+|\/+$/g, '');
-  return {
-    endpoint: normalizedEndpoint,
-    region: (env.S3_REGION ?? 'us-east-1').trim() || 'us-east-1',
-    bucket,
-    accessKey,
-    secretKey,
-    forcePathStyle: readBool(env.S3_FORCE_PATH_STYLE, 'S3_FORCE_PATH_STYLE', true),
-    keyPrefix: keyPrefixRaw,
-  };
+  const resolved = path.resolve(raw);
+  if (resolved === path.parse(resolved).root) {
+    throw new ConfigError('UPLOADS_DIR must not point at the filesystem root');
+  }
+  return resolved;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -110,13 +96,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   }
 
   const publicOriginRaw = (env.PUBLIC_ORIGIN ?? '').trim();
-  const s3 = readS3Config(env);
-
-  if (isProduction && s3 === null) {
-    throw new ConfigError(
-      'In production the attachment storage must be configured: set S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY and S3_SECRET_KEY',
-    );
-  }
 
   return {
     nodeEnv,
@@ -129,7 +108,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     sessionTtlHours: readInt(env.SESSION_TTL_HOURS, 'SESSION_TTL_HOURS', 12, 1, 720),
     cookieSecure: readBool(env.COOKIE_SECURE, 'COOKIE_SECURE', isProduction),
     uploadMaxMb: readInt(env.UPLOAD_MAX_MB, 'UPLOAD_MAX_MB', 25, 1, 200),
-    s3,
+    uploadsDir: readUploadsDir(env.UPLOADS_DIR),
     rateLimits: {
       loginMax: readInt(env.RATE_LIMIT_LOGIN_MAX, 'RATE_LIMIT_LOGIN_MAX', 10, 1, 10000),
       sensitiveMax: readInt(env.RATE_LIMIT_SENSITIVE_MAX, 'RATE_LIMIT_SENSITIVE_MAX', 20, 1, 10000),
