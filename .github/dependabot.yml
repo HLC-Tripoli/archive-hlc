@@ -1,6 +1,10 @@
-# تحديثات أسبوعية مثبّتة: إجراءات GitHub Actions المثبّتة على SHA، وصور
-# Dockerfiles. لا تحديثات npm تلقائية هنا حتى لا تفتح طلبات سحب غير مراجعة على
-# اعتماديات الخادم — تُحدَّث يدوياً عند الحاجة.
+# تحديثات أسبوعية مثبّتة: إجراءات GitHub Actions المثبّتة على SHA، وصورة node
+# الأساسية في /backend. لا تحديثات npm تلقائية هنا حتى لا تُفتح طلبات سحب غير
+# مراجَعة على اعتماديات الخادم — تُحدَّث يدوياً عند الحاجة.
+#
+# ملاحظة: لا ندرج صورة Angie (deploy/angie) هنا لأن سجلّها المخصص
+# (docker.angie.software) غير مدعوم في Dependabot وتفشل متابعته؛ نسخة Angie
+# مثبّتة صريحةً في Dockerfile وتُرقّى يدوياً عند الحاجة.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -9,9 +13,5 @@ updates:
       interval: weekly
   - package-ecosystem: docker
     directory: /backend
-    schedule:
-      interval: weekly
-  - package-ecosystem: docker
-    directory: /deploy/angie
     schedule:
       interval: weekly
