@@ -1,0 +1,171 @@
+import type { FastifyInstance } from 'fastify';
+import type { Pool } from 'pg';
+import type { AppConfig } from '../config.js';
+import { ApiError } from '../lib/errors.js';
+import { isUuid } from '../lib/validation.js';
+import type { AuthGuards } from '../plugins/auth.js';
+import { writeAudit } from '../services/audit.js';
+import {
+  attachmentContentDisposition,
+  deleteFileRow,
+  getFileWithDocument,
+  storeAttachment,
+} from '../services/files.js';
+import type { StorageProvider } from '../services/storage/types.js';
+
+export interface FileRoutesDeps {
+  pool: Pool;
+  guards: AuthGuards;
+  storage: StorageProvider;
+  config: AppConfig;
+}
+
+const ID_PARAMS_SCHEMA = {
+  type: 'object',
+  required: ['id'],
+  properties: { id: { type: 'string', maxLength: 64 } },
+} as const;
+
+export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): void {
+  const { pool, guards, storage, config } = deps;
+
+  app.post(
+    '/documents/:id/files',
+    { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
+    async (request, reply) => {
+      const { id: documentId } = request.params as { id: string };
+      if (!isUuid(documentId)) throw ApiError.notFound('المعاملة غير موجودة.');
+
+      const document = await pool.query<{ id: string; deleted_at: Date | null }>(
+        'SELECT id, deleted_at FROM documents WHERE id = $1',
+        [documentId],
+      );
+      const documentRow = document.rows[0];
+      if (!documentRow) throw ApiError.notFound('المعاملة غير موجودة.');
+      if (documentRow.deleted_at) {
+        throw ApiError.conflict('deleted_document', 'لا يمكن إضافة مرفقات إلى معاملة محذوفة.');
+      }
+
+      if (!request.isMultipart()) {
+        throw ApiError.badRequest('invalid_content_type', 'يجب إرسال الملف باستخدام multipart/form-data.');
+      }
+      const data = await request.file();
+      if (!data) {
+        throw ApiError.badRequest('missing_file', 'لم يتم إرسال أي ملف.');
+      }
+
+      const record = await storeAttachment(
+        { pool, storage, config },
+        {
+          documentId,
+          userId: request.authUser!.id,
+          stream: data.file,
+          filename: data.filename,
+          declaredMimeType: data.mimetype,
+        },
+      );
+
+      await writeAudit(
+        pool,
+        {
+          actorUserId: request.authUser!.id,
+          actorUsername: request.authUser!.username,
+          action: 'file.uploaded',
+          entityType: 'document_file',
+          entityId: record.id,
+          details: {
+            documentId,
+            name: record.originalName,
+            size: record.sizeBytes,
+            mimeType: record.mimeType,
+          },
+        },
+        { ip: request.ip, userAgent: (request.headers['user-agent'] ?? '') || null },
+      );
+
+      reply.code(201);
+      return {
+        file: {
+          id: record.id,
+          originalName: record.originalName,
+          mimeType: record.mimeType,
+          sizeBytes: record.sizeBytes,
+          checksumSha256: record.checksumSha256,
+          createdAt: record.createdAt,
+        },
+      };
+    },
+  );
+
+  app.get(
+    '/files/:id/download',
+    { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!isUuid(id)) throw ApiError.notFound('الملف غير موجود.');
+
+      const found = await getFileWithDocument(pool, id);
+      if (!found) throw ApiError.notFound('الملف غير موجود.');
+      if (found.document.deletedAt && request.authUser!.role !== 'admin') {
+        throw ApiError.notFound('الملف غير موجود.');
+      }
+
+      const object = await storage.getObject(found.file.storageKey);
+
+      await writeAudit(
+        pool,
+        {
+          actorUserId: request.authUser!.id,
+          actorUsername: request.authUser!.username,
+          action: 'file.downloaded',
+          entityType: 'document_file',
+          entityId: id,
+          details: { documentId: found.document.id, name: found.file.originalName },
+        },
+        { ip: request.ip, userAgent: (request.headers['user-agent'] ?? '') || null },
+      );
+
+      reply.header('Content-Type', found.file.mimeType || object.contentType || 'application/octet-stream');
+      reply.header('Content-Length', String(object.contentLength ?? found.file.sizeBytes));
+      reply.header('Content-Disposition', attachmentContentDisposition(found.file.originalName));
+      reply.header('Cache-Control', 'private, no-store');
+      reply.header('X-Content-Type-Options', 'nosniff');
+      return reply.send(object.body);
+    },
+  );
+
+  app.delete(
+    '/files/:id',
+    { preHandler: guards.requireAdmin, schema: { params: ID_PARAMS_SCHEMA } },
+    async (request) => {
+      const { id } = request.params as { id: string };
+      if (!isUuid(id)) throw ApiError.notFound('الملف غير موجود.');
+
+      const found = await getFileWithDocument(pool, id);
+      if (!found) throw ApiError.notFound('الملف غير موجود.');
+
+      // نحذف الكائن من التخزين أولاً؛ إذا فشل الحذف نُبقي السجل كي لا يبقى الكائن يتيماً.
+      await storage.deleteObject(found.file.storageKey);
+      const deleted = await deleteFileRow(pool, id);
+      if (!deleted) throw ApiError.notFound('الملف غير موجود.');
+
+      await writeAudit(
+        pool,
+        {
+          actorUserId: request.authUser!.id,
+          actorUsername: request.authUser!.username,
+          action: 'file.deleted',
+          entityType: 'document_file',
+          entityId: id,
+          details: {
+            documentId: found.document.id,
+            name: found.file.originalName,
+            size: found.file.sizeBytes,
+          },
+        },
+        { ip: request.ip, userAgent: (request.headers['user-agent'] ?? '') || null },
+      );
+      return { ok: true };
+    },
+  );
+}

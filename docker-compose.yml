@@ -1,0 +1,111 @@
+# =============================================================================
+# منظومة الأرشيف الإلكتروني — هاتف ليبيا
+# تشغيل الإنتاج: قاعدة بيانات PostgreSQL + ترحيلات + خادم API + واجهة Angie
+# قاعدة البيانات لا تُنشر خارج الشبكة الداخلية إطلاقاً.
+# =============================================================================
+name: archive-hlc
+
+services:
+  # ---------------------------------------------------------------------------
+  # قاعدة البيانات (PostgreSQL 18) — حجم دائم، بلا نشر منافذ خارجي
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hlc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?يجب ضبط POSTGRES_PASSWORD في ملف .env}
+      POSTGRES_DB: ${POSTGRES_DB:-archive_hlc}
+    volumes:
+      # تخطيط PostgreSQL 18: يُوصَل المجلد الأعلى /var/lib/postgresql
+      - pgdata:/var/lib/postgresql
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # خدمة الترحيلات: تعمل مرة واحدة ثم تتوقف بنجاح قبل تشغيل الخادم
+  # ---------------------------------------------------------------------------
+  migrate:
+    build:
+      context: ./backend
+    image: archive-hlc-api:local
+    command: ["node", "dist/db/migrate-cli.js"]
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - backend
+
+  # ---------------------------------------------------------------------------
+  # خادم واجهة برمجة التطبيقات (Fastify)
+  # extra_hosts يتيح الوصول إلى تخزين RustFS على مضيف Docker عبر host.docker.internal
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: ./backend
+    image: archive-hlc-api:local
+    restart: unless-stopped
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - backend
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # ---------------------------------------------------------------------------
+  # الواجهة الأمامية + الوكيل العكسي (Angie)
+  # المنفذ المنشور الوحيد للخارج هو منفذ الواجهة (افتراضياً 8080).
+  # ---------------------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: deploy/angie/Dockerfile
+    image: archive-hlc-web:local
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local

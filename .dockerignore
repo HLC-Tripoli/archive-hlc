@@ -1,0 +1,12 @@
+# سياق بناء صورة الواجهة (جذر المستودع)
+.git
+.gitignore
+node_modules
+**/node_modules
+backend
+deploy/angie/Dockerfile
+.env
+.env.*
+*.log
+docker-compose.yml
+README.md
