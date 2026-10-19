@@ -773,13 +773,21 @@
     el("notes").value = doc ? doc.notes : "";
 
     var attachmentsSection = el("attachmentsSection");
+    var attachmentInput = el("attachmentInput");
+    var attachmentHint = el("attachmentHint");
+    attachmentInput.value = "";
+    attachmentsSection.hidden = false;
     if (doc) {
-      attachmentsSection.hidden = false;
-      el("attachmentInput").value = "";
+      el("attachmentUploadButton").hidden = false;
+      attachmentHint.textContent =
+        "يتم رفع الملفات فوراً إلى الخادم. الحد الأقصى لحجم الملف يحدده إعداد الخادم (UPLOAD_MAX_MB).";
       await refreshAttachmentList(doc.id);
     } else {
-      attachmentsSection.hidden = true;
-      el("attachmentList").innerHTML = "";
+      // وضع الإنشاء: يختار المستخدم الملفات الآن وتُرفع تلقائياً بعد حفظ المعاملة.
+      el("attachmentUploadButton").hidden = true;
+      attachmentHint.textContent =
+        "اختر الملفات المطلوبة؛ ستُرفع تلقائياً عند حفظ المعاملة. الحد الأقصى لحجم الملف يحدده إعداد الخادم (UPLOAD_MAX_MB).";
+      renderEmpty(el("attachmentList"), "لم تُحدد ملفات بعد.");
     }
     showModal("documentModal");
     el("reference").focus();
@@ -834,6 +842,26 @@
       .join("");
   }
 
+  /** عرض الملفات المختارة في وضع الإنشاء (تُرفع تلقائياً عند حفظ المعاملة). */
+  function renderPendingAttachments(files) {
+    var container = el("attachmentList");
+    if (!files.length) {
+      renderEmpty(container, "لم تُحدد ملفات بعد.");
+      return;
+    }
+    container.innerHTML = files
+      .map(function (file) {
+        return (
+          '<div class="attachment-item"><div class="attachment-meta"><strong>' +
+          escapeHTML(file.name) +
+          "</strong><small>" +
+          escapeHTML(formatBytes(file.size)) +
+          " — ستُرفع عند حفظ المعاملة</small></div></div>"
+        );
+      })
+      .join("");
+  }
+
   async function submitDocumentForm(event) {
     event.preventDefault();
     var button = el("saveDocumentButton");
@@ -849,14 +877,54 @@
       status: el("status").value,
       notes: el("notes").value.trim()
     };
-    setBusy(button, true, "جارٍ الحفظ…");
+    // في وضع الإنشاء: الملفات المختارة تُرفع بعد إنشاء المعاملة مباشرة.
+    var pendingFiles = state.editingDocumentId
+      ? []
+      : Array.prototype.slice.call(el("attachmentInput").files || []);
+    setBusy(button, true, pendingFiles.length ? "جارٍ الحفظ والرفع…" : "جارٍ الحفظ…");
     try {
       if (state.editingDocumentId) {
         await api.patch("/documents/" + state.editingDocumentId, payload);
         toast("تم تحديث المعاملة.");
       } else {
-        await api.post("/documents", payload);
-        toast("تم تسجيل المعاملة بنجاح.");
+        var created = await api.post("/documents", payload);
+        var newDocumentId =
+          created && created.document && created.document.id ? created.document.id : null;
+        var uploaded = 0;
+        var failedNames = [];
+        var lastUploadError = null;
+        for (var index = 0; index < pendingFiles.length && newDocumentId; index += 1) {
+          var formData = new FormData();
+          formData.append("file", pendingFiles[index]);
+          try {
+            await api.postForm("/documents/" + newDocumentId + "/files", formData);
+            uploaded += 1;
+          } catch (uploadError) {
+            lastUploadError = uploadError;
+            failedNames.push(pendingFiles[index].name);
+          }
+        }
+        if (!newDocumentId && pendingFiles.length) {
+          failedNames = pendingFiles.map(function (file) {
+            return file.name;
+          });
+        }
+        if (failedNames.length) {
+          toast(
+            "تم تسجيل المعاملة، لكن تعذّر رفع: " +
+              failedNames.join("، ") +
+              (lastUploadError ? " — " + errorMessage(lastUploadError) : ""),
+            "error"
+          );
+        } else if (uploaded > 0) {
+          toast(
+            uploaded === 1
+              ? "تم تسجيل المعاملة ورفع المرفق."
+              : "تم تسجيل المعاملة ورفع " + uploaded + " مرفقات."
+          );
+        } else {
+          toast("تم تسجيل المعاملة بنجاح.");
+        }
       }
       hideModal("documentModal");
       refreshDocumentsAndStats();
@@ -1653,6 +1721,10 @@
       hideModal("documentModal");
     });
     el("attachmentUploadButton").addEventListener("click", uploadSelectedAttachments);
+    el("attachmentInput").addEventListener("change", function () {
+      if (state.editingDocumentId) return;
+      renderPendingAttachments(Array.prototype.slice.call(el("attachmentInput").files || []));
+    });
     el("documentModal").addEventListener("click", function (event) {
       if (event.target === el("documentModal")) hideModal("documentModal");
     });
