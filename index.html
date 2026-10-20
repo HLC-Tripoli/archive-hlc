@@ -332,7 +332,7 @@
               </button>
             </div>
             <div class="filters">
-              <input id="usersSearch" class="search" placeholder="اسم المستخدم أو الاسم الكامل..." type="search" />
+              <input id="usersSearch" class="search" placeholder="اسم المستخدم أو الاسم الكامل أو الرقم الوظيفي..." type="search" />
               <select id="usersRoleFilter">
                 <option value="">جميع الأدوار</option>
                 <option value="admin">مدير النظام</option>
@@ -535,6 +535,8 @@
             <label for="userUsername">اسم المستخدم *</label>
             <input id="userUsername" minlength="3" maxlength="32" autocomplete="off" />
           </div>
+          <label for="userEmployeeNumber">الرقم الوظيفي (اختياري)</label>
+          <input id="userEmployeeNumber" maxlength="64" autocomplete="off" />
           <label for="userDisplayName">الاسم الكامل *</label>
           <input id="userDisplayName" maxlength="200" />
           <label for="userRole">الدور *</label>
@@ -600,12 +602,14 @@
         <h1>هاتف ليبيا</h1>
         <p>منظومة الأرشيف الإلكتروني</p>
         <form id="loginForm">
-          <label for="loginUsername">اسم المستخدم</label>
+          <label for="loginUsername">الرقم الوظيفي أو اسم المستخدم</label>
           <input
             id="loginUsername"
             type="text"
-            placeholder="أدخل اسم المستخدم"
+            placeholder="أدخل الرقم الوظيفي أو اسم المستخدم"
             autocomplete="username"
+            autocapitalize="none"
+            spellcheck="false"
             required
           />
           <label for="loginPassword">كلمة المرور</label>

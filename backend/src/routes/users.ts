@@ -3,7 +3,12 @@ import type { Pool } from 'pg';
 import type { AppConfig } from '../config.js';
 import { withTransaction } from '../db/pool.js';
 import { ApiError } from '../lib/errors.js';
-import { hashPassword, validatePassword, validateUsername } from '../lib/security.js';
+import {
+  hashPassword,
+  normalizeEmployeeNumber,
+  validatePassword,
+  validateUsername,
+} from '../lib/security.js';
 import type { AuthGuards } from '../plugins/auth.js';
 import { writeAudit, type AuditContext } from '../services/audit.js';
 import { destroyUserSessions } from '../services/sessions.js';
@@ -83,6 +88,9 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
           properties: {
             username: { type: 'string', minLength: 3, maxLength: 32 },
             displayName: { type: 'string', minLength: 1, maxLength: 200 },
+            // لا نستخدم anyOf هنا: coerceTypes في Fastify يحوّل null إلى "" مع anyOf،
+            // بينما type: ['string','null'] يبقي null كما هو ثم يطبّعه التطبيق إلى NULL.
+            employeeNumber: { type: ['string', 'null'], maxLength: 128 },
             role: { type: 'string', enum: ROLE_ENUM },
             password: { type: 'string', minLength: 8, maxLength: 200 },
           },
@@ -93,12 +101,14 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
       const body = request.body as {
         username: string;
         displayName: string;
+        employeeNumber?: string | null;
         role: 'admin' | 'employee';
         password: string;
       };
       const username = body.username.trim();
       validateUsername(username);
       validatePassword(body.password);
+      const employeeNumber = normalizeEmployeeNumber(body.employeeNumber);
       const passwordHash = await hashPassword(body.password);
       const auditContext: AuditContext = {
         ip: request.ip,
@@ -109,6 +119,7 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
         const user = await createUser(client, {
           username,
           displayName: body.displayName.trim(),
+          employeeNumber,
           role: body.role,
           passwordHash,
         });
@@ -120,7 +131,11 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
             action: 'user.created',
             entityType: 'user',
             entityId: user.id,
-            details: { username: user.username, role: user.role },
+            details: {
+              username: user.username,
+              employeeNumber: user.employeeNumber,
+              role: user.role,
+            },
           },
           auditContext,
         );
@@ -144,6 +159,7 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
           minProperties: 1,
           properties: {
             displayName: { type: 'string', minLength: 1, maxLength: 200 },
+            employeeNumber: { type: ['string', 'null'], maxLength: 128 },
             role: { type: 'string', enum: ROLE_ENUM },
             isActive: { type: 'boolean' },
           },
@@ -153,6 +169,10 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
     async (request) => {
       const { id } = request.params as { id: string };
       const body = request.body as UserUpdate;
+      const hasEmployeeNumber = body.employeeNumber !== undefined;
+      const employeeNumber = hasEmployeeNumber
+        ? normalizeEmployeeNumber(body.employeeNumber)
+        : undefined;
       const target = await getUserById(pool, id);
       if (!target) throw ApiError.notFound('المستخدم غير موجود.');
 
@@ -181,12 +201,14 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
       const result = await withTransaction(pool, async (client) => {
         const updated = await updateUser(client, id, {
           displayName: body.displayName?.trim(),
+          employeeNumber,
           role: body.role,
           isActive: body.isActive,
         });
         if (!updated) throw ApiError.notFound('المستخدم غير موجود.');
         const changed: Record<string, unknown> = {};
         if (body.displayName !== undefined) changed.displayName = updated.displayName;
+        if (hasEmployeeNumber) changed.employeeNumber = updated.employeeNumber;
         if (body.role !== undefined) changed.role = updated.role;
         if (body.isActive !== undefined) changed.isActive = updated.isActive;
 

@@ -197,6 +197,268 @@ test('admin password reset revokes the target sessions', async () => {
   assert.equal(audit.rows.length, 1);
 });
 
+test('admin creates users with normalized employee numbers', async () => {
+  const cases: Array<{
+    username: string;
+    employeeNumber?: string | null;
+    expected: string | null;
+  }> = [
+    { username: 'empzero', employeeNumber: '  001245  ', expected: '001245' },
+    { username: 'empalpha', employeeNumber: 'EMP-A17', expected: 'EMP-A17' },
+    { username: 'emplower', employeeNumber: 'abc-009', expected: 'abc-009' },
+    { username: 'empnone', expected: null },
+    { username: 'empnull', employeeNumber: null, expected: null },
+    { username: 'empempty', employeeNumber: '', expected: null },
+    { username: 'empspace', employeeNumber: '   ', expected: null },
+  ];
+
+  for (const entry of cases) {
+    const payload: Record<string, unknown> = {
+      username: entry.username,
+      displayName: entry.username,
+      role: 'employee',
+      password: 'password-123',
+    };
+    if ('employeeNumber' in entry) payload.employeeNumber = entry.employeeNumber;
+
+    const response = await apiRequest(context.app, adminClient, 'POST', '/users', { payload });
+    assert.equal(response.statusCode, 201, `create failed for ${entry.username}`);
+    const user = (response.json() as { user: { employeeNumber: string | null } }).user;
+    assert.equal(user.employeeNumber, entry.expected, `wrong employee number for ${entry.username}`);
+  }
+
+  const search = await apiRequest(context.app, adminClient, 'GET', '/users?q=001245');
+  assert.equal(search.statusCode, 200);
+  const listed = search.json() as {
+    total: number;
+    items: Array<{ username: string; employeeNumber: string | null }>;
+  };
+  assert.equal(listed.total, 1);
+  assert.equal(listed.items[0]!.username, 'empzero');
+  assert.equal(listed.items[0]!.employeeNumber, '001245');
+
+  const byAlpha = await apiRequest(context.app, adminClient, 'GET', '/users?q=emp-a17');
+  assert.equal((byAlpha.json() as { total: number }).total, 1);
+
+  const audit = await context.pool.query<{ details: { employeeNumber: string | null } }>(
+    "SELECT details FROM audit_log WHERE action = 'user.created' AND details->>'username' = 'empzero'",
+  );
+  assert.equal(audit.rows[0]!.details.employeeNumber, '001245');
+});
+
+test('employee numbers are unique case-insensitively, even under concurrent writes', async () => {
+  const first = await apiRequest(context.app, adminClient, 'POST', '/users', {
+    payload: {
+      username: 'dup-one',
+      displayName: 'مكرر أول',
+      employeeNumber: 'DUP-100',
+      role: 'employee',
+      password: 'password-123',
+    },
+  });
+  assert.equal(first.statusCode, 201);
+
+  const duplicate = await apiRequest(context.app, adminClient, 'POST', '/users', {
+    payload: {
+      username: 'dup-two',
+      displayName: 'مكرر ثانٍ',
+      employeeNumber: 'dup-100',
+      role: 'employee',
+      password: 'password-123',
+    },
+  });
+  assert.equal(duplicate.statusCode, 409);
+  assert.equal(
+    (duplicate.json() as { error: { code: string } }).error.code,
+    'duplicate_employee_number',
+  );
+
+  // كتابتان متزامنتان: القيد الفريد في PostgreSQL هو الحكم النهائي، لا الفحص المسبق.
+  const [left, right] = await Promise.all(
+    ['CONC-1', 'conc-1'].map((employeeNumber, index) =>
+      apiRequest(context.app, adminClient, 'POST', '/users', {
+        payload: {
+          username: `conc-${index}`,
+          displayName: `متزامن ${index}`,
+          employeeNumber,
+          role: 'employee',
+          password: 'password-123',
+        },
+      }),
+    ),
+  );
+  assert.deepEqual([left.statusCode, right.statusCode].sort((a, b) => a - b), [201, 409]);
+
+  const tooLong = 'a'.repeat(65);
+  const oversized = await apiRequest(context.app, adminClient, 'POST', '/users', {
+    payload: {
+      username: 'toolong',
+      displayName: 'طويل',
+      employeeNumber: tooLong,
+      role: 'employee',
+      password: 'password-123',
+    },
+  });
+  assert.equal(oversized.statusCode, 400);
+  assert.equal(
+    (oversized.json() as { error: { code: string } }).error.code,
+    'employee_number_too_long',
+  );
+
+  const control = await apiRequest(context.app, adminClient, 'POST', '/users', {
+    payload: {
+      username: 'control',
+      displayName: 'محارف تحكم',
+      employeeNumber: 'EMP\u0001X',
+      role: 'employee',
+      password: 'password-123',
+    },
+  });
+  assert.equal(control.statusCode, 400);
+  assert.equal((control.json() as { error: { code: string } }).error.code, 'invalid_employee_number');
+
+  const maxLength = 'b'.repeat(64);
+  const atLimit = await apiRequest(context.app, adminClient, 'POST', '/users', {
+    payload: {
+      username: 'atlimit',
+      displayName: 'الحد الأقصى',
+      employeeNumber: maxLength,
+      role: 'employee',
+      password: 'password-123',
+    },
+  });
+  assert.equal(atLimit.statusCode, 201);
+  assert.equal(
+    (atLimit.json() as { user: { employeeNumber: string | null } }).user.employeeNumber,
+    maxLength,
+  );
+});
+
+test('admin edits and clears employee numbers, and changes are audited', async () => {
+  const targetId = await createTestUser(context.pool, {
+    username: 'editable',
+    displayName: 'قابل للتعديل',
+  });
+
+  const set = await apiRequest(context.app, adminClient, 'PATCH', `/users/${targetId}`, {
+    payload: { employeeNumber: '  EMP-42  ' },
+  });
+  assert.equal(set.statusCode, 200);
+  assert.equal(
+    (set.json() as { user: { employeeNumber: string | null } }).user.employeeNumber,
+    'EMP-42',
+  );
+
+  const listed = await apiRequest(context.app, adminClient, 'GET', '/users?q=EMP-42');
+  const listedBody = listed.json() as {
+    total: number;
+    items: Array<{ id: string; employeeNumber: string | null }>;
+  };
+  assert.equal(listedBody.total, 1);
+  assert.equal(listedBody.items[0]!.id, targetId);
+  assert.equal(listedBody.items[0]!.employeeNumber, 'EMP-42');
+
+  const setAudit = await context.pool.query<{ details: { changed: { employeeNumber?: string } } }>(
+    `SELECT details FROM audit_log
+      WHERE action = 'user.updated' AND entity_id = $1
+      ORDER BY id DESC LIMIT 1`,
+    [targetId],
+  );
+  assert.equal(setAudit.rows[0]!.details.changed.employeeNumber, 'EMP-42');
+
+  // تعديل حقل آخر لا يمسّ الرقم الوظيفي.
+  const otherField = await apiRequest(context.app, adminClient, 'PATCH', `/users/${targetId}`, {
+    payload: { displayName: 'اسم جديد' },
+  });
+  assert.equal(
+    (otherField.json() as { user: { employeeNumber: string | null } }).user.employeeNumber,
+    'EMP-42',
+  );
+
+  const cleared = await apiRequest(context.app, adminClient, 'PATCH', `/users/${targetId}`, {
+    payload: { employeeNumber: null },
+  });
+  assert.equal(cleared.statusCode, 200);
+  assert.equal((cleared.json() as { user: { employeeNumber: string | null } }).user.employeeNumber, null);
+
+  const listedAfterClear = await apiRequest(context.app, adminClient, 'GET', '/users?q=editable');
+  assert.equal(
+    (listedAfterClear.json() as { items: Array<{ employeeNumber: string | null }> }).items[0]!
+      .employeeNumber,
+    null,
+  );
+
+  // إعادة التعيين ثم المسح بقيمة فارغة/فراغات يطبّعها الخادم إلى NULL.
+  await apiRequest(context.app, adminClient, 'PATCH', `/users/${targetId}`, {
+    payload: { employeeNumber: 'E-2' },
+  });
+  const clearedByWhitespace = await apiRequest(context.app, adminClient, 'PATCH', `/users/${targetId}`, {
+    payload: { employeeNumber: '   ' },
+  });
+  assert.equal(clearedByWhitespace.statusCode, 200);
+  assert.equal(
+    (clearedByWhitespace.json() as { user: { employeeNumber: string | null } }).user.employeeNumber,
+    null,
+  );
+
+  const clearAudit = await context.pool.query<{ details: { changed: { employeeNumber?: null } } }>(
+    `SELECT details FROM audit_log
+      WHERE action = 'user.updated' AND entity_id = $1
+      ORDER BY id DESC LIMIT 1`,
+    [targetId],
+  );
+  assert.equal(clearAudit.rows[0]!.details.changed.employeeNumber, null);
+
+  await createTestUser(context.pool, { username: 'otheruser', employeeNumber: 'OTHER-1' });
+  const duplicate = await apiRequest(context.app, adminClient, 'PATCH', `/users/${targetId}`, {
+    payload: { employeeNumber: 'other-1' },
+  });
+  assert.equal(duplicate.statusCode, 409);
+  assert.equal(
+    (duplicate.json() as { error: { code: string } }).error.code,
+    'duplicate_employee_number',
+  );
+
+  const tooLong = await apiRequest(context.app, adminClient, 'PATCH', `/users/${targetId}`, {
+    payload: { employeeNumber: 'a'.repeat(65) },
+  });
+  assert.equal(tooLong.statusCode, 400);
+  assert.equal(
+    (tooLong.json() as { error: { code: string } }).error.code,
+    'employee_number_too_long',
+  );
+});
+
+test('employees cannot create users or alter employee numbers directly', async () => {
+  const list = await apiRequest(context.app, employeeClient, 'GET', '/users');
+  assert.equal(list.statusCode, 403);
+
+  const anonymous = await apiRequest(context.app, null, 'GET', '/users');
+  assert.equal(anonymous.statusCode, 401);
+
+  const create = await apiRequest(context.app, employeeClient, 'POST', '/users', {
+    payload: {
+      username: 'sneaky-emp',
+      displayName: 'محاول',
+      employeeNumber: 'HACK-1',
+      role: 'employee',
+      password: 'password-123',
+    },
+  });
+  assert.equal(create.statusCode, 403);
+
+  const patch = await apiRequest(context.app, employeeClient, 'PATCH', `/users/${employeeId}`, {
+    payload: { employeeNumber: 'HACK-1' },
+  });
+  assert.equal(patch.statusCode, 403);
+
+  const stored = await context.pool.query<{ employee_number: string | null }>(
+    'SELECT employee_number FROM users WHERE id = $1',
+    [employeeId],
+  );
+  assert.equal(stored.rows[0]!.employee_number, null);
+});
+
 test('user list supports search, role filter, and pagination', async () => {
   for (let index = 0; index < 7; index += 1) {
     await createTestUser(context.pool, {
@@ -219,4 +481,58 @@ test('user list supports search, role filter, and pagination', async () => {
 
   const inactive = await apiRequest(context.app, adminClient, 'GET', '/users?isActive=false');
   assert.equal((inactive.json() as { total: number }).total, 0);
+});
+
+test('pagination total stays correct on pages beyond the result set and with filters', async () => {
+  for (let index = 0; index < 7; index += 1) {
+    await createTestUser(context.pool, {
+      username: `pagestaff-${index}`,
+      displayName: `موظف صفحات ${index}`,
+      employeeNumber: `P-000${index}`,
+      role: 'employee',
+    });
+  }
+
+  // الصفحة تتجاوز النتائج: لا صفوف، لكن الإجمالي يجب أن يبقى 7 لا صفراً.
+  const beyond = await apiRequest(
+    context.app,
+    adminClient,
+    'GET',
+    '/users?q=pagestaff&page=99&pageSize=5',
+  );
+  assert.equal(beyond.statusCode, 200);
+  const beyondBody = beyond.json() as { items: unknown[]; total: number };
+  assert.equal(beyondBody.items.length, 0);
+  assert.equal(beyondBody.total, 7);
+
+  // الشروط المجتمعة (بحث + دور + حالة) مع صفحة متجاوزة.
+  const filteredBeyond = await apiRequest(
+    context.app,
+    adminClient,
+    'GET',
+    '/users?q=pagestaff&role=employee&isActive=true&page=99&pageSize=5',
+  );
+  assert.equal((filteredBeyond.json() as { total: number }).total, 7);
+
+  // بحث بالرقم الوظيفي مع ترقيم صفحات: صفحة ثانية داخل النتائج.
+  const secondPage = await apiRequest(
+    context.app,
+    adminClient,
+    'GET',
+    '/users?q=P-000&role=employee&isActive=true&page=2&pageSize=3',
+  );
+  const secondBody = secondPage.json() as {
+    items: Array<{ employeeNumber: string | null }>;
+    total: number;
+    page: number;
+  };
+  assert.equal(secondBody.total, 7);
+  assert.equal(secondBody.items.length, 3);
+  assert.equal(secondBody.page, 2);
+  assert.ok(secondBody.items.every((item) => item.employeeNumber?.startsWith('P-000')));
+
+  const empty = await apiRequest(context.app, adminClient, 'GET', '/users?q=no-such-user-xyz');
+  const emptyBody = empty.json() as { items: unknown[]; total: number };
+  assert.equal(emptyBody.items.length, 0);
+  assert.equal(emptyBody.total, 0);
 });

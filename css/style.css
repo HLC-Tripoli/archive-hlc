@@ -507,6 +507,9 @@ th {
   background: var(--thead-bg);
   color: var(--thead-text);
 }
+.muted {
+  color: var(--muted);
+}
 tbody tr:hover {
   background: var(--row-hover);
 }

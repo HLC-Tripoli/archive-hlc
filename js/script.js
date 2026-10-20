@@ -354,7 +354,7 @@
     setBusy(button, true, "جارٍ تسجيل الدخول…");
     try {
       var result = await api.post("/auth/login", {
-        username: el("loginUsername").value.trim(),
+        identifier: el("loginUsername").value.trim(),
         password: el("loginPassword").value
       });
       api.setCsrfToken(result.csrfToken);
@@ -1194,9 +1194,14 @@
             (user.isActive ? "تعطيل" : "تفعيل") +
             "</button>"
         ];
+        var employeeNumber = user.employeeNumber
+          ? escapeHTML(user.employeeNumber)
+          : '<span class="muted">غير محدد</span>';
         return (
           "<tr><td>" +
           escapeHTML(user.username) +
+          "</td><td>" +
+          employeeNumber +
           "</td><td>" +
           escapeHTML(user.displayName) +
           '</td><td><span class="badge badge-' +
@@ -1220,7 +1225,7 @@
       .join("");
     container.innerHTML =
       '<div class="table-wrap"><table><thead><tr>' +
-      "<th>اسم المستخدم</th><th>الاسم الكامل</th><th>الدور</th><th>الحالة</th><th>تاريخ الإنشاء</th><th>آخر دخول</th><th>الإجراءات</th>" +
+      "<th>اسم المستخدم</th><th>الرقم الوظيفي</th><th>الاسم الكامل</th><th>الدور</th><th>الحالة</th><th>تاريخ الإنشاء</th><th>آخر دخول</th><th>الإجراءات</th>" +
       "</tr></thead><tbody>" +
       rows +
       "</tbody></table></div>";
@@ -1235,6 +1240,8 @@
     el("userUsername").required = mode !== "edit";
     el("userPassword").required = mode !== "edit";
     el("userUsername").value = mode === "edit" ? user.username : "";
+    el("userEmployeeNumber").value =
+      mode === "edit" && user.employeeNumber ? user.employeeNumber : "";
     el("userDisplayName").value = mode === "edit" ? user.displayName : "";
     el("userRole").value = mode === "edit" ? user.role : "employee";
     el("userPassword").value = "";
@@ -1249,9 +1256,11 @@
     showFormError("userFormError", "");
     setBusy(button, true, "جارٍ الحفظ…");
     try {
+      var employeeNumber = el("userEmployeeNumber").value.trim();
       if (state.editingUserId) {
         await api.patch("/users/" + state.editingUserId, {
           displayName: el("userDisplayName").value.trim(),
+          employeeNumber: employeeNumber,
           role: el("userRole").value
         });
         toast("تم تحديث بيانات المستخدم.");
@@ -1259,6 +1268,7 @@
         await api.post("/users", {
           username: el("userUsername").value.trim(),
           displayName: el("userDisplayName").value.trim(),
+          employeeNumber: employeeNumber,
           role: el("userRole").value,
           password: el("userPassword").value
         });

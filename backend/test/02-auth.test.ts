@@ -84,6 +84,227 @@ test('login rejects wrong password, unknown user, and inactive account with the 
   assert.deepEqual(reasons, ['bad_password', 'unknown_user', 'inactive_account']);
 });
 
+test('login accepts identifier for usernames or employee numbers and keeps username compatibility', async () => {
+  const zeroId = await createTestUser(context.pool, {
+    username: 'zero.emp',
+    employeeNumber: '001245',
+    displayName: 'صاحب الأصفار',
+  });
+  const alphaId = await createTestUser(context.pool, {
+    username: 'alpha.emp',
+    employeeNumber: 'EMP-A17',
+  });
+  const lowerId = await createTestUser(context.pool, {
+    username: 'lower.emp',
+    employeeNumber: 'abc-009',
+  });
+
+  const cases: Array<{ identifier: string; expectedUsername: string; expectedId: string }> = [
+    { identifier: '001245', expectedUsername: 'zero.emp', expectedId: zeroId },
+    { identifier: '  001245  ', expectedUsername: 'zero.emp', expectedId: zeroId },
+    { identifier: 'EMP-A17', expectedUsername: 'alpha.emp', expectedId: alphaId },
+    { identifier: 'emp-a17', expectedUsername: 'alpha.emp', expectedId: alphaId },
+    { identifier: 'ABC-009', expectedUsername: 'lower.emp', expectedId: lowerId },
+    { identifier: 'zero.emp', expectedUsername: 'zero.emp', expectedId: zeroId },
+    { identifier: 'ZERO.EMP', expectedUsername: 'zero.emp', expectedId: zeroId },
+  ];
+
+  for (const entry of cases) {
+    const response = await context.app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: { identifier: entry.identifier, password: 'password-123' },
+    });
+    assert.equal(response.statusCode, 200, `login failed for ${entry.identifier}`);
+    const body = response.json() as {
+      user: { id: string; username: string; displayName: string; role: string };
+      csrfToken: string;
+    };
+    assert.equal(body.user.id, entry.expectedId);
+    assert.equal(body.user.username, entry.expectedUsername);
+    assert.ok(body.csrfToken.length >= 32);
+    // لا تُعاد أي أسرار أو بصمات كلمات مرور ضمن استجابة الدخول.
+    assert.doesNotMatch(response.body, /passwordHash|password_hash|argon2/i);
+
+    const session = await context.pool.query<{ user_id: string }>(
+      `SELECT s.user_id FROM sessions s
+        WHERE s.user_id = $1 AND s.expires_at > now()`,
+      [entry.expectedId],
+    );
+    assert.ok(session.rows.length >= 1);
+
+    const audit = await context.pool.query<{ actor_username: string | null }>(
+      `SELECT actor_username FROM audit_log
+        WHERE action = 'auth.login.success' AND actor_user_id = $1
+        ORDER BY id DESC LIMIT 1`,
+      [entry.expectedId],
+    );
+    assert.equal(audit.rows[0]!.actor_username, entry.expectedUsername);
+  }
+
+  // العملاء القدامى الذين ما زالوا يرسلون username يعملون كما كانوا.
+  const legacy = await context.app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { username: 'ZERO.EMP', password: 'password-123' },
+  });
+  assert.equal(legacy.statusCode, 200);
+  assert.equal((legacy.json() as { user: { username: string } }).user.username, 'zero.emp');
+
+  // ويمكن للعميل القديم إرسال رقم وظيفي في حقل username أيضاً.
+  const legacyEmployee = await context.app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { username: '001245', password: 'password-123' },
+  });
+  assert.equal(legacyEmployee.statusCode, 200);
+  assert.equal(
+    (legacyEmployee.json() as { user: { username: string } }).user.username,
+    'zero.emp',
+  );
+});
+
+test('employee-number login failures stay generic and are audited internally', async () => {
+  await createTestUser(context.pool, { username: 'known.emp', employeeNumber: 'KNOWN-1' });
+  await createTestUser(context.pool, {
+    username: 'inactive.emp',
+    employeeNumber: 'INACT-1',
+    isActive: false,
+  });
+  const generic = 'اسم المستخدم أو كلمة المرور غير صحيحة.';
+
+  const cases = [
+    { identifier: 'KNOWN-1', password: 'wrong-password', reason: 'bad_password' },
+    { identifier: 'NO-SUCH-1', password: 'whatever-123', reason: 'unknown_user' },
+    { identifier: 'inact-1', password: 'password-123', reason: 'inactive_account' },
+  ];
+
+  for (const entry of cases) {
+    const response = await context.app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: { identifier: entry.identifier, password: entry.password },
+    });
+    assert.equal(response.statusCode, 401);
+    assert.equal((response.json() as { error: { message: string } }).error.message, generic);
+  }
+
+  const failures = await context.pool.query<{ details: { reason: string } }>(
+    "SELECT details FROM audit_log WHERE action = 'auth.login.failed' ORDER BY id ASC",
+  );
+  assert.deepEqual(
+    failures.rows.map((row) => row.details.reason),
+    ['bad_password', 'unknown_user', 'inactive_account'],
+  );
+
+  const sessions = await context.pool.query('SELECT 1 FROM sessions');
+  assert.equal(sessions.rows.length, 0);
+});
+
+test('login requires one usable identifier and rejects conflicting or unknown fields', async () => {
+  const bothSame = await context.app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { identifier: 'admin', username: 'ADMIN', password: 'password-123' },
+  });
+  assert.equal(bothSame.statusCode, 200);
+
+  const conflicting = await context.app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { identifier: 'admin', username: 'employee', password: 'password-123' },
+  });
+  assert.equal(conflicting.statusCode, 400);
+  assert.equal(
+    (conflicting.json() as { error: { code: string } }).error.code,
+    'identifier_mismatch',
+  );
+
+  const missingIdentifier = await context.app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { password: 'password-123' },
+  });
+  assert.equal(missingIdentifier.statusCode, 400);
+  assert.equal(
+    (missingIdentifier.json() as { error: { code: string } }).error.code,
+    'validation_error',
+  );
+
+  const missingPassword = await context.app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { identifier: 'admin' },
+  });
+  assert.equal(missingPassword.statusCode, 400);
+
+  const extraField = await context.app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { identifier: 'admin', password: 'password-123', role: 'admin' },
+  });
+  assert.equal(extraField.statusCode, 400);
+
+  // معرّف من فراغات فقط لا يصلح ولا يكشف أي تفاصيل.
+  const blank = await context.app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { identifier: '   ', password: 'password-123' },
+  });
+  assert.equal(blank.statusCode, 401);
+  assert.equal(
+    (blank.json() as { error: { message: string } }).error.message,
+    'اسم المستخدم أو كلمة المرور غير صحيحة.',
+  );
+});
+
+test('an identifier that matches a username and another employee number is rejected as ambiguous', async () => {
+  const usernameOwner = await createTestUser(context.pool, {
+    username: 'SHARED-77',
+    employeeNumber: 'USR-1',
+  });
+  const employeeOwner = await createTestUser(context.pool, {
+    username: 'emp.owner',
+    employeeNumber: 'shared-77',
+  });
+  const generic = 'اسم المستخدم أو كلمة المرور غير صحيحة.';
+
+  const ambiguous = await context.app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { identifier: 'Shared-77', password: 'password-123' },
+  });
+  assert.equal(ambiguous.statusCode, 401);
+  assert.equal((ambiguous.json() as { error: { message: string } }).error.message, generic);
+
+  const sessions = await context.pool.query('SELECT 1 FROM sessions');
+  assert.equal(sessions.rows.length, 0);
+  const audit = await context.pool.query<{ details: { reason: string } }>(
+    `SELECT details FROM audit_log
+      WHERE action = 'auth.login.failed' ORDER BY id DESC LIMIT 1`,
+  );
+  assert.equal(audit.rows[0]!.details.reason, 'ambiguous_identifier');
+
+  // المعرّفات غير المتعارضة لكل حساب تبقى صالحة.
+  const byUsername = await context.app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { identifier: 'emp.owner', password: 'password-123' },
+  });
+  assert.equal(byUsername.statusCode, 200);
+  const byEmployee = await context.app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { identifier: 'usr-1', password: 'password-123' },
+  });
+  assert.equal(byEmployee.statusCode, 200);
+  assert.equal(
+    (byEmployee.json() as { user: { username: string } }).user.username,
+    'SHARED-77',
+  );
+  assert.notEqual(usernameOwner, employeeOwner);
+});
+
 test('expired sessions are rejected and purged', async () => {
   const client = await loginClient(context.app, 'admin');
   await context.pool.query(

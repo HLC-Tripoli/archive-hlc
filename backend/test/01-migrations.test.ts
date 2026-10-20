@@ -49,7 +49,7 @@ test('schema is created from scratch, applied once, and migrations are idempoten
   await pool.query('CREATE SCHEMA public');
 
   const first = await runMigrations(pool);
-  assert.deepEqual(first.applied, ['0001_init.sql']);
+  assert.deepEqual(first.applied, ['0001_init.sql', '0002_employee_number.sql']);
 
   const { rows } = await pool.query<{ table_name: string }>(
     `SELECT table_name FROM information_schema.tables
@@ -69,9 +69,85 @@ test('schema is created from scratch, applied once, and migrations are idempoten
     assert.ok(tableNames.includes(expected), `missing table: ${expected}`);
   }
 
+  const employeeColumn = await pool.query(
+    `SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'employee_number'`,
+  );
+  assert.equal(employeeColumn.rows.length, 1, 'employee_number column is missing');
+
+  const employeeIndex = await pool.query(
+    `SELECT 1 FROM pg_indexes
+      WHERE schemaname = 'public' AND tablename = 'users'
+        AND indexname = 'users_employee_number_lower_uidx'`,
+  );
+  assert.equal(employeeIndex.rows.length, 1, 'employee-number unique index is missing');
+
   const second = await runMigrations(pool);
   assert.equal(second.applied.length, 0);
-  assert.deepEqual(second.skipped, ['0001_init.sql']);
+  assert.deepEqual(second.skipped, ['0001_init.sql', '0002_employee_number.sql']);
+});
+
+test('employee-number migration preserves existing users and leaves their numbers unset', async () => {
+  await pool.query('DROP SCHEMA public CASCADE');
+  await pool.query('CREATE SCHEMA public');
+
+  const directory = await mkdtemp(path.join(tmpdir(), 'hlc-migrations-'));
+  try {
+    // نطبّق الترحيل الأول وحده لمحاكاة قاعدة إنتاج قائمة قبل إضافة الرقم الوظيفي.
+    const original = await readFile(path.join(MIGRATIONS_DIR, '0001_init.sql'), 'utf8');
+    await writeFile(path.join(directory, '0001_init.sql'), original);
+    const first = await runMigrations(pool, { migrationsDir: directory });
+    assert.deepEqual(first.applied, ['0001_init.sql']);
+
+    const inserted = await pool.query<{ id: string }>(
+      `INSERT INTO users (username, display_name, role, password_hash, created_at)
+       VALUES ('legacy.user', 'مستخدم قديم', 'employee', 'legacy-hash', now() - interval '30 days')
+       RETURNING id`,
+    );
+    const legacyId = inserted.rows[0]!.id;
+
+    const second = await runMigrations(pool);
+    assert.deepEqual(second.applied, ['0002_employee_number.sql']);
+
+    const preserved = await pool.query<{
+      username: string;
+      display_name: string;
+      role: string;
+      password_hash: string;
+      employee_number: string | null;
+      is_active: boolean;
+      created_at: Date;
+    }>(
+      `SELECT username, display_name, role, password_hash, employee_number, is_active, created_at
+         FROM users WHERE id = $1`,
+      [legacyId],
+    );
+    const row = preserved.rows[0]!;
+    assert.equal(row.username, 'legacy.user');
+    assert.equal(row.display_name, 'مستخدم قديم');
+    assert.equal(row.role, 'employee');
+    assert.equal(row.password_hash, 'legacy-hash');
+    assert.equal(row.is_active, true);
+    assert.equal(row.employee_number, null);
+    assert.ok(row.created_at instanceof Date);
+
+    // القيد الفريد على مستوى القاعدة يمنع التكرار ولو تجاهل التطبيق الفحص المسبق.
+    await pool.query(
+      `INSERT INTO users (username, display_name, role, password_hash, employee_number)
+       VALUES ('emp.one', 'موظف أول', 'employee', 'hash', 'EMP-01')`,
+    );
+    await assert.rejects(
+      () =>
+        pool.query(
+          `INSERT INTO users (username, display_name, role, password_hash, employee_number)
+           VALUES ('emp.two', 'موظف ثانٍ', 'employee', 'hash', 'emp-01')`,
+        ),
+      (error: unknown) =>
+        typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505',
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('a migration file modified after being applied is rejected (drift protection)', async () => {

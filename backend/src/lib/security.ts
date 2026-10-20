@@ -33,6 +33,34 @@ export function validateUsername(username: unknown): asserts username is string 
   }
 }
 
+/** الحد الأقصى لطول الرقم الوظيفي بعد إزالة الفراغات الطرفية. */
+export const EMPLOYEE_NUMBER_MAX_LENGTH = 64;
+
+/**
+ * تطبيع الرقم الوظيفي:
+ *   * يقبل undefined/null/النصوص، ويعيد null لأي قيمة غير محددة أو فارغة/فراغات فقط.
+ *   * يزيل الفراغات الطرفية ويحافظ على بقية المحارف كما هي (بما فيها الأصفار البادئة).
+ *   * يرفض القيم الأطول من الحد الأقصى أو الحاوية على محارف تحكّم.
+ */
+export function normalizeEmployeeNumber(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') {
+    throw ApiError.badRequest('invalid_employee_number', 'الرقم الوظيفي غير صالح.');
+  }
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > EMPLOYEE_NUMBER_MAX_LENGTH) {
+    throw ApiError.badRequest(
+      'employee_number_too_long',
+      `الرقم الوظيفي يجب ألا يتجاوز ${EMPLOYEE_NUMBER_MAX_LENGTH} حرفاً.`,
+    );
+  }
+  if (/[\u0000-\u001f\u007f]/.test(trimmed)) {
+    throw ApiError.badRequest('invalid_employee_number', 'الرقم الوظيفي يحتوي محارف غير صالحة.');
+  }
+  return trimmed;
+}
+
 export async function hashPassword(password: string): Promise<string> {
   return argon2.hash(password, { type: argon2.argon2id });
 }

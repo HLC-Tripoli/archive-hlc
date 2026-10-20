@@ -65,6 +65,10 @@ interface PgErrorLike {
 const UNIQUE_CONSTRAINT_MESSAGES: Record<string, [string, string]> = {
   documents_reference_lower_active_uidx: ['duplicate_reference', 'رقم المعاملة مستخدم بالفعل لمستند آخر.'],
   users_username_lower_uidx: ['duplicate_username', 'اسم المستخدم مستخدم بالفعل.'],
+  users_employee_number_lower_uidx: [
+    'duplicate_employee_number',
+    'الرقم الوظيفي مستخدم بالفعل لحساب آخر.',
+  ],
   departments_name_lower_uidx: ['duplicate_department', 'يوجد قسم أو إدارة بنفس الاسم.'],
   departments_legacy_uidx: ['duplicate_legacy_record', 'تم استيراد هذا السجل مسبقاً.'],
   documents_legacy_uidx: ['duplicate_legacy_record', 'تم استيراد هذا السجل مسبقاً.'],

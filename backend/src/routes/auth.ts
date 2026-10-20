@@ -16,7 +16,12 @@ import {
   destroyUserSessions,
   SESSION_COOKIE_NAME,
 } from '../services/sessions.js';
-import { findUserByUsername, getUserById, setUserPassword, touchLastLogin } from '../services/users.js';
+import {
+  findUserByIdentifier,
+  getUserById,
+  setUserPassword,
+  touchLastLogin,
+} from '../services/users.js';
 
 export interface AuthRoutesDeps {
   pool: Pool;
@@ -24,11 +29,15 @@ export interface AuthRoutesDeps {
   guards: AuthGuards;
 }
 
+// يقبل الطلب معرّفاً واحداً: identifier (الواجهة الحالية) أو username (عملاء قدامى).
+// anyOf يضمن وجود أحدهما، وadditionalProperties: false يمنع أي حقول غير متوقعة.
 const LOGIN_BODY_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['username', 'password'],
+  required: ['password'],
+  anyOf: [{ required: ['identifier'] }, { required: ['username'] }],
   properties: {
+    identifier: { type: 'string', minLength: 1, maxLength: 128 },
     username: { type: 'string', minLength: 1, maxLength: 64 },
     password: { type: 'string', minLength: 1, maxLength: 200 },
   },
@@ -44,14 +53,31 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
       schema: { body: LOGIN_BODY_SCHEMA },
     },
     async (request, reply) => {
-      const body = request.body as { username: string; password: string };
-      const username = body.username.trim();
+      const body = request.body as {
+        identifier?: string;
+        username?: string;
+        password: string;
+      };
+
+      // عند إرسال الحقلين معاً يجب أن يشيرا إلى المعرّف نفسه، وإلا نرفض الطلب
+      // بدل اختيار أحد الحسابين المحتملين.
+      if (body.identifier !== undefined && body.username !== undefined) {
+        if (body.identifier.trim().toLowerCase() !== body.username.trim().toLowerCase()) {
+          throw ApiError.badRequest(
+            'identifier_mismatch',
+            'أرسل معرّف دخول واحداً فقط: identifier أو username.',
+          );
+        }
+      }
+
+      const identifier = (body.identifier ?? body.username ?? '').trim();
       const auditContext = {
         ip: request.ip,
         userAgent: (request.headers['user-agent'] ?? '').slice(0, 500) || null,
       };
 
-      const user = await findUserByUsername(pool, username);
+      const lookup = await findUserByIdentifier(pool, identifier);
+      const user = lookup.user;
       const passwordOk = user
         ? await verifyPassword(user.passwordHash, body.password)
         : await verifyDummyPassword(body.password);
@@ -61,14 +87,21 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
           pool,
           {
             actorUserId: user?.id ?? null,
-            actorUsername: username,
+            actorUsername: identifier || null,
             action: 'auth.login.failed',
             details: {
-              reason: !user ? 'unknown_user' : !passwordOk ? 'bad_password' : 'inactive_account',
+              reason: lookup.ambiguous
+                ? 'ambiguous_identifier'
+                : !user
+                  ? 'unknown_user'
+                  : !passwordOk
+                    ? 'bad_password'
+                    : 'inactive_account',
             },
           },
           auditContext,
         );
+        // رسالة عامة واحدة لكل حالات الفشل: لا تكشف وجود الحساب ولا سبب الرفض.
         throw ApiError.unauthorized('اسم المستخدم أو كلمة المرور غير صحيحة.');
       }
 

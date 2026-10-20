@@ -136,6 +136,7 @@ export async function createTestUser(
     password?: string;
     role?: UserRole;
     displayName?: string;
+    employeeNumber?: string | null;
     isActive?: boolean;
   },
 ): Promise<string> {
@@ -143,6 +144,7 @@ export async function createTestUser(
   const user = await createUser(pool, {
     username: options.username,
     displayName: options.displayName ?? options.username,
+    employeeNumber: options.employeeNumber,
     role: options.role ?? 'employee',
     passwordHash,
   });
@@ -158,15 +160,14 @@ export interface AuthedClient {
   user: { id: string; username: string; displayName: string; role: UserRole };
 }
 
-export async function loginClient(
+async function loginWithPayload(
   app: FastifyInstance,
-  username: string,
-  password = 'password-123',
+  payload: { username: string; password: string } | { identifier: string; password: string },
 ): Promise<AuthedClient> {
   const response = await app.inject({
     method: 'POST',
     url: '/api/v1/auth/login',
-    payload: { username, password },
+    payload,
   });
   if (response.statusCode !== 200) {
     throw new Error(`login failed (${response.statusCode}): ${response.body}`);
@@ -177,6 +178,23 @@ export async function loginClient(
   const match = /hlc_session=([^;]+)/.exec(cookieHeader ?? '');
   if (!match) throw new Error('session cookie missing in login response');
   return { token: match[1]!, csrf: body.csrfToken, user: body.user };
+}
+
+export function loginClient(
+  app: FastifyInstance,
+  username: string,
+  password = 'password-123',
+): Promise<AuthedClient> {
+  return loginWithPayload(app, { username, password });
+}
+
+/** عميل مسجّل عبر الحقل الجديد identifier (اسم مستخدم أو رقم وظيفي). */
+export function loginClientWithIdentifier(
+  app: FastifyInstance,
+  identifier: string,
+  password = 'password-123',
+): Promise<AuthedClient> {
+  return loginWithPayload(app, { identifier, password });
 }
 
 export type InjectResult = Awaited<ReturnType<FastifyInstance['inject']>>;
