@@ -177,7 +177,8 @@ test('backup export contains the metadata of active documents and departments', 
   };
   assert.equal(backup.formatVersion, 1);
   assert.equal(backup.app, 'archive-hlc');
-  assert.equal(backup.departments.length, 2);
+  // إدارة الاختبار الافتراضية + إدارتان من الترحيل.
+  assert.equal(backup.departments.length, 3);
   assert.deepEqual(
     backup.documents.map((document) => document.reference).sort(),
     ['LEG-001', 'LEG-002'],

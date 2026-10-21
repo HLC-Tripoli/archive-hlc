@@ -15,6 +15,7 @@ import {
 let context: TestContext;
 let adminClient: AuthedClient;
 let employeeClient: AuthedClient;
+let employeeDepartmentId: string;
 
 const STATUSES = ['new', 'in_progress', 'completed', 'archived'] as const;
 
@@ -27,6 +28,10 @@ beforeEach(async () => {
   await resetDatabase(context.pool);
   await createTestUser(context.pool, { username: 'admin', role: 'admin' });
   await createTestUser(context.pool, { username: 'employee', role: 'employee' });
+  const employeeRow = await context.pool.query<{ department_id: string }>(
+    "SELECT department_id FROM users WHERE username = 'employee'",
+  );
+  employeeDepartmentId = employeeRow.rows[0]!.department_id;
   adminClient = await loginClient(context.app, 'admin');
   employeeClient = await loginClient(context.app, 'employee');
 });
@@ -66,9 +71,7 @@ async function seedDocuments(departmentId: string, count = 25): Promise<void> {
   }
 }
 
-test('employee creates a document; invalid payloads are rejected with Arabic validation errors', async () => {
-  const departmentId = await createDepartment('الإدارة العامة');
-
+test('employee creates a document in the assigned department; invalid payloads are rejected with Arabic validation errors', async () => {
   const created = await createDocument({
     reference: 'REF-001',
     title: 'معاملة واردة أولى',
@@ -76,14 +79,14 @@ test('employee creates a document; invalid payloads are rejected with Arabic val
     date: '2026-05-20',
     sender: 'جهة مرسلة',
     recipient: 'هاتف ليبيا',
-    departmentId,
+    departmentId: employeeDepartmentId,
     notes: 'ملاحظة',
   });
   const detail = await apiRequest(context.app, employeeClient, 'GET', `/documents/${created.id}`);
   assert.equal(detail.statusCode, 200);
   const document = (detail.json() as { document: { status: string; department: { name: string }; notes: string } }).document;
   assert.equal(document.status, 'new');
-  assert.equal(document.department.name, 'الإدارة العامة');
+  assert.ok(document.department.name);
   assert.equal(document.notes, 'ملاحظة');
 
   const missingTitle = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
@@ -106,7 +109,7 @@ test('employee creates a document; invalid payloads are rejected with Arabic val
   assert.equal(badType.statusCode, 400);
   assert.equal((badType.json() as { error: { code: string } }).error.code, 'validation_error');
 
-  const unknownDepartment = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
+  const unknownDepartment = await apiRequest(context.app, adminClient, 'POST', '/documents', {
     payload: {
       reference: 'REF-005',
       title: 'إدارة غير موجودة',
@@ -125,36 +128,84 @@ test('employee creates a document; invalid payloads are rejected with Arabic val
   assert.equal(audit.rows.length, 1);
 });
 
-test('departmentId: null is accepted on create and update without coercion to an empty string', async () => {
-  const created = await createDocument({
-    reference: 'REF-NULL-DEPT',
-    title: 'بدون إدارة',
-    type: 'incoming',
-    date: '2026-05-20',
-    departmentId: null,
-  });
-  const detail = await apiRequest(context.app, employeeClient, 'GET', `/documents/${created.id}`);
+test('admin may create and clear a document department; an employee cannot choose null or another department', async () => {
+  const adminCreated = await createDocument(
+    {
+      reference: 'REF-NULL-DEPT',
+      title: 'بدون إدارة',
+      type: 'incoming',
+      date: '2026-05-20',
+      departmentId: null,
+    },
+    adminClient,
+  );
+  const detail = await apiRequest(context.app, adminClient, 'GET', `/documents/${adminCreated.id}`);
   assert.equal(detail.statusCode, 200);
   assert.equal((detail.json() as { document: { department: unknown } }).document.department, null);
 
-  const departmentId = await createDepartment('إدارة الاختبار');
-  const withDepartment = await createDocument({
-    reference: 'REF-WITH-DEPT',
-    title: 'مع إدارة',
-    type: 'incoming',
-    date: '2026-05-20',
-    departmentId,
+  const employeeNull = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
+    payload: {
+      reference: 'REF-EMP-NULL',
+      title: 'محاولة بدون إدارة',
+      type: 'incoming',
+      date: '2026-05-20',
+      departmentId: null,
+    },
   });
+  assert.equal(employeeNull.statusCode, 403);
+  assert.equal(
+    (employeeNull.json() as { error: { code: string } }).error.code,
+    'department_forbidden',
+  );
 
-  const cleared = await apiRequest(
+  const otherDepartmentId = await createDepartment('إدارة أخرى');
+  const employeeOther = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
+    payload: {
+      reference: 'REF-EMP-OTHER',
+      title: 'محاولة إدارة أخرى',
+      type: 'incoming',
+      date: '2026-05-20',
+      departmentId: otherDepartmentId,
+    },
+  });
+  assert.equal(employeeOther.statusCode, 403);
+  assert.equal(
+    (employeeOther.json() as { error: { code: string } }).error.code,
+    'department_forbidden',
+  );
+
+  const ownDocument = await createDocument({ reference: 'REF-OWN', title: 'مع إدارتي', type: 'incoming', date: '2026-05-20' });
+  const attemptMove = await apiRequest(
     context.app,
     employeeClient,
     'PATCH',
-    `/documents/${withDepartment.id}`,
+    `/documents/${ownDocument.id}`,
+    { payload: { departmentId: otherDepartmentId } },
+  );
+  assert.equal(attemptMove.statusCode, 403);
+  assert.equal(
+    (attemptMove.json() as { error: { code: string } }).error.code,
+    'department_forbidden',
+  );
+
+  const attemptClear = await apiRequest(
+    context.app,
+    employeeClient,
+    'PATCH',
+    `/documents/${ownDocument.id}`,
     { payload: { departmentId: null } },
   );
-  assert.equal(cleared.statusCode, 200, cleared.body);
-  assert.equal((cleared.json() as { document: { department: unknown } }).document.department, null);
+  assert.equal(attemptClear.statusCode, 403);
+
+  const adminCleared = await apiRequest(
+    context.app,
+    adminClient,
+    'PATCH',
+    `/documents/${ownDocument.id}`,
+    { payload: { departmentId: null } },
+  );
+  assert.equal(adminCleared.statusCode, 200, adminCleared.body);
+  assert.equal((adminCleared.json() as { document: { department: unknown } }).document.department, null);
 });
 
 test('duplicate references are rejected regardless of letter case', async () => {
@@ -167,9 +218,8 @@ test('duplicate references are rejected regardless of letter case', async () => 
   assert.equal((duplicate.json() as { error: { code: string } }).error.code, 'duplicate_reference');
 });
 
-test('listing supports filters, Arabic search, sorting, and pagination', async () => {
-  const departmentId = await createDepartment('إدارة المتابعة');
-  await seedDocuments(departmentId);
+test('listing supports filters, Arabic search, sorting, and pagination within the employee department', async () => {
+  await seedDocuments(employeeDepartmentId);
 
   const page = await apiRequest(context.app, employeeClient, 'GET', '/documents?page=1&pageSize=10');
   assert.equal(page.statusCode, 200);
@@ -188,9 +238,9 @@ test('listing supports filters, Arabic search, sorting, and pagination', async (
     context.app,
     employeeClient,
     'GET',
-    `/documents?departmentId=${departmentId}`,
+    `/documents?departmentId=${employeeDepartmentId}`,
   );
-  assert.equal((byDepartment.json() as { total: number }).total, 12);
+  assert.equal((byDepartment.json() as { total: number }).total, 25);
 
   const byDate = await apiRequest(
     context.app,
@@ -299,8 +349,7 @@ test('soft delete hides the document from employees; admin can list and restore 
   const editDeleted = await apiRequest(context.app, employeeClient, 'PATCH', `/documents/${created.id}`, {
     payload: { status: 'completed' },
   });
-  assert.equal(editDeleted.statusCode, 409);
-  assert.equal((editDeleted.json() as { error: { code: string } }).error.code, 'deleted_document');
+  assert.equal(editDeleted.statusCode, 404);
 
   const adminList = await apiRequest(context.app, adminClient, 'GET', '/documents?includeDeleted=true');
   const adminBody = adminList.json() as { items: Array<{ deletedAt: string | null }>; total: number };

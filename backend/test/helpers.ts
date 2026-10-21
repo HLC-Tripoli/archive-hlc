@@ -129,6 +129,26 @@ export async function resetDatabase(pool: Pool): Promise<void> {
   );
 }
 
+const DEFAULT_TEST_DEPARTMENT = 'قسم الاختبار الافتراضي';
+
+/**
+ * الاختبارات القديمة تنشئ موظفين بلا إدارة. بعد عزل الإدارات صار ذلك يعني
+ * منع الوصول، لذلك نمنح الموظف إدارة اختبار افتراضية ما لم يطلب الاختبار
+ * صراحةً موظفاً بلا إدارة (departmentId: null) أو إدارة محددة.
+ */
+async function ensureDefaultTestDepartment(pool: Pool): Promise<string> {
+  const existing = await pool.query<{ id: string }>(
+    'SELECT id FROM departments WHERE lower(name) = lower($1)',
+    [DEFAULT_TEST_DEPARTMENT],
+  );
+  if (existing.rows[0]) return existing.rows[0].id;
+  const created = await pool.query<{ id: string }>(
+    'INSERT INTO departments (name) VALUES ($1) RETURNING id',
+    [DEFAULT_TEST_DEPARTMENT],
+  );
+  return created.rows[0]!.id;
+}
+
 export async function createTestUser(
   pool: Pool,
   options: {
@@ -137,15 +157,22 @@ export async function createTestUser(
     role?: UserRole;
     displayName?: string;
     employeeNumber?: string | null;
+    departmentId?: string | null;
     isActive?: boolean;
   },
 ): Promise<string> {
   const passwordHash = await hashPassword(options.password ?? 'password-123');
+  const role = options.role ?? 'employee';
+  const departmentId =
+    options.departmentId === undefined && role === 'employee'
+      ? await ensureDefaultTestDepartment(pool)
+      : options.departmentId;
   const user = await createUser(pool, {
     username: options.username,
     displayName: options.displayName ?? options.username,
     employeeNumber: options.employeeNumber,
-    role: options.role ?? 'employee',
+    departmentId,
+    role,
     passwordHash,
   });
   if (options.isActive === false) {
@@ -157,7 +184,16 @@ export async function createTestUser(
 export interface AuthedClient {
   token: string;
   csrf: string;
-  user: { id: string; username: string; displayName: string; role: UserRole };
+  user: {
+    id: string;
+    username: string;
+    displayName: string;
+    role: UserRole;
+    isActive: boolean;
+    departmentId: string | null;
+    departmentName: string | null;
+    departmentActive: boolean | null;
+  };
 }
 
 async function loginWithPayload(

@@ -117,3 +117,21 @@ export async function countDocumentsInDepartment(db: Queryable, id: string): Pro
   );
   return rows[0]?.count ?? 0;
 }
+
+export async function countUsersInDepartment(db: Queryable, id: string): Promise<number> {
+  const { rows } = await db.query<{ count: number }>(
+    'SELECT count(*)::int AS count FROM users WHERE department_id = $1',
+    [id],
+  );
+  return rows[0]?.count ?? 0;
+}
+
+export async function countActiveEmployeesInDepartment(db: Queryable, id: string): Promise<number> {
+  const { rows } = await db.query<{ count: number }>(
+    `SELECT count(*)::int AS count
+       FROM users
+      WHERE department_id = $1 AND role = 'employee' AND is_active`,
+    [id],
+  );
+  return rows[0]?.count ?? 0;
+}

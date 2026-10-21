@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import type { Queryable } from '../db/pool.js';
+import type { DocumentAccessScope } from '../lib/access.js';
 import { containsPattern } from '../lib/sql.js';
 import { listFilesForDocument, type FileRecordPublic } from './files.js';
 
@@ -77,10 +78,9 @@ interface DocumentListRow {
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
-  total_count: number;
 }
 
-interface DocumentDetailRow extends Omit<DocumentListRow, 'total_count'> {
+interface DocumentDetailRow extends DocumentListRow {
   notes: string;
   updated_by_name: string | null;
   deleted_by_name: string | null;
@@ -116,8 +116,7 @@ const LIST_SELECT = `
          doc.status,
          (SELECT count(*)::int FROM document_files f WHERE f.document_id = doc.id) AS files_count,
          creator.display_name AS created_by_name,
-         doc.created_at, doc.updated_at, doc.deleted_at,
-         count(*) OVER()::int AS total_count
+         doc.created_at, doc.updated_at, doc.deleted_at
     FROM documents doc
     LEFT JOIN departments dep ON dep.id = doc.department_id
     LEFT JOIN users creator ON creator.id = doc.created_by`;
@@ -125,6 +124,7 @@ const LIST_SELECT = `
 export async function listDocuments(
   pool: Pool,
   filters: DocumentListFilters,
+  access: DocumentAccessScope,
 ): Promise<{ items: DocumentListItem[]; total: number }> {
   const conditions: string[] = [];
   const params: unknown[] = [];
@@ -133,7 +133,14 @@ export async function listDocuments(
     return `$${params.length}`;
   };
 
-  if (!filters.includeDeleted) conditions.push('doc.deleted_at IS NULL');
+  // نطاق الموظف يُضاف دائماً قبل أي مرشِّح من العميل، ولا يمكن لأي طلب
+  // (departmentId مختلف، includeDeleted، بحث واسع...) أن يوسّع هذا النطاق.
+  if (!access.isAdmin) {
+    conditions.push('doc.deleted_at IS NULL');
+    conditions.push(`doc.department_id = ${addParam(access.departmentId)}`);
+  } else if (!filters.includeDeleted) {
+    conditions.push('doc.deleted_at IS NULL');
+  }
   if (filters.q) {
     const pattern = addParam(containsPattern(filters.q));
     conditions.push(
@@ -149,6 +156,17 @@ export async function listDocuments(
   if (filters.dateTo) conditions.push(`doc.transaction_date <= ${addParam(filters.dateTo)}`);
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  // عدّاد منفصل: count(*) OVER() كان يعيد صفراً عندما تتجاوز الإزاحة نهاية
+  // النتائج، وهو ما كان يفسد إجمالي الصفحات في الواجهة.
+  const countResult = await pool.query<{ total: number }>(
+    `SELECT count(*)::int AS total
+       FROM documents doc
+       LEFT JOIN departments dep ON dep.id = doc.department_id
+       ${where}`,
+    params,
+  );
+
   const sortExpression = SORT_EXPRESSIONS[filters.sort];
   const direction = filters.order === 'asc' ? 'ASC' : 'DESC';
   const limit = addParam(filters.pageSize);
@@ -164,11 +182,23 @@ export async function listDocuments(
 
   return {
     items: rows.map((row) => toListItem(row)),
-    total: rows[0]?.total_count ?? 0,
+    total: countResult.rows[0]?.total ?? 0,
   };
 }
 
-export async function getDocumentById(db: Queryable, id: string): Promise<DocumentDetail | null> {
+export async function getDocumentById(
+  db: Queryable,
+  id: string,
+  access: DocumentAccessScope,
+): Promise<DocumentDetail | null> {
+  const params: unknown[] = [id];
+  const conditions = ['doc.id = $1'];
+  if (!access.isAdmin) {
+    // الموظف لا يرى إلا مستندات إدارته، ولا يرى المحذوفة إطلاقاً.
+    params.push(access.departmentId);
+    conditions.push(`doc.department_id = $${params.length}`);
+    conditions.push('doc.deleted_at IS NULL');
+  }
   const { rows } = await db.query<DocumentDetailRow>(
     `SELECT doc.id, doc.reference, doc.title, doc.doc_type,
             to_char(doc.transaction_date, 'YYYY-MM-DD') AS transaction_date,
@@ -185,8 +215,8 @@ export async function getDocumentById(db: Queryable, id: string): Promise<Docume
        LEFT JOIN users creator ON creator.id = doc.created_by
        LEFT JOIN users updater ON updater.id = doc.updated_by
        LEFT JOIN users deleter ON deleter.id = doc.deleted_by
-      WHERE doc.id = $1`,
-    [id],
+      WHERE ${conditions.join(' AND ')}`,
+    params,
   );
   const row = rows[0];
   if (!row) return null;
@@ -227,7 +257,18 @@ const PATCH_COLUMNS: Record<keyof DocumentInput, string> = {
   notes: 'notes',
 };
 
-export async function insertDocument(db: Queryable, input: DocumentInput, userId: string): Promise<string> {
+export async function insertDocument(
+  db: Queryable,
+  input: DocumentInput,
+  userId: string,
+  access: DocumentAccessScope,
+): Promise<string> {
+  // إدارة الموظف تأتي من هويته الموثوقة، لا من جسم الطلب. حتى لو أخطأ
+  // استدعاء أعلى المستوى، لا يمكن إنشاء مستند موظف في إدارة أخرى.
+  const departmentId = access.isAdmin ? input.departmentId : access.departmentId;
+  if (!access.isAdmin && !departmentId) {
+    throw new Error('employee document requires an assigned department');
+  }
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO documents
        (reference, title, doc_type, transaction_date, sender, recipient, department_id, status, notes, created_by, updated_by)
@@ -240,7 +281,7 @@ export async function insertDocument(db: Queryable, input: DocumentInput, userId
       input.date,
       input.sender,
       input.recipient,
-      input.departmentId,
+      departmentId,
       input.status,
       input.notes,
       userId,
@@ -254,6 +295,7 @@ export async function insertDocument(db: Queryable, input: DocumentInput, userId
 export type DocumentUpdateResult =
   | { status: 'not_found' }
   | { status: 'deleted' }
+  | { status: 'department_forbidden' }
   | { status: 'updated'; changedFields: string[] };
 
 export async function updateDocument(
@@ -261,20 +303,36 @@ export async function updateDocument(
   id: string,
   patch: DocumentPatch,
   userId: string,
+  access: DocumentAccessScope,
 ): Promise<DocumentUpdateResult> {
+  const existingParams: unknown[] = [id];
+  let existingScope = '';
+  if (!access.isAdmin) {
+    existingParams.push(access.departmentId);
+    existingScope = ` AND department_id = $${existingParams.length}`;
+  }
   const existing = await db.query<{ deleted_at: Date | null }>(
-    'SELECT deleted_at FROM documents WHERE id = $1',
-    [id],
+    `SELECT deleted_at FROM documents WHERE id = $1${existingScope}`,
+    existingParams,
   );
   const existingRow = existing.rows[0];
   if (!existingRow) return { status: 'not_found' };
   if (existingRow.deleted_at) return { status: 'deleted' };
 
+  // لا يمكن للموظف نقل مستنده إلى إدارة أخرى أو إزالته من إدارته.
+  if (
+    !access.isAdmin &&
+    patch.departmentId !== undefined &&
+    patch.departmentId !== access.departmentId
+  ) {
+    return { status: 'department_forbidden' };
+  }
+
   const sets: string[] = [];
   const params: unknown[] = [];
   const changedFields: string[] = [];
   for (const key of Object.keys(patch) as (keyof DocumentInput)[]) {
-    const value = patch[key];
+    const value = key === 'departmentId' && !access.isAdmin ? access.departmentId : patch[key];
     if (value === undefined) continue;
     params.push(value);
     sets.push(`${PATCH_COLUMNS[key]} = $${params.length}`);
@@ -287,10 +345,19 @@ export async function updateDocument(
   sets.push(`updated_by = $${params.length}`);
   sets.push('updated_at = now()');
   params.push(id);
-  await db.query(
-    `UPDATE documents SET ${sets.join(', ')} WHERE id = $${params.length} AND deleted_at IS NULL`,
+  const idParam = params.length;
+  let scopeSql = '';
+  if (!access.isAdmin) {
+    params.push(access.departmentId);
+    scopeSql = ` AND department_id = $${params.length}`;
+  }
+  // شرط الإدارة جزء من أمر UPDATE نفسه، لا مجرد فحص سابق في المسار.
+  const result = await db.query(
+    `UPDATE documents SET ${sets.join(', ')}
+      WHERE id = $${idParam} AND deleted_at IS NULL${scopeSql}`,
     params,
   );
+  if ((result.rowCount ?? 0) === 0) return { status: 'not_found' };
   return { status: 'updated', changedFields };
 }
 

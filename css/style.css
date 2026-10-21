@@ -306,6 +306,26 @@ button {
   flex-wrap: wrap;
   gap: 12px;
 }
+.access-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: -8px 0 24px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-right: 4px solid var(--btn-danger);
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.access-notice[hidden] {
+  display: none;
+}
+.access-notice span {
+  color: var(--text);
+}
 .user-badge {
   display: flex;
   align-items: center;

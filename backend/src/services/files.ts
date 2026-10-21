@@ -8,6 +8,7 @@ import { pipeline } from 'node:stream/promises';
 import type { Pool } from 'pg';
 import type { AppConfig } from '../config.js';
 import type { Queryable } from '../db/pool.js';
+import type { DocumentAccessScope } from '../lib/access.js';
 import { ApiError } from '../lib/errors.js';
 import type { StorageProvider } from './storage/types.js';
 
@@ -131,7 +132,11 @@ export interface StoredFileWithDocument {
   document: { id: string; reference: string; deletedAt: Date | null };
 }
 
-export async function getFileWithDocument(db: Queryable, fileId: string): Promise<StoredFileWithDocument | null> {
+export async function getFileWithDocument(
+  db: Queryable,
+  fileId: string,
+  access: DocumentAccessScope,
+): Promise<StoredFileWithDocument | null> {
   const { rows } = await db.query<FileRow & {
     storage_key: string;
     storage_provider: string;
@@ -146,8 +151,9 @@ export async function getFileWithDocument(db: Queryable, fileId: string): Promis
        FROM document_files f
        JOIN documents doc ON doc.id = f.document_id
        LEFT JOIN users uploader ON uploader.id = f.uploaded_by
-      WHERE f.id = $1`,
-    [fileId],
+      WHERE f.id = $1
+        AND ($2::boolean OR doc.department_id = $3)`,
+    [fileId, access.isAdmin, access.departmentId],
   );
   const row = rows[0];
   if (!row) return null;
@@ -170,6 +176,7 @@ export async function deleteFileRow(db: Queryable, fileId: string): Promise<bool
 export interface StoreAttachmentInput {
   documentId: string;
   userId: string;
+  access: DocumentAccessScope;
   stream: Readable & { truncated?: boolean };
   filename: string;
   declaredMimeType?: string;
@@ -266,7 +273,11 @@ export async function storeAttachment(
       const { rows } = await deps.pool.query<{ id: string; created_at: Date }>(
         `INSERT INTO document_files
            (document_id, original_name, mime_type, size_bytes, checksum_sha256, storage_provider, storage_key, uploaded_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         SELECT $1, $2, $3, $4, $5, $6, $7, $8
+           FROM documents doc
+          WHERE doc.id = $1
+            AND doc.deleted_at IS NULL
+            AND ($9::boolean OR doc.department_id = $10)
          RETURNING id, created_at`,
         [
           input.documentId,
@@ -277,10 +288,14 @@ export async function storeAttachment(
           deps.storage.name,
           storageKey,
           input.userId,
+          input.access.isAdmin,
+          input.access.departmentId,
         ],
       );
       const row = rows[0];
-      if (!row) throw new Error('failed to insert document_files row');
+      if (!row) {
+        throw ApiError.notFound('المعاملة غير موجودة.');
+      }
       return {
         id: row.id,
         originalName,

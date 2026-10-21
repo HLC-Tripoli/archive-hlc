@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import { withTransaction } from '../db/pool.js';
+import { resolveDocumentAccessScope } from '../lib/access.js';
 import { isValidIsoDate } from '../lib/dates.js';
 import { ApiError } from '../lib/errors.js';
 import { isUuid } from '../lib/validation.js';
@@ -98,6 +99,9 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
     { preHandler: guards.requireAuth, schema: { querystring: LIST_QUERY_SCHEMA } },
     async (request) => {
       const query = request.query as DocumentListQuery;
+      // نطاق الوصول أولاً: الموظف غير المعيّن/ذي الإدارة المعطّلة يحصل على
+      // رسالة الحجب الواضحة حتى لو أرسل مرشِّحات غير صالحة.
+      const access = resolveDocumentAccessScope(request.authUser!);
       if (query.dateFrom && !isValidIsoDate(query.dateFrom)) {
         throw ApiError.badRequest('invalid_date_from', 'تاريخ البداية غير صالح.');
       }
@@ -107,21 +111,25 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
       if (query.departmentId && !isUuid(query.departmentId)) {
         throw ApiError.badRequest('invalid_department', 'معرّف الإدارة غير صالح.');
       }
-      const includeDeleted = request.authUser!.role === 'admin' ? query.includeDeleted : false;
+      const includeDeleted = access.isAdmin ? query.includeDeleted : false;
 
-      const result = await listDocuments(pool, {
-        q: query.q?.trim() || undefined,
-        type: query.type,
-        status: query.status,
-        departmentId: query.departmentId,
-        dateFrom: query.dateFrom,
-        dateTo: query.dateTo,
-        includeDeleted,
-        sort: query.sort,
-        order: query.order,
-        page: query.page,
-        pageSize: query.pageSize,
-      });
+      const result = await listDocuments(
+        pool,
+        {
+          q: query.q?.trim() || undefined,
+          type: query.type,
+          status: query.status,
+          departmentId: query.departmentId,
+          dateFrom: query.dateFrom,
+          dateTo: query.dateTo,
+          includeDeleted,
+          sort: query.sort,
+          order: query.order,
+          page: query.page,
+          pageSize: query.pageSize,
+        },
+        access,
+      );
       return { items: result.items, total: result.total, page: query.page, pageSize: query.pageSize };
     },
   );
@@ -130,13 +138,11 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
     '/documents/:id',
     { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
     async (request) => {
+      const access = resolveDocumentAccessScope(request.authUser!);
       const { id } = request.params as { id: string };
       if (!isUuid(id)) throw ApiError.notFound('المعاملة غير موجودة.');
-      const document = await getDocumentById(pool, id);
+      const document = await getDocumentById(pool, id, access);
       if (!document) throw ApiError.notFound('المعاملة غير موجودة.');
-      if (document.deletedAt && request.authUser!.role !== 'admin') {
-        throw ApiError.notFound('المعاملة غير موجودة.');
-      }
       return { document };
     },
   );
@@ -161,6 +167,7 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
         type: DocumentTypeDb;
         date: string;
       };
+      const access = resolveDocumentAccessScope(request.authUser!);
       if (!isValidIsoDate(body.date)) {
         throw ApiError.badRequest('invalid_date', 'تاريخ المعاملة غير صالح. استخدم الصيغة YYYY-MM-DD.');
       }
@@ -168,6 +175,13 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
       const title = body.title.trim();
       if (!reference || !title) {
         throw ApiError.badRequest('missing_fields', 'رقم المعاملة والعنوان مطلوبان.');
+      }
+      if (!access.isAdmin && body.departmentId !== undefined && body.departmentId !== access.departmentId) {
+        throw new ApiError(
+          403,
+          'department_forbidden',
+          'لا يمكنك إنشاء معاملة في إدارة أخرى. ستُسجَّل المعاملة في إدارتك المعيّنة فقط.',
+        );
       }
       if (body.departmentId) {
         if (!isUuid(body.departmentId)) {
@@ -193,6 +207,7 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
             notes: (body.notes ?? '').trim(),
           },
           userId,
+          access,
         );
         await writeAudit(
           client,
@@ -209,7 +224,7 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
         return createdId;
       });
 
-      const document = await getDocumentById(pool, id);
+      const document = await getDocumentById(pool, id, access);
       reply.code(201);
       return { document };
     },
@@ -230,6 +245,7 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
       },
     },
     async (request) => {
+      const access = resolveDocumentAccessScope(request.authUser!);
       const { id } = request.params as { id: string };
       if (!isUuid(id)) throw ApiError.notFound('المعاملة غير موجودة.');
       const body = request.body as Partial<DocumentInput>;
@@ -244,8 +260,15 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
         const department = await getDepartmentById(pool, body.departmentId);
         if (!department) throw ApiError.badRequest('invalid_department', 'الإدارة المحددة غير موجودة.');
       }
+      if (!access.isAdmin && body.departmentId !== undefined && body.departmentId !== access.departmentId) {
+        throw new ApiError(
+          403,
+          'department_forbidden',
+          'لا يمكنك نقل المعاملة إلى إدارة أخرى أو إزالتها من إدارتك.',
+        );
+      }
 
-      const existing = await getDocumentById(pool, id);
+      const existing = await getDocumentById(pool, id, access);
       if (!existing || existing.deletedAt) {
         if (!existing) throw ApiError.notFound('المعاملة غير موجودة.');
         throw ApiError.conflict('deleted_document', 'لا يمكن تعديل معاملة محذوفة. يمكنك استعادتها أولاً.');
@@ -270,10 +293,17 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
 
       const userId = request.authUser!.id;
       const result = await withTransaction(pool, async (client) => {
-        const updateResult = await updateDocument(client, id, patch, userId);
+        const updateResult = await updateDocument(client, id, patch, userId, access);
         if (updateResult.status === 'not_found') throw ApiError.notFound('المعاملة غير موجودة.');
         if (updateResult.status === 'deleted') {
           throw ApiError.conflict('deleted_document', 'لا يمكن تعديل معاملة محذوفة. يمكنك استعادتها أولاً.');
+        }
+        if (updateResult.status === 'department_forbidden') {
+          throw new ApiError(
+            403,
+            'department_forbidden',
+            'لا يمكنك نقل المعاملة إلى إدارة أخرى أو إزالتها من إدارتك.',
+          );
         }
         await writeAudit(
           client,
@@ -290,7 +320,7 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
         return updateResult;
       });
 
-      const document = await getDocumentById(pool, id);
+      const document = await getDocumentById(pool, id, access);
       return { document, changedFields: result.changedFields };
     },
   );
@@ -332,6 +362,7 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
     async (request) => {
       const { id } = request.params as { id: string };
       if (!isUuid(id)) throw ApiError.notFound('المعاملة غير موجودة.');
+      const access = resolveDocumentAccessScope(request.authUser!);
       const userId = request.authUser!.id;
       const outcome = await withTransaction(pool, async (client) => {
         const result = await restoreDocument(client, id, userId);
@@ -357,7 +388,7 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
         );
         return result;
       });
-      const document = await getDocumentById(pool, id);
+      const document = await getDocumentById(pool, id, access);
       return { document, outcome };
     },
   );

@@ -42,7 +42,7 @@
         <button class="menu" data-page="archive" type="button">
           🗄️ الأرشيف الإلكتروني
         </button>
-        <button class="menu" data-page="departments" type="button">
+        <button class="menu admin-only is-hidden" data-page="departments" type="button">
           🏢 الإدارات والأقسام
         </button>
         <button class="menu" data-page="reports" type="button">
@@ -84,6 +84,12 @@
           </div>
         </header>
 
+        <!-- تنبيه الوصول عند غياب إدارة نشطة للموظف -->
+        <div id="departmentAccessNotice" class="access-notice" role="alert" hidden>
+          <strong>الوصول إلى المعاملات غير متاح حالياً</strong>
+          <span id="departmentAccessNoticeText"></span>
+        </div>
+
         <!-- لوحة التحكم -->
         <section id="dashboard" class="page active">
           <div class="welcome">
@@ -91,7 +97,7 @@
               <h2>مرحباً بك في الأرشيف الإلكتروني</h2>
               <p>إدارة المراسلات والوثائق من مكان واحد.</p>
             </div>
-            <button class="button white-button" id="addDocumentButton" type="button">
+            <button class="button white-button" id="addDocumentButton" data-requires-department type="button">
               + تسجيل معاملة
             </button>
           </div>
@@ -142,7 +148,7 @@
                 <h2>المراسلات الواردة</h2>
                 <p>تسجيل ومتابعة المراسلات المستلمة.</p>
               </div>
-              <button class="button" id="addIncomingButton" type="button">
+              <button class="button" id="addIncomingButton" data-requires-department type="button">
                 + إضافة وارد
               </button>
             </div>
@@ -167,7 +173,7 @@
                 <h2>المراسلات الصادرة</h2>
                 <p>تسجيل ومتابعة المراسلات المرسلة.</p>
               </div>
-              <button class="button" id="addOutgoingButton" type="button">
+              <button class="button" id="addOutgoingButton" data-requires-department type="button">
                 + إضافة صادر
               </button>
             </div>
@@ -192,7 +198,7 @@
                 <h2>الأرشيف الإلكتروني</h2>
                 <p>جميع الوثائق المسجلة في المنظومة مع البحث والتصفية.</p>
               </div>
-              <button class="button secondary-button" id="exportArchiveCsvButton" type="button">
+              <button class="button secondary-button" id="exportArchiveCsvButton" data-requires-department type="button">
                 تصدير CSV
               </button>
             </div>
@@ -242,7 +248,7 @@
         </section>
 
         <!-- الإدارات -->
-        <section id="departments" class="page">
+        <section id="departments" class="page admin-only is-hidden">
           <div class="panel">
             <div class="panel-heading">
               <div>
@@ -279,7 +285,7 @@
                 <button class="button secondary-button" id="printReportButton" type="button">
                   🖨️ طباعة
                 </button>
-                <button class="button" id="exportReportsCsvButton" type="button">
+                <button class="button" id="exportReportsCsvButton" data-requires-department type="button">
                   تصدير CSV
                 </button>
               </div>
@@ -320,7 +326,7 @@
         </section>
 
         <!-- إدارة المستخدمين (للمدير فقط) -->
-        <section id="users" class="page">
+        <section id="users" class="page admin-only is-hidden">
           <div class="panel">
             <div class="panel-heading">
               <div>
@@ -350,7 +356,7 @@
         </section>
 
         <!-- سجل التدقيق (للمدير فقط) -->
-        <section id="audit" class="page">
+        <section id="audit" class="page admin-only is-hidden">
           <div class="panel">
             <div class="panel-heading">
               <div>
@@ -376,6 +382,7 @@
         <section id="settings" class="page">
           <div class="panel">
             <h2>حسابي</h2>
+            <p id="settingsDepartmentInfo">الإدارة المعيّنة: —</p>
             <p>تغيير كلمة المرور الخاصة بحسابك. سيؤدي ذلك إلى إنهاء الجلسات الأخرى.</p>
             <form id="changePasswordForm" class="stacked-form">
               <label for="currentPassword">كلمة المرور الحالية</label>
@@ -544,6 +551,15 @@
             <option value="employee">موظف الأرشيف</option>
             <option value="admin">مدير النظام</option>
           </select>
+          <div id="userDepartmentField">
+            <label for="userDepartment">الإدارة المعيّنة <span id="userDepartmentRequired">*</span></label>
+            <select id="userDepartment">
+              <option value="">بدون إدارة (المدير فقط)</option>
+            </select>
+            <small class="hint" id="userDepartmentHint">
+              الموظف يحتاج إدارة نشطة للوصول إلى معاملاتها. المدير يرى جميع الإدارات.
+            </small>
+          </div>
           <div id="userPasswordField">
             <label for="userPassword">كلمة المرور *</label>
             <input id="userPassword" type="password" minlength="8" maxlength="200" autocomplete="new-password" />

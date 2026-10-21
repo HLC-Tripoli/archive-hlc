@@ -17,6 +17,7 @@ let adminClient: AuthedClient;
 let employeeClient: AuthedClient;
 let adminId: string;
 let employeeId: string;
+let departmentId: string;
 
 before(async () => {
   context = await createTestContext();
@@ -35,6 +36,11 @@ beforeEach(async () => {
     role: 'employee',
     displayName: 'موظف الأرشيف',
   });
+  const employeeRow = await context.pool.query<{ department_id: string }>(
+    'SELECT department_id FROM users WHERE id = $1',
+    [employeeId],
+  );
+  departmentId = employeeRow.rows[0]!.department_id;
   adminClient = await loginClient(context.app, 'admin');
   employeeClient = await loginClient(context.app, 'employee');
 });
@@ -69,6 +75,7 @@ test('admin creates a user, and usernames are unique case-insensitively', async 
       username: 'newuser',
       displayName: 'مستخدم جديد',
       role: 'employee',
+      departmentId,
       password: 'password-123',
     },
   });
@@ -83,6 +90,7 @@ test('admin creates a user, and usernames are unique case-insensitively', async 
       username: 'ADMIN',
       displayName: 'مكرر',
       role: 'employee',
+      departmentId,
       password: 'password-123',
     },
   });
@@ -90,13 +98,13 @@ test('admin creates a user, and usernames are unique case-insensitively', async 
   assert.equal((duplicate.json() as { error: { code: string } }).error.code, 'duplicate_username');
 
   const shortUsername = await apiRequest(context.app, adminClient, 'POST', '/users', {
-    payload: { username: 'ab', displayName: 'قصير', role: 'employee', password: 'password-123' },
+    payload: { username: 'ab', displayName: 'قصير', role: 'employee', departmentId, password: 'password-123' },
   });
   assert.equal(shortUsername.statusCode, 400);
   assert.equal((shortUsername.json() as { error: { code: string } }).error.code, 'validation_error');
 
   const shortPassword = await apiRequest(context.app, adminClient, 'POST', '/users', {
-    payload: { username: 'okuser', displayName: 'قصير', role: 'employee', password: 'short' },
+    payload: { username: 'okuser', displayName: 'قصير', role: 'employee', departmentId, password: 'short' },
   });
   assert.equal(shortPassword.statusCode, 400);
 
@@ -158,7 +166,7 @@ test('admin cannot deactivate their own account', async () => {
 
 test('the last active admin cannot be demoted or deactivated', async () => {
   const demote = await apiRequest(context.app, adminClient, 'PATCH', `/users/${adminId}`, {
-    payload: { role: 'employee' },
+    payload: { role: 'employee', departmentId },
   });
   assert.equal(demote.statusCode, 409);
   assert.equal((demote.json() as { error: { code: string } }).error.code, 'last_admin');
@@ -217,6 +225,7 @@ test('admin creates users with normalized employee numbers', async () => {
       username: entry.username,
       displayName: entry.username,
       role: 'employee',
+      departmentId,
       password: 'password-123',
     };
     if ('employeeNumber' in entry) payload.employeeNumber = entry.employeeNumber;
@@ -253,6 +262,7 @@ test('employee numbers are unique case-insensitively, even under concurrent writ
       displayName: 'مكرر أول',
       employeeNumber: 'DUP-100',
       role: 'employee',
+      departmentId,
       password: 'password-123',
     },
   });
@@ -264,6 +274,7 @@ test('employee numbers are unique case-insensitively, even under concurrent writ
       displayName: 'مكرر ثانٍ',
       employeeNumber: 'dup-100',
       role: 'employee',
+      departmentId,
       password: 'password-123',
     },
   });
@@ -282,6 +293,7 @@ test('employee numbers are unique case-insensitively, even under concurrent writ
           displayName: `متزامن ${index}`,
           employeeNumber,
           role: 'employee',
+          departmentId,
           password: 'password-123',
         },
       }),
@@ -296,6 +308,7 @@ test('employee numbers are unique case-insensitively, even under concurrent writ
       displayName: 'طويل',
       employeeNumber: tooLong,
       role: 'employee',
+      departmentId,
       password: 'password-123',
     },
   });
@@ -311,6 +324,7 @@ test('employee numbers are unique case-insensitively, even under concurrent writ
       displayName: 'محارف تحكم',
       employeeNumber: 'EMP\u0001X',
       role: 'employee',
+      departmentId,
       password: 'password-123',
     },
   });
@@ -324,6 +338,7 @@ test('employee numbers are unique case-insensitively, even under concurrent writ
       displayName: 'الحد الأقصى',
       employeeNumber: maxLength,
       role: 'employee',
+      departmentId,
       password: 'password-123',
     },
   });
@@ -442,6 +457,7 @@ test('employees cannot create users or alter employee numbers directly', async (
       displayName: 'محاول',
       employeeNumber: 'HACK-1',
       role: 'employee',
+      departmentId,
       password: 'password-123',
     },
   });

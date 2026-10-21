@@ -53,37 +53,59 @@ test('admin creates departments; duplicates are rejected case-insensitively afte
   assert.equal(audit.rows.length, 1);
 });
 
-test('employees can list departments but cannot manage them', async () => {
+test('employees only list their own active department and cannot manage departments', async () => {
   await apiRequest(context.app, adminClient, 'POST', '/departments', { payload: { name: 'إدارة المالية' } });
 
+  const own = await context.pool.query<{ id: string; name: string }>(
+    `SELECT dep.id, dep.name
+       FROM users u JOIN departments dep ON dep.id = u.department_id
+      WHERE u.username = 'employee'`,
+  );
   const list = await apiRequest(context.app, employeeClient, 'GET', '/departments');
   assert.equal(list.statusCode, 200);
-  const items = (list.json() as { items: Array<{ name: string }> }).items;
+  const items = (list.json() as { items: Array<{ id: string; name: string }> }).items;
   assert.equal(items.length, 1);
-  assert.equal(items[0]!.name, 'إدارة المالية');
+  assert.equal(items[0]!.id, own.rows[0]!.id);
+  assert.equal(items[0]!.name, own.rows[0]!.name);
+
+  // حتى مع includeInactive لا يستطيع الموظف رؤية إدارة أخرى أو إدارة معطّلة.
+  const forced = await apiRequest(
+    context.app,
+    employeeClient,
+    'GET',
+    '/departments?includeInactive=true',
+  );
+  assert.deepEqual(
+    (forced.json() as { items: Array<{ id: string }> }).items.map((item) => item.id),
+    [own.rows[0]!.id],
+  );
 
   const created = await apiRequest(context.app, employeeClient, 'POST', '/departments', {
     payload: { name: 'إدارة ممنوعة' },
   });
   assert.equal(created.statusCode, 403);
 
-  const id = await context.pool.query<{ id: string }>('SELECT id FROM departments LIMIT 1');
-  const patched = await apiRequest(context.app, employeeClient, 'PATCH', `/departments/${id.rows[0]!.id}`, {
+  const patched = await apiRequest(context.app, employeeClient, 'PATCH', `/departments/${own.rows[0]!.id}`, {
     payload: { name: 'تغيير ممنوع' },
   });
   assert.equal(patched.statusCode, 403);
 
-  const deleted = await apiRequest(context.app, employeeClient, 'DELETE', `/departments/${id.rows[0]!.id}`);
+  const deleted = await apiRequest(context.app, employeeClient, 'DELETE', `/departments/${own.rows[0]!.id}`);
   assert.equal(deleted.statusCode, 403);
 });
 
-test('department listing hides inactive departments from employees and counts documents', async () => {
+test('department listing is scoped to the employee and deactivation is blocked while active employees remain', async () => {
+  const own = await context.pool.query<{ id: string }>(
+    "SELECT department_id AS id FROM users WHERE username = 'employee'",
+  );
+  const originalDepartmentId = own.rows[0]!.id;
+
   const created = await apiRequest(context.app, adminClient, 'POST', '/departments', {
     payload: { name: 'إدارة الوثائق' },
   });
   const departmentId = (created.json() as { department: { id: string } }).department.id;
 
-  const document = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
+  const document = await apiRequest(context.app, adminClient, 'POST', '/documents', {
     payload: {
       reference: 'DEPT-1',
       title: 'معاملة مرتبطة بإدارة',
@@ -94,9 +116,45 @@ test('department listing hides inactive departments from employees and counts do
   });
   assert.equal(document.statusCode, 201);
 
+  const employeeId = await context.pool.query<{ id: string }>(
+    "SELECT id FROM users WHERE username = 'employee'",
+  );
+  const assigned = await apiRequest(
+    context.app,
+    adminClient,
+    'PATCH',
+    `/users/${employeeId.rows[0]!.id}`,
+    { payload: { departmentId } },
+  );
+  assert.equal(assigned.statusCode, 200);
+
   const withCount = await apiRequest(context.app, employeeClient, 'GET', '/departments');
-  const item = (withCount.json() as { items: Array<{ documentCount: number }> }).items[0]!;
+  const item = (withCount.json() as { items: Array<{ id: string; documentCount: number }> }).items[0]!;
+  assert.equal(item.id, departmentId);
   assert.equal(item.documentCount, 1);
+
+  const blockedDeactivation = await apiRequest(
+    context.app,
+    adminClient,
+    'PATCH',
+    `/departments/${departmentId}`,
+    { payload: { isActive: false } },
+  );
+  assert.equal(blockedDeactivation.statusCode, 409);
+  assert.equal(
+    (blockedDeactivation.json() as { error: { code: string } }).error.code,
+    'department_has_active_employees',
+  );
+
+  // نقل الموظف إلى إدارة نشطة أخرى يسمح بتعطيل الإدارة.
+  const moved = await apiRequest(
+    context.app,
+    adminClient,
+    'PATCH',
+    `/users/${employeeId.rows[0]!.id}`,
+    { payload: { departmentId: originalDepartmentId } },
+  );
+  assert.equal(moved.statusCode, 200);
 
   const deactivated = await apiRequest(context.app, adminClient, 'PATCH', `/departments/${departmentId}`, {
     payload: { isActive: false },
@@ -104,10 +162,11 @@ test('department listing hides inactive departments from employees and counts do
   assert.equal(deactivated.statusCode, 200);
 
   const employeeList = await apiRequest(context.app, employeeClient, 'GET', '/departments');
-  assert.equal((employeeList.json() as { items: unknown[] }).items.length, 0);
+  const visible = (employeeList.json() as { items: Array<{ id: string }> }).items;
+  assert.deepEqual(visible.map((entry) => entry.id), [originalDepartmentId]);
 
   const adminList = await apiRequest(context.app, adminClient, 'GET', '/departments?includeInactive=true');
-  assert.equal((adminList.json() as { items: unknown[] }).items.length, 1);
+  assert.equal((adminList.json() as { items: unknown[] }).items.length, 2);
 
   const employeeForced = await apiRequest(
     context.app,
@@ -115,7 +174,10 @@ test('department listing hides inactive departments from employees and counts do
     'GET',
     '/departments?includeInactive=true',
   );
-  assert.equal((employeeForced.json() as { items: unknown[] }).items.length, 0);
+  assert.deepEqual(
+    (employeeForced.json() as { items: Array<{ id: string }> }).items.map((entry) => entry.id),
+    [originalDepartmentId],
+  );
 });
 
 test('a department referenced by documents cannot be deleted; an unused one can', async () => {
@@ -146,4 +208,39 @@ test('a department referenced by documents cannot be deleted; an unused one can'
 
   const audit = await context.pool.query("SELECT 1 FROM audit_log WHERE action = 'department.deleted'");
   assert.equal(audit.rows.length, 1);
+});
+
+test('a department referenced by a user cannot be deleted until the user is reassigned', async () => {
+  const created = await apiRequest(context.app, adminClient, 'POST', '/departments', {
+    payload: { name: 'إدارة مرتبطة بمستخدم' },
+  });
+  const departmentId = (created.json() as { department: { id: string } }).department.id;
+  const employee = await context.pool.query<{ id: string; department_id: string }>(
+    "SELECT id, department_id FROM users WHERE username = 'employee'",
+  );
+
+  const assigned = await apiRequest(
+    context.app,
+    adminClient,
+    'PATCH',
+    `/users/${employee.rows[0]!.id}`,
+    { payload: { departmentId } },
+  );
+  assert.equal(assigned.statusCode, 200);
+
+  const blocked = await apiRequest(context.app, adminClient, 'DELETE', `/departments/${departmentId}`);
+  assert.equal(blocked.statusCode, 409);
+  assert.equal((blocked.json() as { error: { code: string } }).error.code, 'department_has_users');
+
+  const movedBack = await apiRequest(
+    context.app,
+    adminClient,
+    'PATCH',
+    `/users/${employee.rows[0]!.id}`,
+    { payload: { departmentId: employee.rows[0]!.department_id } },
+  );
+  assert.equal(movedBack.statusCode, 200);
+
+  const removed = await apiRequest(context.app, adminClient, 'DELETE', `/departments/${departmentId}`);
+  assert.equal(removed.statusCode, 200);
 });

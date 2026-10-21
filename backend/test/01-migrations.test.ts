@@ -49,7 +49,11 @@ test('schema is created from scratch, applied once, and migrations are idempoten
   await pool.query('CREATE SCHEMA public');
 
   const first = await runMigrations(pool);
-  assert.deepEqual(first.applied, ['0001_init.sql', '0002_employee_number.sql']);
+  assert.deepEqual(first.applied, [
+    '0001_init.sql',
+    '0002_employee_number.sql',
+    '0003_user_department.sql',
+  ]);
 
   const { rows } = await pool.query<{ table_name: string }>(
     `SELECT table_name FROM information_schema.tables
@@ -82,9 +86,38 @@ test('schema is created from scratch, applied once, and migrations are idempoten
   );
   assert.equal(employeeIndex.rows.length, 1, 'employee-number unique index is missing');
 
+  const departmentColumn = await pool.query(
+    `SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'department_id'`,
+  );
+  assert.equal(departmentColumn.rows.length, 1, 'department_id column is missing');
+
+  const departmentIndex = await pool.query(
+    `SELECT 1 FROM pg_indexes
+      WHERE schemaname = 'public' AND tablename = 'users'
+        AND indexname = 'users_department_idx'`,
+  );
+  assert.equal(departmentIndex.rows.length, 1, 'users department index is missing');
+
+  const foreignKey = await pool.query<{ delete_rule: string }>(
+    `SELECT rc.delete_rule
+       FROM information_schema.table_constraints tc
+       JOIN information_schema.referential_constraints rc
+         ON rc.constraint_name = tc.constraint_name
+        AND rc.constraint_schema = tc.constraint_schema
+      WHERE tc.table_schema = 'public' AND tc.table_name = 'users'
+        AND tc.constraint_type = 'FOREIGN KEY'
+        AND tc.constraint_name LIKE '%department_id%'`,
+  );
+  assert.equal(foreignKey.rows[0]?.delete_rule, 'RESTRICT');
+
   const second = await runMigrations(pool);
   assert.equal(second.applied.length, 0);
-  assert.deepEqual(second.skipped, ['0001_init.sql', '0002_employee_number.sql']);
+  assert.deepEqual(second.skipped, [
+    '0001_init.sql',
+    '0002_employee_number.sql',
+    '0003_user_department.sql',
+  ]);
 });
 
 test('employee-number migration preserves existing users and leaves their numbers unset', async () => {
@@ -107,7 +140,10 @@ test('employee-number migration preserves existing users and leaves their number
     const legacyId = inserted.rows[0]!.id;
 
     const second = await runMigrations(pool);
-    assert.deepEqual(second.applied, ['0002_employee_number.sql']);
+    assert.deepEqual(second.applied, [
+      '0002_employee_number.sql',
+      '0003_user_department.sql',
+    ]);
 
     const preserved = await pool.query<{
       username: string;
@@ -115,10 +151,11 @@ test('employee-number migration preserves existing users and leaves their number
       role: string;
       password_hash: string;
       employee_number: string | null;
+      department_id: string | null;
       is_active: boolean;
       created_at: Date;
     }>(
-      `SELECT username, display_name, role, password_hash, employee_number, is_active, created_at
+      `SELECT username, display_name, role, password_hash, employee_number, department_id, is_active, created_at
          FROM users WHERE id = $1`,
       [legacyId],
     );
@@ -129,6 +166,7 @@ test('employee-number migration preserves existing users and leaves their number
     assert.equal(row.password_hash, 'legacy-hash');
     assert.equal(row.is_active, true);
     assert.equal(row.employee_number, null);
+    assert.equal(row.department_id, null);
     assert.ok(row.created_at instanceof Date);
 
     // القيد الفريد على مستوى القاعدة يمنع التكرار ولو تجاهل التطبيق الفحص المسبق.
@@ -144,6 +182,84 @@ test('employee-number migration preserves existing users and leaves their number
         ),
       (error: unknown) =>
         typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505',
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('department migration preserves existing departments, users, documents, and files without auto-assignment', async () => {
+  await pool.query('DROP SCHEMA public CASCADE');
+  await pool.query('CREATE SCHEMA public');
+
+  const directory = await mkdtemp(path.join(tmpdir(), 'hlc-migrations-'));
+  try {
+    // قاعدة بيانات على المخطط السابق مباشرة: 0001 + 0002 فقط.
+    for (const name of ['0001_init.sql', '0002_employee_number.sql']) {
+      await writeFile(
+        path.join(directory, name),
+        await readFile(path.join(MIGRATIONS_DIR, name), 'utf8'),
+      );
+    }
+    const before = await runMigrations(pool, { migrationsDir: directory });
+    assert.deepEqual(before.applied, ['0001_init.sql', '0002_employee_number.sql']);
+
+    const department = await pool.query<{ id: string }>(
+      "INSERT INTO departments (name) VALUES ('إدارة قديمة') RETURNING id",
+    );
+    const departmentId = department.rows[0]!.id;
+    const employee = await pool.query<{ id: string }>(
+      `INSERT INTO users (username, display_name, role, password_hash, employee_number)
+       VALUES ('legacy.emp', 'موظف قديم', 'employee', 'legacy-hash', 'LEG-7')
+       RETURNING id`,
+    );
+    const employeeId = employee.rows[0]!.id;
+    const document = await pool.query<{ id: string }>(
+      `INSERT INTO documents (reference, title, doc_type, transaction_date, department_id, created_by)
+       VALUES ('LEG-001', 'معاملة قديمة', 'incoming', '2025-01-15', $1, $2)
+       RETURNING id`,
+      [departmentId, employeeId],
+    );
+    const documentId = document.rows[0]!.id;
+    await pool.query(
+      `INSERT INTO document_files
+         (document_id, original_name, mime_type, size_bytes, storage_provider, storage_key)
+       VALUES ($1, 'old.pdf', 'application/pdf', 4, 'local', 'legacy/old.pdf')`,
+      [documentId],
+    );
+
+    const after = await runMigrations(pool);
+    assert.deepEqual(after.applied, ['0003_user_department.sql']);
+
+    const preserved = await pool.query<{
+      department_id: string | null;
+      employee_number: string | null;
+      role: string;
+    }>('SELECT department_id, employee_number, role FROM users WHERE id = $1', [employeeId]);
+    assert.deepEqual(preserved.rows[0], {
+      department_id: null,
+      employee_number: 'LEG-7',
+      role: 'employee',
+    });
+
+    const counts = await pool.query<{
+      departments: number;
+      users: number;
+      documents: number;
+      files: number;
+    }>(
+      `SELECT
+         (SELECT count(*)::int FROM departments) AS departments,
+         (SELECT count(*)::int FROM users) AS users,
+         (SELECT count(*)::int FROM documents) AS documents,
+         (SELECT count(*)::int FROM document_files) AS files`,
+    );
+    assert.deepEqual(counts.rows[0], { departments: 1, users: 1, documents: 1, files: 1 });
+
+    // القيد يمنع حذف إدارة ما زالت مرتبطة بمستخدم أو مستند.
+    await assert.rejects(
+      () => pool.query('DELETE FROM departments WHERE id = $1', [departmentId]),
+      /violates RESTRICT setting of foreign key constraint/,
     );
   } finally {
     await rm(directory, { recursive: true, force: true });

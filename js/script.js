@@ -62,6 +62,7 @@
     user: null,
     currentPage: "dashboard",
     departments: [],
+    userFormDepartments: [],
     views: {
       dashboard: { page: 1, pageSize: 8, q: "", total: 0 },
       incoming: { page: 1, pageSize: 10, q: "", total: 0 },
@@ -94,6 +95,34 @@
 
   function isAdmin() {
     return Boolean(state.user && state.user.role === "admin");
+  }
+
+  function isDepartmentBlocked() {
+    return Boolean(
+      state.user &&
+        state.user.role === "employee" &&
+        (!state.user.departmentId || state.user.departmentActive === false)
+    );
+  }
+
+  function currentDepartmentName() {
+    if (!state.user || !state.user.departmentId) return "";
+    return state.user.departmentName || "الإدارة المعيّنة";
+  }
+
+  function departmentAccessMessage() {
+    if (!state.user || state.user.role !== "employee") return "";
+    if (!state.user.departmentId) {
+      return "لم يتم تعيينك إلى أي إدارة بعد. يرجى مراجعة مدير النظام لتعيين إدارتك قبل الوصول إلى المعاملات أو التقارير أو المرفقات.";
+    }
+    if (state.user.departmentActive === false) {
+      return (
+        "الإدارة المرتبطة بحسابك («" +
+        currentDepartmentName() +
+        "») معطّلة. يرجى مراجعة مدير النظام لتفعيلها أو إعادة تعيينك إلى إدارة نشطة."
+      );
+    }
+    return "";
   }
 
   /* ========================================================================
@@ -328,13 +357,28 @@
 
   function applyRoleUI() {
     var admin = isAdmin();
+    var blocked = isDepartmentBlocked();
     document.querySelectorAll(".admin-only").forEach(function (node) {
       node.classList.toggle("is-hidden", !admin);
     });
+    document.querySelectorAll("[data-requires-department]").forEach(function (node) {
+      node.disabled = blocked;
+      node.title = blocked ? departmentAccessMessage() : "";
+    });
+
     el("userName").textContent = state.user.displayName;
-    el("userRoleLabel").textContent = ROLE_LABELS[state.user.role] || state.user.role;
+    var roleLabel = ROLE_LABELS[state.user.role] || state.user.role;
+    if (state.user.role === "employee" && currentDepartmentName()) {
+      roleLabel += " — " + currentDepartmentName();
+    }
+    el("userRoleLabel").textContent = roleLabel;
     var firstLetter = state.user.displayName.trim().charAt(0);
     el("userAvatar").textContent = firstLetter || "؟";
+
+    var notice = el("departmentAccessNotice");
+    var message = departmentAccessMessage();
+    notice.hidden = !message;
+    el("departmentAccessNoticeText").textContent = message;
   }
 
   async function loadSession() {
@@ -344,6 +388,23 @@
     showApp();
     applyRoleUI();
     showPage("dashboard");
+  }
+
+  /**
+   * يعيد قراءة حالة الموظف (الدور/التفعيل/الإدارة) من الخادم قبل تحميل أي
+   * بيانات تشغيلية. قد يغيّر المدير إدارة الموظف أو حالتها أثناء جلسته،
+   * فلا يجوز الاعتماد على نسخة تسجيل الدخول القديمة في الواجهة.
+   */
+  async function refreshSession() {
+    try {
+      var session = await api.get("/auth/session");
+      api.setCsrfToken(session.csrfToken);
+      state.user = session.user;
+      applyRoleUI();
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 
   async function doLogin(event) {
@@ -390,7 +451,11 @@
      ======================================================================== */
   async function loadDepartmentsForSelects() {
     try {
-      var data = await api.get("/departments", {});
+      // المدير يحتاج الإدارات المعطّلة أيضاً عند تعديل ارتباط قديم، أما
+      // الموظف فلا يعيد الخادم له إلا إدارته النشطة.
+      var data = await api.get("/departments", {
+        includeInactive: isAdmin() ? true : undefined
+      });
       state.departments = data.items;
       fillDepartmentSelects();
     } catch (error) {
@@ -400,17 +465,52 @@
 
   function fillDepartmentSelects() {
     var archiveSelect = el("departmentFilter");
-    var currentArchive = archiveSelect.value;
-    archiveSelect.innerHTML = '<option value="">جميع الإدارات</option>';
     var formSelect = el("department");
+    if (!archiveSelect || !formSelect) return;
+
+    if (!isAdmin()) {
+      var own = null;
+      if (state.user && state.user.departmentId) {
+        own = {
+          id: state.user.departmentId,
+          name: state.user.departmentName || "إدارتي"
+        };
+      }
+      archiveSelect.innerHTML = "";
+      formSelect.innerHTML = "";
+      if (own) {
+        var ownFilter = document.createElement("option");
+        ownFilter.value = own.id;
+        ownFilter.textContent = own.name;
+        archiveSelect.appendChild(ownFilter);
+        var ownForm = document.createElement("option");
+        ownForm.value = own.id;
+        ownForm.textContent = own.name;
+        formSelect.appendChild(ownForm);
+        archiveSelect.value = own.id;
+        formSelect.value = own.id;
+      } else {
+        archiveSelect.innerHTML = '<option value="">لا توجد إدارة</option>';
+        formSelect.innerHTML = '<option value="">لا توجد إدارة</option>';
+      }
+      archiveSelect.disabled = true;
+      formSelect.disabled = true;
+      return;
+    }
+
+    var currentArchive = archiveSelect.value;
     var currentForm = formSelect.value;
+    archiveSelect.disabled = false;
+    formSelect.disabled = false;
+    archiveSelect.innerHTML = '<option value="">جميع الإدارات</option>';
     formSelect.innerHTML = '<option value="">غير محددة</option>';
     state.departments.forEach(function (department) {
-      var option = document.createElement("option");
-      option.value = department.id;
-      option.textContent = department.name;
-      archiveSelect.appendChild(option);
-      formSelect.appendChild(option.cloneNode(true));
+      var filterOption = document.createElement("option");
+      filterOption.value = department.id;
+      filterOption.textContent =
+        department.name + (department.isActive ? "" : " (معطّلة)");
+      archiveSelect.appendChild(filterOption);
+      formSelect.appendChild(filterOption.cloneNode(true));
     });
     archiveSelect.value = currentArchive;
     formSelect.value = currentForm;
@@ -641,12 +741,15 @@
       q: view.q,
       type: view.type,
       status: view.status,
-      departmentId: view.departmentId,
+      // الموظف لا يرسل departmentId إطلاقاً: الخادم يشتق النطاق من
+      // department_id الحالي في قاعدة البيانات، فلا تؤثر أي حالة قديمة
+      // في المتصفح ولا يمكن فرض إدارة أخرى عبر المرشِّح.
+      departmentId: isAdmin() ? view.departmentId : undefined,
       dateFrom: view.dateFrom,
       dateTo: view.dateTo,
       sort: view.sort,
       order: view.order,
-      includeDeleted: view.includeDeleted ? true : undefined,
+      includeDeleted: isAdmin() && view.includeDeleted ? true : undefined,
       page: view.page,
       pageSize: view.pageSize
     };
@@ -678,7 +781,12 @@
       el("totalCount").textContent = stats.activeDocuments;
       el("pendingCount").textContent = stats.byStatus ? stats.byStatus.in_progress : 0;
     } catch (error) {
-      /* البطاقات تبقى بآخر قيمة معروفة. */
+      if (isDepartmentBlocked()) {
+        el("incomingCount").textContent = "0";
+        el("outgoingCount").textContent = "0";
+        el("totalCount").textContent = "0";
+        el("pendingCount").textContent = "0";
+      }
     }
   }
 
@@ -741,6 +849,10 @@
      المعاملات: النموذج والتفاصيل والحذف والاستعادة
      ======================================================================== */
   async function openDocumentForm(mode, documentId, defaultType) {
+    if (isDepartmentBlocked()) {
+      toast(departmentAccessMessage(), "error");
+      return;
+    }
     var doc = null;
     if (mode === "edit" && documentId) {
       try {
@@ -768,7 +880,13 @@
     el("date").value = doc ? doc.date : todayString();
     el("sender").value = doc ? doc.sender : "";
     el("recipient").value = doc ? doc.recipient : "";
-    el("department").value = doc && doc.department ? doc.department.id : "";
+    el("department").value = doc && doc.department
+      ? doc.department.id
+      : isAdmin()
+        ? ""
+        : state.user && state.user.departmentId
+          ? state.user.departmentId
+          : "";
     el("status").value = doc ? doc.status : "new";
     el("notes").value = doc ? doc.notes : "";
 
@@ -873,10 +991,12 @@
       date: el("date").value,
       sender: el("sender").value.trim(),
       recipient: el("recipient").value.trim(),
-      departmentId: el("department").value || null,
       status: el("status").value,
       notes: el("notes").value.trim()
     };
+    // المدير وحده يختار الإدارة؛ أما الموظف فيفرض الخادم إدارته الحالية
+    // من قاعدة البيانات، ولا نرسل قيمة محلية قد تكون قديمة.
+    if (isAdmin()) payload.departmentId = el("department").value || null;
     // في وضع الإنشاء: الملفات المختارة تُرفع بعد إنشاء المعاملة مباشرة.
     var pendingFiles = state.editingDocumentId
       ? []
@@ -1197,6 +1317,12 @@
         var employeeNumber = user.employeeNumber
           ? escapeHTML(user.employeeNumber)
           : '<span class="muted">غير محدد</span>';
+        var department = user.departmentId
+          ? escapeHTML(user.departmentName || "إدارة محذوفة") +
+            (user.departmentActive === false
+              ? ' <span class="badge badge-inactive">معطّلة</span>'
+              : "")
+          : '<span class="muted">غير معيّنة</span>';
         return (
           "<tr><td>" +
           escapeHTML(user.username) +
@@ -1204,6 +1330,8 @@
           employeeNumber +
           "</td><td>" +
           escapeHTML(user.displayName) +
+          "</td><td>" +
+          department +
           '</td><td><span class="badge badge-' +
           (user.role === "admin" ? "admin" : "employee") +
           '">' +
@@ -1225,10 +1353,44 @@
       .join("");
     container.innerHTML =
       '<div class="table-wrap"><table><thead><tr>' +
-      "<th>اسم المستخدم</th><th>الرقم الوظيفي</th><th>الاسم الكامل</th><th>الدور</th><th>الحالة</th><th>تاريخ الإنشاء</th><th>آخر دخول</th><th>الإجراءات</th>" +
+      "<th>اسم المستخدم</th><th>الرقم الوظيفي</th><th>الاسم الكامل</th><th>الإدارة</th><th>الدور</th><th>الحالة</th><th>تاريخ الإنشاء</th><th>آخر دخول</th><th>الإجراءات</th>" +
       "</tr></thead><tbody>" +
       rows +
       "</tbody></table></div>";
+  }
+
+  function fillUserDepartmentOptions(user) {
+    var select = el("userDepartment");
+    select.innerHTML = '<option value="">بدون إدارة (المدير فقط)</option>';
+    var departments = state.userFormDepartments || [];
+    departments.forEach(function (department) {
+      var option = document.createElement("option");
+      option.value = department.id;
+      option.textContent =
+        department.name + (department.isActive ? "" : " (معطّلة)");
+      select.appendChild(option);
+    });
+    if (user && user.departmentId && !departments.some(function (department) {
+      return department.id === user.departmentId;
+    })) {
+      var stale = document.createElement("option");
+      stale.value = user.departmentId;
+      stale.textContent = user.departmentName || "إدارة غير متاحة";
+      select.appendChild(stale);
+    }
+    select.value = user && user.departmentId ? user.departmentId : "";
+    updateUserDepartmentField();
+  }
+
+  function updateUserDepartmentField() {
+    var employee = el("userRole").value === "employee";
+    el("userDepartment").required = employee;
+    el("userDepartmentRequired").hidden = !employee;
+    el("userDepartmentHint").textContent = employee
+      ? "إدارة نشطة إلزامية للموظف. لا يمكن حفظ الحساب كموظف دون تعيين إدارة."
+      : "المدير يرى جميع الإدارات، ويمكن تركه بلا إدارة.";
+    var blank = el("userDepartment").querySelector('option[value=""]');
+    if (blank) blank.disabled = employee;
   }
 
   async function openUserModal(mode, user) {
@@ -1246,6 +1408,13 @@
     el("userRole").value = mode === "edit" ? user.role : "employee";
     el("userPassword").value = "";
     showFormError("userFormError", "");
+    try {
+      var data = await api.get("/departments", { includeInactive: true });
+      state.userFormDepartments = data.items;
+    } catch (error) {
+      state.userFormDepartments = state.departments.slice();
+    }
+    fillUserDepartmentOptions(mode === "edit" ? user : null);
     showModal("userModal");
     el("userDisplayName").focus();
   }
@@ -1257,11 +1426,18 @@
     setBusy(button, true, "جارٍ الحفظ…");
     try {
       var employeeNumber = el("userEmployeeNumber").value.trim();
+      var role = el("userRole").value;
+      var departmentId = el("userDepartment").value || null;
+      if (role === "employee" && !departmentId) {
+        showFormError("userFormError", "يجب اختيار إدارة نشطة للموظف.");
+        return;
+      }
       if (state.editingUserId) {
         await api.patch("/users/" + state.editingUserId, {
           displayName: el("userDisplayName").value.trim(),
           employeeNumber: employeeNumber,
-          role: el("userRole").value
+          departmentId: departmentId,
+          role: role
         });
         toast("تم تحديث بيانات المستخدم.");
       } else {
@@ -1269,7 +1445,8 @@
           username: el("userUsername").value.trim(),
           displayName: el("userDisplayName").value.trim(),
           employeeNumber: employeeNumber,
-          role: el("userRole").value,
+          departmentId: departmentId,
+          role: role,
           password: el("userPassword").value
         });
         toast("تم إنشاء المستخدم.");
@@ -1651,14 +1828,30 @@
   }
 
   function loadSettingsPage() {
+    var departmentInfo = el("settingsDepartmentInfo");
+    if (state.user && state.user.role === "employee") {
+      departmentInfo.textContent = state.user.departmentId
+        ? "الإدارة المعيّنة: " +
+          currentDepartmentName() +
+          (state.user.departmentActive === false ? " (معطّلة)" : " (نشطة)")
+        : "الإدارة المعيّنة: غير معيّنة — راجع مدير النظام.";
+    } else {
+      departmentInfo.textContent = "الإدارة المعيّنة: صلاحية عامة (مدير النظام)";
+    }
     updateLegacyStatus();
   }
 
   /* ========================================================================
      التنقل بين الصفحات
      ======================================================================== */
-  function showPage(pageId) {
+  async function showPage(pageId) {
+    // حالة الدور/الإدارة تُقرأ من الخادم عند كل تنقّل، فلا تُبقي جلسة قائمة
+    // واجهة إدارية قديمة بعد تغيير الدور أو تعطيل الحساب أو نقل الإدارة.
+    if (state.user) await refreshSession();
     if (!PAGE_TITLES[pageId]) pageId = "dashboard";
+    if (!isAdmin() && (pageId === "departments" || pageId === "users" || pageId === "audit")) {
+      pageId = "dashboard";
+    }
     state.currentPage = pageId;
     document.querySelectorAll(".page").forEach(function (page) {
       page.classList.toggle("active", page.id === pageId);
@@ -1747,6 +1940,7 @@
     });
 
     el("userForm").addEventListener("submit", submitUserForm);
+    el("userRole").addEventListener("change", updateUserDepartmentField);
     el("closeUserModal").addEventListener("click", function () {
       hideModal("userModal");
     });

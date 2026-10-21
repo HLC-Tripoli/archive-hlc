@@ -18,6 +18,21 @@ production hosts only need the standalone `docker-compose.yml` plus a configured
 file and pull prebuilt images. All application data lives on the server; the browser
 keeps only the theme preference and optional legacy demo data awaiting migration.
 
+**Department isolation (English summary, issue #10):** administrators are global and may
+remain unassigned; every employee must have exactly one active department to use
+operational APIs. The server reloads the user's role, active flag, department, and
+department status from PostgreSQL on every authenticated request, so stale sessions
+cannot widen access. Employees can only list, read, create, update, attach files to, or
+export documents in their current department; cross-department IDs return `404`, and
+filters, search, sorting, pagination, `includeDeleted`, reports, dashboard, and CSV are
+always combined with the server-side department scope. Unassigned employees receive
+`403 department_required`, and employees whose department is inactive receive
+`403 department_inactive`, both with clear Arabic messages. Migration
+`0003_user_department.sql` is additive and nullable: it does not auto-assign legacy users
+or documents, so legacy documents without a department remain visible to administrators
+only. Department deletion is blocked while users or documents reference it, and
+deactivation is blocked while active employees are assigned.
+
 **جدول المحتويات**
 
 1) البنية العامة
@@ -58,9 +73,13 @@ Angie — صورة web المنشورة من GHCR (المنفذ 80 داخل ال
   الذي يضيف ترويسة CSRF ويعالج الأخطاء العربية وانتهاء الجلسة.
 - **الخادم**: `backend/` — Fastify 5، TypeScript صارم (ESM/NodeNext)، مخططات JSON لكل
   المدخلات، تحقق من الصلاحيات على كل مسار، تسجيل تدقيق للعمليات الحساسة.
-- **قاعدة البيانات**: `backend/migrations/0001_init.sql` و`0002_employee_number.sql` — تُدار بمرحّل خاص
-  (`src/db/migrate.ts`) يتحقق من بصمات الملفات (SHA-256) ويرفض أي تعديل على ترحيل
-  مطبَّق (الترحيلات غير قابلة للتعديل بعد تطبيقها).
+- **قاعدة البيانات**: `backend/migrations/0001_init.sql` و`0002_employee_number.sql`
+  و`0003_user_department.sql` — تُدار بمرحّل خاص (`src/db/migrate.ts`) يتحقق من
+  بصمات الملفات (SHA-256) ويرفض أي تعديل على ترحيل مطبَّق (الترحيلات غير قابلة
+  للتعديل بعد تطبيقها).
+- **عزل الإدارات**: الموظف مرتبط بإدارة واحدة نشطة، وكل قراءة/كتابة للمعاملات
+  والمرفقات والتقارير والتصدير تُقيَّد بها من قاعدة البيانات في كل طلب؛ المدير عام
+  وغير ملزم بإدارة. التفاصيل في القسم 11.2.
 - **التخزين**: مزوّد محلي (`LocalFilesystemStorageProvider`) يكتب المرفقات تحت
   `UPLOADS_DIR` (افتراضياً `/data/uploads` داخل الحاوية، مربوط بمجلد دائم على المضيف)،
   خلف واجهة `StorageProvider` تبقى بقية طبقات التطبيق مستقلة عن آلية التخزين.
@@ -517,16 +536,16 @@ Releases عند وسم الإصدارات. استخدم **نفس التزام ا
 | `POST /auth/login` • `POST /auth/logout` | دخول (اسم مستخدم أو رقم وظيفي) / خروج | عام / جلسة |
 | `GET /auth/session` | جلسة حالية + رمز CSRF | عام (401 بدون جلسة) |
 | `POST /auth/password` | تغيير كلمة المرور الشخصية | جلسة |
-| `GET/POST /users` • `PATCH /users/:id` • `POST /users/:id/password` | إدارة المستخدمين (يتضمن الرقم الوظيفي والبحث به) | مدير |
-| `GET /departments` | قائمة الإدارات | جلسة |
-| `POST /departments` • `PATCH/DELETE /departments/:id` | إدارة الإدارات | مدير |
-| `GET /documents` | بحث/تصفية/ترتيب/ترقيم صفحات من الخادم | جلسة |
-| `GET /documents/:id` | تفاصيل معاملة | جلسة |
-| `POST /documents` • `PATCH /documents/:id` | تسجيل/تعديل معاملة | جلسة |
+| `GET/POST /users` • `PATCH /users/:id` • `POST /users/:id/password` | إدارة المستخدمين (يتضمن الرقم الوظيفي، الاسم الكامل، تعيين الإدارة، والبحث) | مدير |
+| `GET /departments` | قائمة الإدارات: المدير يرى الجميع، والموظف يرى إدارته النشطة فقط | جلسة |
+| `POST /departments` • `PATCH/DELETE /departments/:id` | إدارة الإدارات (الحذف/التعطيل محميّان بمراجع المستخدمين والمستندات) | مدير |
+| `GET /documents` | بحث/تصفية/ترتيب/ترقيم صفحات من الخادم، مقيّد بإدارة الموظف تلقائياً | جلسة |
+| `GET /documents/:id` | تفاصيل معاملة ضمن نطاق الإدارة؛ غير الموجودة/الخارجية `404` | جلسة |
+| `POST /documents` • `PATCH /documents/:id` | تسجيل/تعديل معاملة؛ الخادم يفرض إدارة الموظف الحالية | جلسة |
 | `DELETE /documents/:id` • `POST /documents/:id/restore` | حذف منطقي/استعادة | مدير |
-| `POST /documents/:id/files` | رفع مرفق (multipart) إلى التخزين المحلي | جلسة |
-| `GET /files/:id/download` • `DELETE /files/:id` | تنزيل مرفق / حذفه | جلسة / مدير |
-| `GET /stats/dashboard` • `GET /reports/summary` • `GET /reports/documents.csv` | إحصائيات وتقارير (CSV بـ BOM لدعم Excel العربي) | جلسة |
+| `POST /documents/:id/files` | رفع مرفق (multipart) إلى التخزين المحلي ضمن نطاق الإدارة | جلسة |
+| `GET /files/:id/download` • `DELETE /files/:id` | تنزيل مرفق ضمن النطاق / حذفه | جلسة / مدير |
+| `GET /stats/dashboard` • `GET /reports/summary` • `GET /reports/documents.csv` | إحصائيات وتقارير مقيّدة بإدارة الموظف (CSV بـ BOM لدعم Excel العربي) | جلسة |
 | `POST /imports/legacy` • `POST /imports/backup` • `GET /exports/backup` | ترحيل بيانات المتصفح، استيراد/تصدير نسخة JSON | مدير |
 | `GET /audit` | سجل التدقيق | مدير |
 
@@ -534,13 +553,13 @@ Releases عند وسم الإصدارات. استخدم **نفس التزام ا
 
 | العملية | موظف الأرشيف | مدير النظام |
 | --- | :---: | :---: |
-| عرض/بحث/تصفية المعاملات والتقارير | ✔ | ✔ |
-| تسجيل وتعديل المعاملات | ✔ | ✔ |
-| رفع/تنزيل المرفقات | ✔ | ✔ |
+| عرض/بحث/تصفية المعاملات والتقارير | ✔ داخل إدارته النشطة فقط | ✔ عالمي |
+| تسجيل وتعديل المعاملات | ✔ داخل إدارته فقط | ✔ عالمي |
+| رفع/تنزيل المرفقات | ✔ لمعاملات إدارته فقط | ✔ عالمي |
 | حذف مرفق | ✖ | ✔ |
 | حذف معاملة (نقل للمحذوفات) واستعادتها | ✖ | ✔ |
 | إدارة الإدارات (إضافة/تعديل/تعطيل) | ✖ | ✔ |
-| إدارة المستخدمين (إنشاء/أدوار/أرقام وظيفية/كلمات مرور/تعطيل) | ✖ | ✔ |
+| إدارة المستخدمين (إنشاء/أدوار/أرقام وظيفية/تعيين إدارة/كلمات مرور/تعطيل) | ✖ | ✔ |
 | ترحيل بيانات المتصفح، النسخ الاحتياطي الاستيراد/التصدير | ✖ | ✔ |
 | سجلّ التدقيق | ✖ | ✔ |
 
@@ -556,6 +575,28 @@ Releases عند وسم الإصدارات. استخدم **نفس التزام ا
   الفراغات الطرفية)، ويُنشئ الجلسة نفسها بهوية الحساب القانونية (`user id` و`username`).
 - إذا طابق المعرّف اسم مستخدم لحساب ورقم وظيفي لحساب آخر، يُرفض الدخول بالرسالة العامة
   نفسها بدل اختيار أحد الحسابين.
+- **الإدارة مصدر الحقيقة لا الجلسة**: يُعاد قراءة دور المستخدم وحالة تفعيله و`department_id`
+  وحالة الإدارة من PostgreSQL في كل طلب محمي؛ لا تُخزَّن هذه القيم في الكوكي ولا يُقبل
+  أي `departmentId` من العميل لتوسيع النطاق. تغيير الإدارة يسري في الطلب التالي دون
+  إعادة تسجيل دخول، وتغيير كلمة المرور/التعطيل يُبطل الجلسات (سلوك منفصل مقصود).
+- **الموظف بلا إدارة نشطة لا يرى بيانات تشغيلية**: تسجيل الدخول يبقى متاحاً كي يستطيع
+  تغيير كلمة المرور أو مراجعة الإعدادات، لكن كل مسارات المعاملات والمرفقات والإحصاءات
+  والتقارير والتصدير تُرجع `403 department_required` أو `403 department_inactive`
+  برسالة عربية واضحة، بما في ذلك عند تمرير مرشِّحات أو معرّفات غير صالحة.
+- **العزل مطبَّق في SQL والخدمات، وليس في المسارات فقط**: استعلامات القوائم والتفاصيل
+  والتعديل والمرفقات والتقارير والتصدير كلها تربط `department_id` بإدارة الموظف
+  الحالية؛ ولذلك لا يوسّع النطاقَ تمريرُ `departmentId` آخر، ولا البحث، ولا الترتيب،
+  ولا الترقيم، ولا `includeDeleted`. معاملة إدارة أخرى تُعالَج كغير موجودة (`404`)
+  لعدم كشف وجودها.
+- **إدارة الحسابات**: الموظف يجب أن يُعيَّن إلى إدارة موجودة ونشطة عند الإنشاء أو عند
+  تحويل مدير إلى موظف؛ مدير النظام قد يبقى بلا إدارة ويظل عالمياً. لا يمكن إفراغ إدارة
+  موظف قائم، وتُسجَّل تغييرات التعيين في سجل التدقيق.
+- **دورة حياة الإدارة**: لا تُحذف إدارة ما دام أي مستخدم أو مستند (حتى المحذوف منطقياً)
+  يشير إليها، ولا تُعطَّل ما دام موظف نشط معيَّن عليها. بعد نقل الارتباطات أو تعطيل
+  الحسابات تصبح العمليات مسموحة.
+- **الترحيل لا يخمّن**: `0003_user_department.sql` إضافي فقط ويضيف عموداً قابلاً لـ`NULL`
+  وفهرساً؛ لا ينشئ إدارة افتراضية ولا يعيّن المستخدمين أو المستندات القديمة تلقائياً.
+  المستندات القديمة بلا إدارة تبقى مرئية للمدير فقط إلى أن يعالجها يدوياً.
 
 ### 11.1) الرقم الوظيفي وتسجيل الدخول
 
@@ -608,6 +649,63 @@ search by it; the users list shows “غير محدد” when unset. Login accep
 identifier matching two different accounts is rejected with the same generic 401 used for
 all login failures. Existing accounts migrate with `NULL` and are otherwise untouched.
 
+### 11.2) عزل الإدارات (المسألة #10)
+
+**النموذج**
+
+- `departments` موجودة مسبقاً؛ أضاف الترحيل `0003_user_department.sql` العمود
+  `users.department_id uuid NULL REFERENCES departments(id) ON DELETE RESTRICT` والفهرس
+  `users_department_idx`. الترحيل إضافي فقط ولا يعدّل أي صف.
+- المدير (`admin`) **عام**: يرى ويعدّل كل الإدارات والمستندات، ويجوز أن يبقى
+  `department_id = NULL`.
+- الموظف (`employee`) يحتاج **إدارة واحدة موجودة ونشطة** للوصول التشغيلي. لا تُقبل
+  إدارة أخرى ولا `null` في إنشاء/تعديل مستنداته، ويفرض الخادم إدارته الحالية حتى لو
+  أرسل العميل قيمة مختلفة.
+- لا تُقبل المعاملات القديمة (`department_id = NULL`) من الموظف؛ تبقى للمدير فقط.
+
+**الاستجابة للطلبات**
+
+- `403 department_required` — الموظف بلا إدارة، مع رسالة «لم يتم تعيينك إلى أي إدارة…».
+- `403 department_inactive` — الإدارة موجودة لكنها معطّلة، مع اسم الإدارة في الرسالة.
+- `403 department_forbidden` — محاولة موظف إنشاء/نقل معاملة إلى إدارة أخرى أو إزالتها
+  من إدارته، أو إرسال `departmentId` مختلف.
+- `404` — معاملة/ملف إدارة أخرى عند الطلب المباشر، أو مستند محذوف منطقياً للموظف.
+- القوائم والبحث والترقيم والإحصاءات والتقارير وCSV تعيد نتائج الإدارة الحالية فقط،
+  وإذا أضيف مرشِّح إدارة أخرى تكون النتيجة فارغة بدل توسيع النطاق.
+
+**إدارة المستخدمين والإدارات**
+
+- واجهة المدير تعرض عمود «الإدارة» في جدول المستخدمين، وحقلاً إلزامياً للموظف في
+  نافذة الإضافة/التعديل، وتعرض الإدارات المعطّلة معلَّمة `(معطّلة)` مع منع اختيارها
+  كإدارة نشطة عند الحفظ.
+- الطلب `PATCH /users/:id` يتحقق من الدور الناتج: إذا كان `employee` فلا بد من إدارة
+  نشطة موجودة، ويُسجَّل التعيين/التغيير في `audit_log` مع `revokedSessions` واسم الإدارة.
+- حذف إدارة مرتبطة بمستخدمين أو مستندات يُرفض برسالة عربية واضحة، وتعطيل إدارة فيها
+  موظفون نشطون يُرفض كذلك. الإدارة المعطّلة لا تظهر لموظفيها في القوائم التشغيلية.
+
+**الواجهة**
+
+- إخفاء صفحات الإدارات/المستخدمين/التدقيق وأزرارها عن الموظف، وإظهار إشعار وصول
+  عربي واضح له عند غياب الإدارة أو تعطّلها، مع تعطيل أزرار الإنشاء والتصدير.
+- قائمة الإدارة في نموذج المعاملة/الفلتر تُقفل على إدارة الموظف، وتُعرض الإدارة
+  الحالية في الشريط العلوي والإعدادات. الواجهة تعيد قراءة الجلسة قبل تحميل البيانات
+  التشغيلية، لكن الحماية الفعلية تبقى في الخادم دائماً.
+
+**English summary (department isolation):** `users.department_id` is nullable for
+backward compatibility and admin accounts, but the API requires every `employee` to have
+an existing active department. Admins remain global and may be unassigned. The session
+lookup joins `departments` and refreshes role/active/department state from PostgreSQL on
+every protected request; client-supplied department IDs never widen access. Employees can
+only access documents and attachments in their current department, and list/search/sort/
+pagination/`includeDeleted`/dashboard/reports/CSV are all scoped in SQL. Cross-department
+detail/update/attachment requests return `404`; a mismatched department payload returns
+`403 department_forbidden`. Unassigned and inactive-department employees can still log in
+but receive `403 department_required` / `403 department_inactive` with Arabic messages
+until an administrator fixes the assignment. Department deletion is blocked by any user or
+document reference, and deactivation is blocked while active employees remain assigned.
+The additive `0003_user_department.sql` migration does not auto-assign legacy users or
+documents; legacy unassigned documents stay administrator-only until handled explicitly.
+
 ## 12) ترحيل بيانات النسخة التجريبية (localStorage)
 
 الواجهة القديمة كانت تحفظ كل شيء في المتصفح تحت مفتاحي `hl_archive_data_v1` (المعاملات)
@@ -641,7 +739,30 @@ cd backend && npm ci && npm run typecheck && npm test
 docker compose -f docker-compose.dev.yml build
 ```
 
-### خلاصة جولة التحقق المنفَّذة فعلياً (آخر تحديث: 2026-10-20)
+### جولة التحقق للمسألة #10 (2026-10-21)
+
+- `npm run typecheck`: نظيف. حزمة اختبارات الخادم كاملة: **81 اختباراً — 81 ناجحاً،
+  0 فاشل، 0 متجاهل** على PostgreSQL 18 مؤقتة، وتشمل ملفاً أمنياً جديداً
+  (`09-department-isolation.test.ts`) بفحوص: العزل عبر القوائم/البحث/الترتيب/الترقيم/
+  `includeDeleted`، والتفاصيل/التعديل/المرفقات عبر الإدارات، ورفض `departmentId`
+  المزوَّر، وموظف بلا إدارة، وإدارة معطّلة، وتحديث الجلسة بعد تغيير التعيين، وإحصاءات
+  ولوحة تحكم وتقارير وCSV، ونقاط الإدارة المحظورة، وتدقيق تغيير إدارة المستخدم.
+- ترحيل Clean install وترقية من مخطط ما قبل `0003` كلاهما مغطّى، مع التحقق من بقاء
+  المستخدمين/المستندات/الملفات بلا تعيين تلقائي، ومن قيد `ON DELETE RESTRICT`
+  والفهرس `users_department_idx`.
+- `npm run build` و`node --check` لملفات الواجهة: نجحا. بناء بيئة تطوير معزولة
+  (`archive-hlc-dev`، منفذ `18080`، مشروع وحجم ومجلدات منفصلة) نجح، و`/api/v1/health`
+  و`/api/v1/ready` يعيدان `ok` مع `database=true` و`storage=true`.
+- Playwright على البيئة المعزولة: **91 فحصاً — 91 ناجحاً** (84 فحصاً أساسياً في ثلاث
+  جلسات: موظف إدارة 35، مدير عام 26، وموظف بلا إدارة/إدارة معطّلة 23، إضافة إلى
+  7 فحوص تركيز لإعادة تعيين الإدارة أثناء الجلسة). شملت: RTL،
+  المكتب/الجوال، السمتين، إخفاء نواحي الإدارة، قفل فلتر الإدارة، إنشاء معاملة بإدارة
+  مفروضة، إخفاء المحذوفة عن الموظف وإظهارها للمدير، إحصاءات/تقارير/CSV مقيّدة،
+  رفض 403/404 عبر API من سياق المتصفح، إشعارات الحجب العربية، وتعافي الجلسة القائمة
+  فور تعيين الإدارة أو تفعيلها دون إعادة تسجيل دخول. لم تظهر أخطاء JavaScript غير
+  متوقعة؛ سُجّلت فقط استجابات 401/403 المتوقعة لحالات الفشل المقصودة.
+
+### خلاصة جولة تحقق سابقة (آخر تحديث: 2026-10-20)
 
 - الخادم: `npm ci` نجح، `npm run typecheck` نظيف، وحزمة الاختبارات كاملة:
   **70 اختباراً — 70 ناجحاً، 0 فاشل، 0 متجاهل** (PostgreSQL 18)، ومنها اختبارات

@@ -40,15 +40,41 @@ async function seed(): Promise<void> {
   });
   const departmentId = (department.json() as { department: { id: string } }).department.id;
 
-  const documents = [
-    { reference: 'REP-001', type: 'incoming', status: 'new', date: '2026-01-05', departmentId },
-    { reference: 'REP-002', type: 'outgoing', status: 'in_progress', date: '2026-01-06', departmentId },
+  const employee = await context.pool.query<{ id: string; department_id: string }>(
+    "SELECT id, department_id FROM users WHERE username = 'employee'",
+  );
+  const employeeId = employee.rows[0]!.id;
+  const originalDepartmentId = employee.rows[0]!.department_id;
+  const assigned = await apiRequest(context.app, adminClient, 'PATCH', `/users/${employeeId}`, {
+    payload: { departmentId },
+  });
+  assert.equal(assigned.statusCode, 200, assigned.body);
+
+  // أربع معاملات في إدارة الموظف الحالية.
+  const employeeDocuments = [
+    { reference: 'REP-001', type: 'incoming', status: 'new', date: '2026-01-05' },
+    { reference: 'REP-002', type: 'outgoing', status: 'in_progress', date: '2026-01-06' },
     { reference: 'REP-003', type: 'incoming', status: 'completed', date: '2026-02-01' },
     { reference: 'REP-004', type: 'outgoing', status: 'archived', date: '2026-03-01' },
   ];
-  for (const document of documents) {
+  for (const document of employeeDocuments) {
     const response = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
-      payload: { title: `معاملة ${document.reference}`, ...document },
+      payload: { title: `معاملة ${document.reference}`, departmentId, ...document },
+    });
+    assert.equal(response.statusCode, 201, response.body);
+  }
+
+  // أربع معاملات أخرى خارج نطاق الموظف (إدارته السابقة) لفحص العزل.
+  for (let index = 0; index < 4; index += 1) {
+    const response = await apiRequest(context.app, adminClient, 'POST', '/documents', {
+      payload: {
+        reference: `ADM-00${index + 1}`,
+        title: `معاملة إدارية ${index + 1}`,
+        type: index % 2 === 0 ? 'incoming' : 'outgoing',
+        status: ['new', 'in_progress', 'completed', 'archived'][index],
+        date: `2026-0${index + 1}-15`,
+        departmentId: originalDepartmentId,
+      },
     });
     assert.equal(response.statusCode, 201, response.body);
   }
@@ -67,23 +93,39 @@ test('dashboard statistics are role-appropriate', async () => {
     users: number | null;
     recent: unknown[];
   };
-  assert.equal(adminStats.activeDocuments, 4);
+  assert.equal(adminStats.activeDocuments, 8);
   assert.equal(adminStats.deletedDocuments, 0);
-  assert.equal(adminStats.incoming, 2);
-  assert.equal(adminStats.outgoing, 2);
+  assert.equal(adminStats.incoming, 4);
+  assert.equal(adminStats.outgoing, 4);
   assert.deepEqual(adminStats.byStatus, {
-    new: 1,
-    in_progress: 1,
-    completed: 1,
-    archived: 1,
+    new: 2,
+    in_progress: 2,
+    completed: 2,
+    archived: 2,
   });
-  assert.equal(adminStats.departments, 1);
+  assert.equal(adminStats.departments, 2);
   assert.equal(adminStats.users, 2);
-  assert.equal(adminStats.recent.length, 4);
+  assert.equal(adminStats.recent.length, 5);
 
   const employeeView = await apiRequest(context.app, employeeClient, 'GET', '/stats/dashboard');
   assert.equal(employeeView.statusCode, 200);
-  assert.equal((employeeView.json() as { users: number | null }).users, null);
+  const employeeStats = employeeView.json() as {
+    activeDocuments: number;
+    deletedDocuments: number;
+    incoming: number;
+    outgoing: number;
+    departments: number;
+    users: number | null;
+    recent: Array<{ reference: string }>;
+  };
+  assert.equal(employeeStats.activeDocuments, 4);
+  assert.equal(employeeStats.deletedDocuments, 0);
+  assert.equal(employeeStats.incoming, 2);
+  assert.equal(employeeStats.outgoing, 2);
+  assert.equal(employeeStats.departments, 1);
+  assert.equal(employeeStats.users, null);
+  assert.equal(employeeStats.recent.length, 4);
+  assert.ok(employeeStats.recent.every((item) => item.reference.startsWith('REP-')));
 });
 
 test('report summaries aggregate by status, type, department, and month', async () => {
@@ -105,7 +147,8 @@ test('report summaries aggregate by status, type, department, and month', async 
     ['incoming:2', 'outgoing:2'],
   );
   const general = summary.byDepartment.find((row) => row.department === 'الإدارة العامة');
-  assert.equal(general?.count, 2);
+  assert.equal(general?.count, 4);
+  assert.equal(summary.byDepartment.length, 1);
 
   const filtered = await apiRequest(context.app, employeeClient, 'GET', '/reports/summary?status=completed');
   assert.equal((filtered.json() as { total: number }).total, 1);
@@ -136,11 +179,14 @@ test('audit log is admin-only and supports filtering', async () => {
   const employeeView = await apiRequest(context.app, employeeClient, 'GET', '/audit');
   assert.equal(employeeView.statusCode, 403);
 
+  const employee = await context.pool.query<{ id: string }>(
+    "SELECT id FROM users WHERE username = 'employee'",
+  );
   const response = await apiRequest(
     context.app,
     adminClient,
     'GET',
-    '/audit?action=document.created&pageSize=10',
+    `/audit?action=document.created&actorUserId=${employee.rows[0]!.id}&pageSize=10`,
   );
   assert.equal(response.statusCode, 200);
   const body = response.json() as {

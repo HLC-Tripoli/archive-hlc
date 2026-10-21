@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import type { AppConfig } from '../config.js';
+import { resolveDocumentAccessScope } from '../lib/access.js';
 import { ApiError } from '../lib/errors.js';
 import { isUuid } from '../lib/validation.js';
 import type { AuthGuards } from '../plugins/auth.js';
@@ -55,12 +56,18 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
     '/documents/:id/files',
     { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
     async (request, reply) => {
+      const access = resolveDocumentAccessScope(request.authUser!);
       const { id: documentId } = request.params as { id: string };
       if (!isUuid(documentId)) throw ApiError.notFound('المعاملة غير موجودة.');
 
+      // نطاق الموظف شرط في استعلام المعاملة الأم نفسه، فلا يكفي إخفاء المرفق
+      // في الواجهة أو الاعتماد على فحص سابق منفصل.
       const document = await pool.query<{ id: string; deleted_at: Date | null }>(
-        'SELECT id, deleted_at FROM documents WHERE id = $1',
-        [documentId],
+        `SELECT id, deleted_at
+           FROM documents
+          WHERE id = $1
+            AND ($2::boolean OR department_id = $3)`,
+        [documentId, access.isAdmin, access.departmentId],
       );
       const documentRow = document.rows[0];
       if (!documentRow) throw ApiError.notFound('المعاملة غير موجودة.');
@@ -81,6 +88,7 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
         {
           documentId,
           userId: request.authUser!.id,
+          access,
           stream: data.file,
           filename: data.filename,
           declaredMimeType: data.mimetype,
@@ -123,12 +131,13 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
     '/files/:id/download',
     { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
     async (request, reply) => {
+      const access = resolveDocumentAccessScope(request.authUser!);
       const { id } = request.params as { id: string };
       if (!isUuid(id)) throw ApiError.notFound('الملف غير موجود.');
 
-      const found = await getFileWithDocument(pool, id);
+      const found = await getFileWithDocument(pool, id, access);
       if (!found) throw ApiError.notFound('الملف غير موجود.');
-      if (found.document.deletedAt && request.authUser!.role !== 'admin') {
+      if (found.document.deletedAt && !access.isAdmin) {
         throw ApiError.notFound('الملف غير موجود.');
       }
       assertSupportedProvider(request, found.file, storage);
@@ -161,10 +170,11 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
     '/files/:id',
     { preHandler: guards.requireAdmin, schema: { params: ID_PARAMS_SCHEMA } },
     async (request) => {
+      const access = resolveDocumentAccessScope(request.authUser!);
       const { id } = request.params as { id: string };
       if (!isUuid(id)) throw ApiError.notFound('الملف غير موجود.');
 
-      const found = await getFileWithDocument(pool, id);
+      const found = await getFileWithDocument(pool, id, access);
       if (!found) throw ApiError.notFound('الملف غير موجود.');
       assertSupportedProvider(request, found.file, storage);
 

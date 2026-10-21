@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
+import { resolveDocumentAccessScope } from '../lib/access.js';
 import { buildCsv } from '../lib/csv.js';
 import { isValidIsoDate } from '../lib/dates.js';
 import { ApiError } from '../lib/errors.js';
@@ -73,21 +74,31 @@ function formatDateStamp(date: Date = new Date()): string {
 export function registerStatsRoutes(app: FastifyInstance, deps: StatsRoutesDeps): void {
   const { pool, guards } = deps;
 
-  app.get('/stats/dashboard', { preHandler: guards.requireAuth }, async (request) =>
-    getDashboardStats(pool, { includeAdminInfo: request.authUser!.role === 'admin' }),
-  );
+  app.get('/stats/dashboard', { preHandler: guards.requireAuth }, async (request) => {
+    const access = resolveDocumentAccessScope(request.authUser!);
+    return getDashboardStats(pool, access);
+  });
 
   app.get(
     '/reports/summary',
     { preHandler: guards.requireAuth, schema: { querystring: REPORT_QUERY_SCHEMA } },
-    async (request) => getReportSummary(pool, parseReportFilters(request.query as ReportQuery)),
+    async (request) => {
+      const access = resolveDocumentAccessScope(request.authUser!);
+      return getReportSummary(pool, parseReportFilters(request.query as ReportQuery), access);
+    },
   );
 
   app.get(
     '/reports/documents.csv',
     { preHandler: guards.requireAuth, schema: { querystring: REPORT_QUERY_SCHEMA } },
     async (request, reply) => {
-      const rows = await collectDocumentsForCsv(pool, parseReportFilters(request.query as ReportQuery), 10_000);
+      const access = resolveDocumentAccessScope(request.authUser!);
+      const rows = await collectDocumentsForCsv(
+        pool,
+        parseReportFilters(request.query as ReportQuery),
+        10_000,
+        access,
+      );
       const csv = buildCsv([
         [
           'رقم المعاملة',

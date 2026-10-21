@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import type { Queryable } from '../db/pool.js';
+import type { DocumentAccessScope } from '../lib/access.js';
 import { containsPattern } from '../lib/sql.js';
 import { listDocuments, type DocumentListFilters } from './documents.js';
 
@@ -15,7 +16,10 @@ export interface DashboardStats {
   recent: Awaited<ReturnType<typeof listDocuments>>['items'];
 }
 
-export async function getDashboardStats(pool: Pool, options: { includeAdminInfo: boolean }): Promise<DashboardStats> {
+export async function getDashboardStats(
+  pool: Pool,
+  access: DocumentAccessScope,
+): Promise<DashboardStats> {
   const counts = await pool.query<{
     active_documents: number;
     deleted_documents: number;
@@ -37,27 +41,36 @@ export async function getDashboardStats(pool: Pool, options: { includeAdminInfo:
        count(*) FILTER (WHERE deleted_at IS NULL AND status = 'completed')::int AS completed,
        count(*) FILTER (WHERE deleted_at IS NULL AND status = 'archived')::int AS archived,
        count(*) FILTER (WHERE deleted_at IS NULL AND created_at >= date_trunc('month', now()))::int AS this_month
-     FROM documents`,
+     FROM documents
+     WHERE ($1::uuid IS NULL OR department_id = $1)`,
+    [access.departmentId],
   );
 
-  const departments = await pool.query<{ count: number }>('SELECT count(*)::int AS count FROM departments');
+  const departments = access.isAdmin
+    ? await pool.query<{ count: number }>('SELECT count(*)::int AS count FROM departments')
+    : null;
   const row = counts.rows[0];
 
-  const users = options.includeAdminInfo
+  const users = access.isAdmin
     ? await pool.query<{ count: number }>('SELECT count(*)::int AS count FROM users WHERE is_active')
     : null;
 
-  const recent = await listDocuments(pool, {
-    includeDeleted: false,
-    sort: 'createdAt',
-    order: 'desc',
-    page: 1,
-    pageSize: 5,
-  });
+  const recent = await listDocuments(
+    pool,
+    {
+      includeDeleted: false,
+      sort: 'createdAt',
+      order: 'desc',
+      page: 1,
+      pageSize: 5,
+    },
+    access,
+  );
 
   return {
     activeDocuments: row?.active_documents ?? 0,
-    deletedDocuments: row?.deleted_documents ?? 0,
+    // الموظف لا يرى سلة المحذوفات ولا إحصاءاتها؛ المدير يراها عالمية.
+    deletedDocuments: access.isAdmin ? (row?.deleted_documents ?? 0) : 0,
     incoming: row?.incoming ?? 0,
     outgoing: row?.outgoing ?? 0,
     byStatus: {
@@ -67,7 +80,8 @@ export async function getDashboardStats(pool: Pool, options: { includeAdminInfo:
       archived: row?.archived ?? 0,
     },
     thisMonth: row?.this_month ?? 0,
-    departments: departments.rows[0]?.count ?? 0,
+    // الموظف يرى إدارته الحالية فقط (واحدة)، والمدير يرى العدد العالمي.
+    departments: access.isAdmin ? (departments?.rows[0]?.count ?? 0) : 1,
     users: users?.rows[0]?.count ?? null,
     recent: recent.items,
   };
@@ -90,12 +104,21 @@ export interface ReportSummary {
   byMonth: Array<{ month: string; count: number }>;
 }
 
-function buildFilterClause(filters: ReportSummaryFilters, params: unknown[]): string {
+function buildFilterClause(
+  filters: ReportSummaryFilters,
+  params: unknown[],
+  access: DocumentAccessScope,
+): string {
   const conditions: string[] = ['doc.deleted_at IS NULL'];
   const addParam = (value: unknown): string => {
     params.push(value);
     return `$${params.length}`;
   };
+  // نطاق الإدارة يُطبَّق قبل مرشِّح العميل؛ اختيار إدارة أخرى يضيف شرطاً
+  // متناقضاً فيعطي نتيجة فارغة بدلاً من كشف بيانات إدارة غير مسموحة.
+  if (!access.isAdmin) {
+    conditions.push(`doc.department_id = ${addParam(access.departmentId)}`);
+  }
   if (filters.q) {
     const pattern = addParam(containsPattern(filters.q));
     conditions.push(
@@ -112,9 +135,13 @@ function buildFilterClause(filters: ReportSummaryFilters, params: unknown[]): st
   return `WHERE ${conditions.join(' AND ')}`;
 }
 
-export async function getReportSummary(pool: Pool, filters: ReportSummaryFilters): Promise<ReportSummary> {
+export async function getReportSummary(
+  pool: Pool,
+  filters: ReportSummaryFilters,
+  access: DocumentAccessScope,
+): Promise<ReportSummary> {
   const baseParams: unknown[] = [];
-  const where = buildFilterClause(filters, baseParams);
+  const where = buildFilterClause(filters, baseParams, access);
 
   const [statusRows, typeRows, departmentRows, monthRows] = await Promise.all([
     pool.query<{ status: string; count: number }>(
@@ -173,9 +200,10 @@ export async function collectDocumentsForCsv(
   db: Queryable,
   filters: ReportSummaryFilters,
   limit: number,
+  access: DocumentAccessScope,
 ): Promise<CsvExportRow[]> {
   const params: unknown[] = [];
-  const where = buildFilterClause(filters, params);
+  const where = buildFilterClause(filters, params, access);
   params.push(limit);
   const { rows } = await db.query<CsvExportRow>(
     `SELECT doc.reference, doc.title, doc.doc_type::text AS type,
