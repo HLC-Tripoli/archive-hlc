@@ -5,7 +5,7 @@
 # =============================================================================
 
 # ---------- مرحلة البناء: تثبيت الاعتماديات وترجمة TypeScript ----------
-FROM node:24-bookworm-slim AS build
+FROM node:25-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -15,13 +15,13 @@ COPY migrations ./migrations
 RUN npm run build
 
 # ---------- مرحلة اعتماديات الإنتاج ----------
-FROM node:24-bookworm-slim AS production-deps
+FROM node:25-bookworm-slim AS production-deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 # ---------- مرحلة التشغيل ----------
-FROM node:24-bookworm-slim AS runtime
+FROM node:25-bookworm-slim AS runtime
 
 # وسوم OCI الوصفية: يمرّرها سير عمل GitHub Actions عبر build-args (قيم افتراضية فارغة
 # للبناء المحلي). مصدر الحزمة (source) يربط صورة GHCR بالمستودع تلقائياً.
