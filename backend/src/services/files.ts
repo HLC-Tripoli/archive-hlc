@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { lstat, mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { Transform, type Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -10,6 +9,11 @@ import type { AppConfig } from '../config.js';
 import type { Queryable } from '../db/pool.js';
 import type { DocumentAccessScope } from '../lib/access.js';
 import { ApiError } from '../lib/errors.js';
+import {
+  candidatePathFor,
+  type AttachmentOptimizer,
+} from './optimization/optimizer.js';
+import { validateOptimizedCandidate } from './optimization/validate.js';
 import type { StorageProvider } from './storage/types.js';
 
 /**
@@ -182,23 +186,40 @@ export interface StoreAttachmentInput {
   declaredMimeType?: string;
 }
 
+export interface AttachmentLogger {
+  debug(payload: Record<string, unknown>, message?: string): void;
+  warn(payload: Record<string, unknown>, message?: string): void;
+}
+
 export interface StoreAttachmentDeps {
   pool: Pool;
   storage: StorageProvider;
   config: AppConfig;
+  optimizer: AttachmentOptimizer;
+  logger?: AttachmentLogger;
 }
 
+async function hashFile(filePath: string): Promise<string> {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(filePath)) {
+    hash.update(chunk as Buffer);
+  }
+  return hash.digest('hex');
+}
 /**
  * يخزّن مرفقاً جديداً:
  *   1. يتحقق من الامتداد والنوع والحجم.
  *   2. يكتب الملف مؤقتاً على القرص (مع بصمة SHA-256) دون تحميله كاملاً في الذاكرة.
- *   3. يرفعه إلى مزوّد التخزين، ثم يسجّل السطر في قاعدة البيانات.
- *   4. عند فشل التسجيل بعد نجاح الرفع، يحذف الكائن من التخزين (تعويض) كي لا يبقى يتيم.
+ *   3. يحاول تحسين PDF/الصور المدعومة في ملف مؤقت منفصل، ويتحقق من المرشّح
+ *      (السلامة، الحجم الأصغر، بقاء الخصائص) قبل اختياره. أي فشل يعني الرجوع للأصل.
+ *   4. يحسب الحجم والبصمة من البايتات المختارة فعلاً، ثم يرفعها ويسجّل السطر.
+ *   5. عند فشل التسجيل بعد نجاح الرفع، يحذف الكائن من التخزين (تعويض) كي لا يبقى يتيماً.
+ *   6. ينظّف مجلد العمل المؤقت في كل المسارات (نجاحاً أو فشلاً).
  */
 export async function storeAttachment(
   deps: StoreAttachmentDeps,
   input: StoreAttachmentInput,
-): Promise<FileRecordPublic & { storageKey: string }> {
+): Promise<FileRecordPublic & { storageKey: string; optimized: boolean }> {
   const { extension, mimeType } = resolveMimeType(input.filename);
   if (
     input.declaredMimeType &&
@@ -219,14 +240,19 @@ export async function storeAttachment(
     }
   }
 
+  // وقت الحدث المنطقي للرفع: يُسجَّل كما هو حتى لو استغرق التحسين ثواني.
+  const uploadStartedAt = new Date();
   const originalName = sanitizeOriginalName(input.filename);
   const fileId = randomUUID();
   const storageKey = buildStorageKey(input.documentId, fileId, extension);
   const maxBytes = deps.config.uploadMaxMb * 1024 * 1024;
 
-  const tempDir = await mkdtemp(path.join(tmpdir(), 'hlc-upload-'));
-  const tempPath = path.join(tempDir, 'upload.bin');
-  const hash = createHash('sha256');
+  await mkdir(deps.config.processingTmpDir, { recursive: true, mode: 0o700 });
+  const tempDir = await mkdtemp(path.join(deps.config.processingTmpDir, 'hlc-upload-'));
+  const tempPath = path.join(tempDir, `original.${extension}`);
+  const candidatePath = candidatePathFor(tempPath, extension);
+  let selectedPath = tempPath;
+  let optimized = false;
   let size = 0;
 
   try {
@@ -237,7 +263,6 @@ export async function storeAttachment(
           callback(ApiError.payloadTooLarge(`حجم الملف يتجاوز الحد المسموح (${deps.config.uploadMaxMb} ميجابايت).`));
           return;
         }
-        hash.update(chunk);
         callback(null, chunk);
       },
     });
@@ -263,31 +288,88 @@ export async function storeAttachment(
       );
     }
 
-    const checksum = hash.digest('hex');
-    await deps.storage.putObject(storageKey, createReadStream(tempPath), {
+    const originalSize = size;
+    const deadline = Date.now() + deps.config.optimizationTimeoutMs;
+    try {
+      const outcome = await deps.optimizer.produceCandidate({
+        sourcePath: tempPath,
+        outputPath: candidatePath,
+        extension,
+        deadline,
+      });
+      if (outcome.produced) {
+        let candidateSize: number | null = null;
+        try {
+          const info = await lstat(candidatePath);
+          if (info.isFile() && !info.isSymbolicLink()) candidateSize = info.size;
+        } catch {
+          candidateSize = null;
+        }
+        if (candidateSize === null || candidateSize === 0) {
+          deps.logger?.warn({ extension, reason: 'candidate_missing' }, 'attachment optimization skipped');
+        } else if (candidateSize >= originalSize) {
+          deps.logger?.debug({ extension, reason: 'not_smaller' }, 'attachment optimization skipped');
+        } else {
+          const validation = await validateOptimizedCandidate({
+            originalPath: tempPath,
+            candidatePath,
+            extension,
+            deadline,
+          });
+          if (validation.valid) {
+            selectedPath = candidatePath;
+            optimized = true;
+            deps.logger?.debug(
+              { extension, originalSize, storedSize: candidateSize },
+              'attachment optimized',
+            );
+          } else {
+            deps.logger?.warn(
+              { extension, reason: validation.reason },
+              'attachment optimization candidate rejected',
+            );
+          }
+        }
+      } else if (outcome.reason !== 'unsupported_type') {
+        deps.logger?.debug({ extension, reason: outcome.reason }, 'attachment optimization skipped');
+      }
+    } catch {
+      // فشل غير متوقع في المحسّن لا يفشل الرفع: نستخدم الأصل.
+      deps.logger?.warn({ extension, reason: 'optimizer_error' }, 'attachment optimization skipped');
+    }
+
+    const finalInfo = await stat(selectedPath);
+    if (!finalInfo.isFile() || finalInfo.size <= 0 || finalInfo.size > maxBytes) {
+      throw ApiError.badRequest('invalid_file', 'الملف المرفوع فارغ أو غير صالح.');
+    }
+    const finalSize = finalInfo.size;
+    const checksum = await hashFile(selectedPath);
+
+    await deps.storage.putObject(storageKey, createReadStream(selectedPath), {
       contentType: mimeType,
-      contentLength: size,
+      contentLength: finalSize,
     });
 
     try {
       const { rows } = await deps.pool.query<{ id: string; created_at: Date }>(
         `INSERT INTO document_files
-           (document_id, original_name, mime_type, size_bytes, checksum_sha256, storage_provider, storage_key, uploaded_by)
-         SELECT $1, $2, $3, $4, $5, $6, $7, $8
+           (document_id, original_name, mime_type, size_bytes, checksum_sha256, storage_provider, storage_key, uploaded_by, created_at)
+         SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9
            FROM documents doc
           WHERE doc.id = $1
             AND doc.deleted_at IS NULL
-            AND ($9::boolean OR doc.department_id = $10)
+            AND ($10::boolean OR doc.department_id = $11)
          RETURNING id, created_at`,
         [
           input.documentId,
           originalName,
           mimeType,
-          size,
+          finalSize,
           checksum,
           deps.storage.name,
           storageKey,
           input.userId,
+          uploadStartedAt,
           input.access.isAdmin,
           input.access.departmentId,
         ],
@@ -300,11 +382,12 @@ export async function storeAttachment(
         id: row.id,
         originalName,
         mimeType,
-        sizeBytes: size,
+        sizeBytes: finalSize,
         checksumSha256: checksum,
         createdAt: row.created_at,
         uploadedByName: null,
         storageKey,
+        optimized,
       };
     } catch (error) {
       // تعويض: حذف الكائن المرفوع كي لا يبقى يتيماً في التخزين.
@@ -312,6 +395,9 @@ export async function storeAttachment(
       throw error;
     }
   } finally {
-    await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+    await rm(tempDir, { recursive: true, force: true }).catch(() => {
+      // لا نسجّل المسار أو نص خطأ نظام الملفات؛ رمز مختصر يكفي للتشخيص.
+      deps.logger?.warn({ reason: 'temp_cleanup_failed' }, 'attachment temporary directory cleanup failed');
+    });
   }
 }

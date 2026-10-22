@@ -6,6 +6,7 @@ import { ApiError } from '../lib/errors.js';
 import { isUuid } from '../lib/validation.js';
 import type { AuthGuards } from '../plugins/auth.js';
 import { writeAudit } from '../services/audit.js';
+import type { AttachmentOptimizer } from '../services/optimization/optimizer.js';
 import {
   attachmentContentDisposition,
   deleteFileRow,
@@ -20,6 +21,7 @@ export interface FileRoutesDeps {
   guards: AuthGuards;
   storage: StorageProvider;
   config: AppConfig;
+  optimizer: AttachmentOptimizer;
 }
 
 const ID_PARAMS_SCHEMA = {
@@ -50,7 +52,7 @@ function assertSupportedProvider(
 }
 
 export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): void {
-  const { pool, guards, storage, config } = deps;
+  const { pool, guards, storage, config, optimizer } = deps;
 
   app.post(
     '/documents/:id/files',
@@ -84,7 +86,7 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
       }
 
       const record = await storeAttachment(
-        { pool, storage, config },
+        { pool, storage, config, optimizer, logger: request.log },
         {
           documentId,
           userId: request.authUser!.id,

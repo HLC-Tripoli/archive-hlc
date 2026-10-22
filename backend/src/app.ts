@@ -16,6 +16,10 @@ import { registerHealthRoutes } from './routes/health.js';
 import { registerImportRoutes } from './routes/imports.js';
 import { registerStatsRoutes } from './routes/stats.js';
 import { registerUserRoutes } from './routes/users.js';
+import {
+  createAttachmentOptimizer,
+  type AttachmentOptimizer,
+} from './services/optimization/optimizer.js';
 import type { StorageProvider } from './services/storage/types.js';
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -24,6 +28,8 @@ export interface AppDeps {
   config: AppConfig;
   pool: Pool;
   storage: StorageProvider;
+  /** حقن محسّن بديل في الاختبارات؛ الإنتاج يستخدم المحسّن الافتراضي. */
+  optimizer?: AttachmentOptimizer;
 }
 
 interface FastifyErrorLike {
@@ -75,6 +81,12 @@ function toApiError(error: unknown): ApiError {
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { config, pool, storage } = deps;
+  const optimizer =
+    deps.optimizer ??
+    createAttachmentOptimizer({
+      concurrency: config.optimizationConcurrency,
+      tmpDir: config.processingTmpDir,
+    });
 
   const app = Fastify({
     logger: {
@@ -164,7 +176,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       registerUserRoutes(instance, { pool, config, guards });
       registerDepartmentRoutes(instance, { pool, guards });
       registerDocumentRoutes(instance, { pool, guards });
-      registerFileRoutes(instance, { pool, guards, storage, config });
+      registerFileRoutes(instance, { pool, guards, storage, config, optimizer });
       registerStatsRoutes(instance, { pool, guards });
       registerAuditRoutes(instance, { pool, guards });
       registerImportRoutes(instance, { pool, config, guards });

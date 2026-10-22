@@ -588,6 +588,28 @@ tbody tr:hover {
   border-radius: 8px;
   margin-bottom: 10px;
 }
+/* اسم الإدارة في سطر مستقل وعدد المعاملات تحته، مع التفاف آمن للأسماء العربية الطويلة. */
+.department-meta {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  text-align: start;
+}
+.department-meta strong {
+  display: block;
+  max-width: 100%;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.department-meta small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
 .report-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -889,6 +911,16 @@ hr,
   }
 }
 @media (max-width: 480px) {
+  .department-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .department-meta {
+    width: 100%;
+  }
+  .department-item .action-buttons {
+    flex-wrap: wrap;
+  }
   .theme-toggle button {
     padding: 8px;
   }

@@ -11,6 +11,7 @@ import { runMigrations } from '../src/db/migrate.js';
 import { createPool } from '../src/db/pool.js';
 import { ApiError } from '../src/lib/errors.js';
 import { hashPassword } from '../src/lib/security.js';
+import type { AttachmentOptimizer } from '../src/services/optimization/optimizer.js';
 import type { StorageProvider, StoredObject } from '../src/services/storage/types.js';
 import { createUser } from '../src/services/users.js';
 import type { UserRole } from '../src/services/sessions.js';
@@ -93,6 +94,9 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     cookieSecure: false,
     uploadMaxMb: 1,
     uploadsDir: path.join(tmpdir(), 'hlc-test-uploads'),
+    processingTmpDir: path.join(tmpdir(), 'hlc-test-processing'),
+    optimizationTimeoutMs: 20_000,
+    optimizationConcurrency: 2,
     rateLimits: { loginMax: 50, sensitiveMax: 50, globalMax: 100000 },
     ...overrides,
   };
@@ -105,11 +109,14 @@ export interface TestContext {
   config: AppConfig;
 }
 
-export async function createTestContext(overrides: Partial<AppConfig> = {}): Promise<TestContext> {
+export async function createTestContext(
+  overrides: Partial<AppConfig> = {},
+  options: { optimizer?: AttachmentOptimizer } = {},
+): Promise<TestContext> {
   const config = testConfig(overrides);
   const pool = createPool(config.databaseUrl);
   const storage = new MemoryStorageProvider();
-  const app = await buildApp({ config, pool, storage });
+  const app = await buildApp({ config, pool, storage, optimizer: options.optimizer });
   await app.ready();
   return { app, pool, storage, config };
 }

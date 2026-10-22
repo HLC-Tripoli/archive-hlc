@@ -1,3 +1,4 @@
+import os from 'node:os';
 import path from 'node:path';
 import { ConfigError } from './lib/errors.js';
 
@@ -5,6 +6,9 @@ export type NodeEnv = 'development' | 'production' | 'test';
 
 /** المسار الداخلي الافتراضي لمجلد تخزين المرفقات داخل حاوية api. */
 export const DEFAULT_UPLOADS_DIR = '/data/uploads';
+
+/** مجلد العمل المؤقت لتحسين المرفقات (يُنشأ بصلاحيات 0700 عند أول استخدام). */
+export const DEFAULT_PROCESSING_TMP_DIR = path.join(os.tmpdir(), 'archive-hlc-processing');
 
 export interface AppConfig {
   nodeEnv: NodeEnv;
@@ -19,6 +23,12 @@ export interface AppConfig {
   uploadMaxMb: number;
   /** المجلد الجذري لتخزين المرفقات على نظام الملفات (يُوصَل إليه Compose بحجم دائم). */
   uploadsDir: string;
+  /** المجلد المؤقت الذي تُكتب فيه نسخ التحسين قبل اختيار النسخة النهائية. */
+  processingTmpDir: string;
+  /** الحد الأقصى الكلي لزمن تحسين مرفق واحد (بالمللي ثانية). */
+  optimizationTimeoutMs: number;
+  /** الحد الأقصى لعدد عمليات التحسين المتزامنة. */
+  optimizationConcurrency: number;
   rateLimits: {
     loginMax: number;
     sensitiveMax: number;
@@ -82,6 +92,18 @@ function readUploadsDir(value: string | undefined): string {
   return resolved;
 }
 
+function readProcessingTmpDir(value: string | undefined): string {
+  const raw = (value ?? '').trim() || DEFAULT_PROCESSING_TMP_DIR;
+  if (raw.includes('\0')) {
+    throw new ConfigError('PROCESSING_TMP_DIR must not contain NUL bytes');
+  }
+  const resolved = path.resolve(raw);
+  if (resolved === path.parse(resolved).root) {
+    throw new ConfigError('PROCESSING_TMP_DIR must not point at the filesystem root');
+  }
+  return resolved;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const nodeEnvRaw = (env.NODE_ENV ?? 'development').trim();
   if (nodeEnvRaw !== 'development' && nodeEnvRaw !== 'production' && nodeEnvRaw !== 'test') {
@@ -109,6 +131,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     cookieSecure: readBool(env.COOKIE_SECURE, 'COOKIE_SECURE', isProduction),
     uploadMaxMb: readInt(env.UPLOAD_MAX_MB, 'UPLOAD_MAX_MB', 25, 1, 200),
     uploadsDir: readUploadsDir(env.UPLOADS_DIR),
+    processingTmpDir: readProcessingTmpDir(env.PROCESSING_TMP_DIR),
+    optimizationTimeoutMs:
+      readInt(env.OPTIMIZE_TIMEOUT_SECONDS, 'OPTIMIZE_TIMEOUT_SECONDS', 20, 1, 300) * 1000,
+    optimizationConcurrency: readInt(env.OPTIMIZE_CONCURRENCY, 'OPTIMIZE_CONCURRENCY', 2, 1, 8),
     rateLimits: {
       loginMax: readInt(env.RATE_LIMIT_LOGIN_MAX, 'RATE_LIMIT_LOGIN_MAX', 10, 1, 10000),
       sensitiveMax: readInt(env.RATE_LIMIT_SENSITIVE_MAX, 'RATE_LIMIT_SENSITIVE_MAX', 20, 1, 10000),

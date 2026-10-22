@@ -78,6 +78,14 @@ jobs:
       - name: تثبيت اعتماديات الخادم عبر lockfile (npm ci)
         working-directory: backend
         run: npm ci
+      - name: تثبيت أدوات تحسين PDF/الصور المستخدمة في الاختبارات
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qpdf libjpeg-turbo-progs poppler-utils
+          qpdf --version
+          jpegtran -version
+          pdftotext -v
       - name: فحص TypeScript بلا إخراج
         working-directory: backend
         run: npm run typecheck

@@ -155,6 +155,8 @@ docker run -d --name hlc-dev-pg \
 ### 2.3 الاعتماديات والفحوص والاختبارات
 
 ```bash
+# أدوات تحسين المرفقات مطلوبة لاختبارات PDF/الصور (Debian/Ubuntu):
+sudo apt-get install -y --no-install-recommends qpdf libjpeg-turbo-progs poppler-utils
 cd backend
 npm ci
 npm run typecheck        # فحص TypeScript بلا إخراج
@@ -373,6 +375,9 @@ never build images on the production host.
 | `WEB_PORT` | المنفذ المنشور للواجهة (افتراضي 8080) — المنفذ الخارجي الوحيد. |
 | `ARCHIVE_UPLOADS_PATH` | مجلد المرفقات على مضيف Docker (افتراضي `./archive/files/uploads` بجانب ملف compose). يقبل مساراً نسبياً أو مطلقاً (قرص مخصّص، مثال `/srv/archive-hlc/uploads`). يُربط إلى `/data/uploads` في حاوية `api` وحدها. |
 | `UPLOADS_DIR` | مسار تخزين المرفقات داخل الحاوية (افتراضي `/data/uploads`)؛ اتركه كما هو إلا لحالات خاصة. |
+| `PROCESSING_TMP_DIR` | مجلد العمل المؤقت لتحسين المرفقات (افتراضي `/tmp/archive-hlc` داخل الصورة). لا يُشارك مع التخزين الدائم ويُنظَّف تلقائياً. |
+| `OPTIMIZE_TIMEOUT_SECONDS` | سقف زمن تحسين المرفق الواحد بالثواني (1..300، افتراضي 20). عند التجاوز يُحفظ الأصل. |
+| `OPTIMIZE_CONCURRENCY` | أقصى عدد عمليات تحسين متزامنة (1..8، افتراضي 2). |
 | `RATE_LIMIT_*` | حدود المعدّل: دخول/عمليات حساسة/عام. |
 
 > ملاحظة أمنية: جميع الأسرار تبقى في `.env` على المضيف فقط؛ الصور لا تحتوي أي أسرار،
@@ -458,6 +463,87 @@ so the host directory must be pre-created and owned by that user. The Angie cont
 never sees the directory and `/uploads/...` is explicitly 404. Downloads go exclusively
 through the authenticated API. Back up both the uploads directory and PostgreSQL — one
 without the other is not a recoverable archive.
+
+### 6.3 تحسين المرفقات قبل التخزين (PDF والصور)
+
+يُطبَّق التحسين أثناء الرفع نفسه، بعد التحقق من النوع/الحجم وقبل حساب البصمة النهائية
+وحفظ الكائن. القاعدة الأساسية: **الأصل هو المرجع**. لا تُستبدل البايتات الأصلية إلا إذا
+أنتج المحسّن ملفاً صالحاً، أصغر حجماً، واجتاز فحوص السلامة وعدم تغيّر المحتوى/الخصائص.
+أي فشل أو مهلة أو نقص في الأدوات يعني حفظ الأصل كما هو دون أي خطأ للمستخدم.
+
+#### ما الذي يُحسَّن؟
+
+| النوع | الأداة | الطريقة | ما يُحفظ |
+| --- | --- | --- | --- |
+| PDF | `qpdf` 11.3.0 | `--object-streams=generate --recompress-flate --compression-level=9` — تحسين هيكلي بلا فقدان، بلا rasterization أو downsampling | عدد الصفحات وترتيبها وأبعادها ودورانها، النصوص والخطوط والصور، الروابط والتعليقات والعلامات المرتبطة، حقول النماذج، معلومات المستند وتواريخ الإنشاء/التعديل |
+| JPEG | `jpegtran` (libjpeg-turbo 2.1.5) | `-copy all -optimize` — إعادة ترميز Huffman فقط، **بلا فقدان وبلا إعادة ضغط lossy** | البكسلات مطابقة تماماً، EXIF/IPTC/XMP، ملف ICC، Orientation، تواريخ الالتقاط، وكل مقاطع APP/COM |
+| PNG | `sharp` 0.35.5 (libvips) | إعادة ترميز PNG بلا فقدان (`compressionLevel: 9`, `adaptiveFiltering`, بلا palette) | البكسلات والشفافية، الأبعاد، ICC/EXIF/XMP، Orientation، الكثافة |
+| WebP | `sharp` 0.35.5 | `lossless: true, effort: 6` (تُتخطى الملفات المتحركة) | البكسلات والشفافية، الأبعاد، ICC/EXIF/XMP |
+| TIFF | `sharp` 0.35.5 | `deflate` بلا فقدان مع predictor أفقي، لصور 8-bit sRGB/رمادية فقط | البكسلات، الأبعاد، الشفافية إن وُجدت؛ تُتخطى TIFF متعددة الصفحات أو 16-bit أو CMYK |
+| GIF / BMP | — | لا يوجد مسار بلا فقدان آمن للأول (palette/animation) والثاني غير مدعوم للكتابة في sharp | تبقى **بايتاً بايتاً** كما وردت |
+| Office / TXT / CSV وغيرها | — | لا تُلمس إطلاقاً | بايتات مطابقة تماماً |
+
+#### ضوابط الأمان والتحقق
+
+- **PDF**: يُفحص باستخدام `qpdf --check`، وتُقارن الصفحات (العدد، `MediaBox`، `CropBox`،
+  `Rotate`، `UserUnit`)، وعدد التعليقات، والمخططات (bookmarks)، وقاموس `/Info`
+  (العنوان/المنشئ/تواريخ الإنشاء والتعديل) بين الأصل والمرشّح. ملفات PDF الموقّعة رقمياً
+  (وجود `/ByteRange` أو `/Sig`) أو المشفّرة تُحفظ كما هي لأن إعادة الكتابة قد تُبطل
+  التوقيع أو التشفير.
+- **JPEG**: وُجد أن `jpegtran` يغيّر جداول Huffman فقط؛ لذلك تُقارن كل مقاطع APP/COM
+  بايتاً بايتاً، وتُقارن أبعاد/Orientation/ICC/EXIF دلالياً، وتُقارن البكسلات الخام.
+  لا تُستخدم إعادة ضغط lossy ولا إعداد جودة (مثل 85) إطلاقاً في هذا المسار.
+- **الصور الأخرى**: تُقارن الأبعاد، نوع الصيغة، وجود قناة ألفا، مساحة الألوان،
+  Orientation، الكثافة، ICC/XMP وEXIF (حقلاً بحقل عبر `exif-reader`)، ثم تُقارن
+  البكسلات الخام RGBA. أي اختلاف يعني رفض المرشّح والاحتفاظ بالأصل.
+- **القيود**: حد أعلى 20 مليون بكسل للصورة الواحدة؛ ما فوقه لا يُحسَّن (حماية من
+  decompression bombs). مهلة كل أداة والتحقق النهائي محدودة بـ`OPTIMIZE_TIMEOUT_SECONDS`
+  (افتراضي 20 ثانية)، وعدد العمليات المتزامنة `OPTIMIZE_CONCURRENCY` (افتراضي 2).
+- **ملفات مؤقتة**: تُنشأ تحت `PROCESSING_TMP_DIR` بمجلد فريد `0700` لكل رفع، ويُحذف
+  دائماً في `finally` (نجاح، فشل، مهلة، ملف تالف، انقطاع العميل، تجاوز الحجم، فشل
+  التخزين أو قاعدة البيانات). لا تُحمَّل الملفات كاملة في الذاكرة، ويُفرض حد الحجم أثناء
+  التدفّق نفسه.
+- **الاتساق**: بعد اختيار البايتات النهائية يُعاد حساب SHA-256 والحجم منها، ويُخزَّن
+  الكائن ثم يُسجَّل سطر واحد في `document_files`. إذا فشل الإدراج بعد نجاح التخزين يُحذف
+  الكائن (تعويض). اسم الملف الأصلي ونوع MIME لا يتغيران.
+- **الوقت**: `created_at` يمثل **بداية حدث الرفع** ويُسجَّل صراحةً، لا وقت انتهاء التحسين،
+  ولا يُشتق من `mtime` للملف المؤقت أو المخزَّن. لا يُنشأ سجل ثانٍ ولا يُعدَّل سجل قائم.
+- **الخصوصية**: لا تُعاد مخرجات qpdf/jpegtran أو مسارات الملفات في استجابات API. تُسجَّل
+  أسباب مختصرة فقط (مثل `timeout`, `pdf_signed`, `image_pixels_changed`).
+
+#### الأدوات وإصداراتها
+
+الأدوات مثبّتة في **مرحلة التشغيل** النهائية لصورة API (وليس مرحلة البناء فقط):
+
+- `qpdf=11.3.0-1+deb12u1` و`libjpeg-turbo-progs=1:2.1.5-2` من Debian bookworm.
+- `sharp@0.35.5` و`exif-reader@2.0.3` مثبّتان في `package-lock.json`.
+- الصورة تعمل بمستخدم `node` غير الجذري؛ `/tmp/archive-hlc` مملوك له بصلاحية `0700`.
+
+#### استكشاف الأخطاء
+
+- إذا غابت `qpdf` أو `jpegtran` أو فشلت، يُحفظ الأصل ويظهر في السجل سبب مختصر
+  `tool_unavailable`/`optimizer_error` — الرفع ينجح دائماً. تحقق داخل الحاوية:
+  `docker compose exec api qpdf --version` و`docker compose exec api jpegtran -version`.
+- إذا لم يظهر أي تحسين في السجل، فغالباً لا يوجد مكسب آمن (`not_smaller`) أو النوع غير
+  مدعوم (`unsupported_type`)؛ هذا سلوك مقصود وليس خطأ.
+- إذا امتلأ القرص، يفشل إنشاء المجلد المؤقت ويُعاد خطأ خادم واضح دون كتابة سجل أو كائن.
+  راقب مساحة `/tmp` و`PROCESSING_TMP_DIR`؛ الملفات المؤقتة لا تبقى بعد الطلب.
+- ملفات PDF الموقّعة/المشفّرة تبقى بحجمها الأصلي عمداً؛ هذا ليس عطلاً.
+
+**English summary (attachment optimization):** PDFs are structurally optimized with
+qpdf 11.3 (object streams + flate recompression, no rasterization or downsampling) and
+validated with `qpdf --check` plus page/geometry/rotation/annotation/outline/Info
+comparisons. Signed or encrypted PDFs are stored unchanged. JPEGs use lossless
+`jpegtran -copy all -optimize` (no lossy recompression, no quality setting); EXIF/IPTC/XMP,
+ICC, orientation and pixels are verified unchanged. PNG, WebP and 8-bit sRGB/grayscale TIFF
+are re-encoded losslessly with sharp 0.35.5, preserving alpha and metadata, and accepted only
+after a raw RGBA pixel comparison. GIF/BMP, Office, text, CSV and all other types remain
+byte-for-byte unchanged. Each request uses a private 0700 temporary directory, bounded to
+20 megapixels and a configurable timeout/concurrency. A candidate is stored only when it is
+valid, smaller and passes preservation checks; otherwise the original bytes are kept.
+`created_at` remains the upload start time, and final size/SHA-256 always describe the exact
+stored/downloaded bytes. Runtime tools are pinned in `backend/Dockerfile` and run as the
+non-root `node` user.
 
 ## 7) إنشاء أول مدير (إلزامي — لا توجد حسابات افتراضية)
 
@@ -727,7 +813,8 @@ documents; legacy unassigned documents stay administrator-only until handled exp
 ### في CI (عند كل دفع إلى main أو طلب سحب)
 
 - `npm ci` بالـ lockfile ثم `npm run typecheck` ثم كامل حزمة اختبارات الخادم على
-  `postgres:18` مؤقتة (نفس ما تشغّله محلياً في القسم 2.3).
+  `postgres:18` مؤقتة (نفس ما تشغّله محلياً في القسم 2.3). تُثبَّت قبلها أدوات
+  `qpdf` و`libjpeg-turbo-progs` و`poppler-utils` لاختبارات التحسين الحقيقية.
 - `scripts/validate-compose.sh` للتحقق الآلي من ملفي Compose وحدود الشبكة والاستبعادات.
 - بناء صورتَي `api` و`web`؛ النشر فقط بعد نجاح كل ما سبق (القسم 3).
 
@@ -761,6 +848,33 @@ docker compose -f docker-compose.dev.yml build
   رفض 403/404 عبر API من سياق المتصفح، إشعارات الحجب العربية، وتعافي الجلسة القائمة
   فور تعيين الإدارة أو تفعيلها دون إعادة تسجيل دخول. لم تظهر أخطاء JavaScript غير
   متوقعة؛ سُجّلت فقط استجابات 401/403 المتوقعة لحالات الفشل المقصودة.
+
+### جولة التحقق للمسألة #9 (2026-10-22) — تحسين المرفقات وتخطيط الإدارة
+
+- `npm run typecheck` و`npm run build`: نظيفان. حزمة اختبارات الخادم كاملة:
+  **94 اختباراً — 94 ناجحاً، 0 فاشل، 0 متجاهل** على PostgreSQL 18 مؤقتة، منها
+  **13 اختباراً جديداً** في `10-attachment-optimization.test.ts` تغطّي: تحسين JPEG
+  بلا فقدان مع EXIF/ICC/Orientation، وPNG الشفاف، وWebP/TIFF، وPDF عربي متعدد
+  الصفحات بدوران وروابط، وعدم وجود مكسب، والملفات غير المدعومة (TXT/CSV/DOCX/GIF)
+  بايتاً بايتاً، وفشل/مهلة/فقدان الأداة/مخرجات تالفة/أكبر من الأصل، وPDF الموقّع
+  والمشفّر، وانقطاع العميل، وفشل التخزين وقاعدة البيانات مع التنظيف والتعويض،
+  وتجاوز الحجم، وثبات `created_at` عند بداية الرفع، وعزل الإدارات.
+- **اختبار صورة الإنتاج الفعلية** (`node:24-bookworm-slim` النهائية، مستخدم `node`):
+  `qpdf 11.3.0` و`jpegtran` (libjpeg-turbo 2.1.5) موجودان، و`/tmp/archive-hlc`
+  بصلاحية `0700`، ونجحت 8 حالات حقيقية داخل الحاوية: JPEG `96,042→88,150`،
+  PNG `368,820→1,632`، WebP `1,538→1,456`، TIFF `921,838→9,834`،
+  PDF `239,492→233,064`، مع ترك PDF الموقّع والمشفّر وTXT كما هي، ونجاح التحقق
+  المستقل في كل حالة.
+- **Playwright على بيئة تطوير معزولة** (مشروع `archive-hlc-opt-dev`، منفذ `8091`،
+  مجلدات وحجم وقاعدة منفصلة تماماً؛ أُزيلت بعد الجولة): تخطيط بطاقة الإدارة في
+  المكتب والجوال (عرض 390px) وفي السمتين الفاتحة والداكنة — الاسم في سطر مستقل،
+  والعدد تحته، والأسماء الطويلة تلتف بلا تجاوز أفقي، واتجاه RTL سليم. رفع 5 مرفقات
+  عبر الواجهة (PDF/JPEG/PNG/WebP/CSV)، ثم تنزيلها: الأحجام والبصمات تطابق
+  `document_files` حرفياً، وMIME و`Content-Disposition` صحيحان، وأبعاد الصور
+  المنزّلة سليمة. رفع ملف PNG تالف في وضع التعديل بقي 25 بايت كما هو، وبقيت
+  أوقات المرفقات القديمة دون تغيير. لم تظهر أخطاء JavaScript غير متوقعة؛ فقط
+  401 المتوقعة قبل تسجيل الدخول ومحاولة دخول فاشلة مقصودة، ومجلد العمل المؤقت
+  بقي فارغاً بعد كل الطلبات.
 
 ### خلاصة جولة تحقق سابقة (آخر تحديث: 2026-10-20)
 
@@ -847,6 +961,10 @@ docker compose -f docker-compose.dev.yml build
 - الصور المنشورة عامة على GHCR بمصدرها (OCI source) مرتبط بالمستودع؛ لا تحتوي أي أسرار
   تشغيلية — كل الإعدادات تُحقن وقت التشغيل من `.env`.
 - المعمارية أحادية العقدة (بلا توزيع/توسّع أفقي)؛ مناسبة لحجم استخدام إدارة واحدة.
+- تحسين المرفقات **أفضل جهد** وليس ضماناً: إذا لم يوجد مكسب آمن يبقى الأصل. تُترك
+  عمداً دون تحسين: PDF الموقّع/المشفّر، وGIF/BMP (لا مسار بلا فقدان آمن)، وصور
+  TIFF متعددة الصفحات أو 16-bit أو CMYK، والصور فوق 20 مليون بكسل. هذا سلوك مقصود
+  وليس عطلاً؛ راجع القسم 6.3.
 
 ## 15) الترخيص والحقوق
 
