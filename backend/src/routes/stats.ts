@@ -4,13 +4,12 @@ import { resolveDocumentAccessScope } from '../lib/access.js';
 import { buildCsv } from '../lib/csv.js';
 import { isValidIsoDate } from '../lib/dates.js';
 import { ApiError } from '../lib/errors.js';
-import { STATUS_LABELS, TYPE_LABELS } from '../lib/labels.js';
+import { TYPE_LABELS } from '../lib/labels.js';
 import { isUuid } from '../lib/validation.js';
 import type { AuthGuards } from '../plugins/auth.js';
 import {
   DOCUMENT_STATUSES,
   DOCUMENT_TYPES,
-  type DocumentStatus,
   type DocumentTypeDb,
 } from '../services/documents.js';
 import {
@@ -31,6 +30,7 @@ const REPORT_QUERY_SCHEMA = {
   properties: {
     q: { type: 'string', maxLength: 200 },
     type: { type: 'string', enum: DOCUMENT_TYPES as unknown as string[] },
+    // مرشِّح متقاعد: يُقبل للتوافق ولا يؤثر في النتائج.
     status: { type: 'string', enum: DOCUMENT_STATUSES as unknown as string[] },
     departmentId: { type: 'string', maxLength: 64 },
     dateFrom: { type: 'string', maxLength: 10 },
@@ -41,7 +41,6 @@ const REPORT_QUERY_SCHEMA = {
 interface ReportQuery {
   q?: string;
   type?: DocumentTypeDb;
-  status?: DocumentStatus;
   departmentId?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -60,7 +59,6 @@ function parseReportFilters(query: ReportQuery): ReportSummaryFilters {
   return {
     q: query.q?.trim() || undefined,
     type: query.type,
-    status: query.status,
     departmentId: query.departmentId,
     dateFrom: query.dateFrom,
     dateTo: query.dateTo,
@@ -101,27 +99,27 @@ export function registerStatsRoutes(app: FastifyInstance, deps: StatsRoutesDeps)
       );
       const csv = buildCsv([
         [
-          'رقم المعاملة',
-          'العنوان',
+          'الرقم الاشاري',
+          'رقم التسلسل',
+          'موضوع الرسالة',
           'النوع',
-          'التاريخ',
-          'الجهة المرسلة',
-          'الجهة المستلمة',
+          'تاريخ الرسالة',
+          'من',
+          'إلى',
           'الإدارة',
-          'الحالة',
           'الملاحظات',
           'عدد المرفقات',
           'تاريخ الإنشاء',
         ],
         ...rows.map((row) => [
           row.reference,
+          row.sequence_number ?? '',
           row.title,
           TYPE_LABELS[row.type] ?? row.type,
           row.date,
           row.sender,
           row.recipient,
           row.department,
-          STATUS_LABELS[row.status] ?? row.status,
           row.notes,
           row.files_count,
           row.created_at.toISOString().slice(0, 10),

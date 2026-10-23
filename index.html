@@ -97,9 +97,6 @@
               <h2>مرحباً بك في الأرشيف الإلكتروني</h2>
               <p>إدارة المراسلات والوثائق من مكان واحد.</p>
             </div>
-            <button class="button white-button" id="addDocumentButton" data-requires-department type="button">
-              + تسجيل معاملة
-            </button>
           </div>
           <div class="stats">
             <div class="stat-card">
@@ -119,10 +116,10 @@
             </div>
             <div class="stat-card">
               <div class="stat-top">
-                <span>قيد الإجراء</span><span>⏳</span>
+                <span>هذا الشهر</span><span>🗓️</span>
               </div>
-              <h2 id="pendingCount">0</h2>
-              <small>معاملات تحتاج إلى متابعة</small>
+              <h2 id="monthCount">0</h2>
+              <small>معاملات مسجلة هذا الشهر</small>
             </div>
           </div>
           <div class="panel">
@@ -131,7 +128,7 @@
               <input
                 id="dashboardSearch"
                 class="search"
-                placeholder="ابحث عن معاملة..."
+                placeholder="الرقم الاشاري أو موضوع الرسالة أو الجهة..."
                 type="search"
               />
             </div>
@@ -156,7 +153,7 @@
               <input
                 id="incomingSearch"
                 class="search"
-                placeholder="رقم المعاملة أو العنوان أو الجهة..."
+                placeholder="الرقم الاشاري أو موضوع الرسالة أو رقم التسلسل أو الجهة..."
                 type="search"
               />
             </div>
@@ -181,7 +178,7 @@
               <input
                 id="outgoingSearch"
                 class="search"
-                placeholder="رقم المعاملة أو العنوان أو الجهة..."
+                placeholder="الرقم الاشاري أو موضوع الرسالة أو رقم التسلسل أو الجهة..."
                 type="search"
               />
             </div>
@@ -206,20 +203,13 @@
               <input
                 id="archiveSearch"
                 class="search"
-                placeholder="رقم المعاملة أو العنوان أو الجهة..."
+                placeholder="الرقم الاشاري أو موضوع الرسالة أو رقم التسلسل أو الجهة..."
                 type="search"
               />
               <select id="typeFilter">
                 <option value="">جميع الأنواع</option>
                 <option value="incoming">وارد</option>
                 <option value="outgoing">صادر</option>
-              </select>
-              <select id="statusFilter">
-                <option value="">جميع الحالات</option>
-                <option value="new">جديدة</option>
-                <option value="in_progress">قيد الإجراء</option>
-                <option value="completed">مكتملة</option>
-                <option value="archived">مؤرشفة</option>
               </select>
               <select id="departmentFilter">
                 <option value="">جميع الإدارات</option>
@@ -231,8 +221,9 @@
                 <option value="date:asc">التاريخ (الأقدم أولاً)</option>
                 <option value="createdAt:desc">تاريخ التسجيل (الأحدث)</option>
                 <option value="updatedAt:desc">آخر تعديل</option>
-                <option value="reference:asc">رقم المعاملة</option>
-                <option value="title:asc">العنوان</option>
+                <option value="reference:asc">الرقم الاشاري</option>
+                <option value="sequenceNumber:asc">رقم التسلسل</option>
+                <option value="title:asc">موضوع الرسالة</option>
               </select>
               <label class="checkbox-field admin-only is-hidden" id="includeDeletedField">
                 <input type="checkbox" id="includeDeletedFilter" />
@@ -296,16 +287,12 @@
                 <strong id="reportTotal">0</strong>
               </div>
               <div class="report-box">
-                <span>المعاملات المكتملة</span>
-                <strong id="reportCompleted">0</strong>
+                <span>المراسلات الواردة</span>
+                <strong id="reportIncoming">0</strong>
               </div>
               <div class="report-box">
-                <span>المعاملات قيد الإجراء</span>
-                <strong id="reportPending">0</strong>
-              </div>
-              <div class="report-box">
-                <span>الوثائق المؤرشفة</span>
-                <strong id="reportArchived">0</strong>
+                <span>المراسلات الصادرة</span>
+                <strong id="reportOutgoing">0</strong>
               </div>
             </div>
             <div class="report-details">
@@ -450,37 +437,29 @@
     <div class="modal" id="documentModal" role="dialog" aria-modal="true">
       <div class="modal-box">
         <div class="modal-header">
-          <h2 id="formTitle">تسجيل معاملة جديدة</h2>
+          <h2 id="formTitle">تسجيل مراسلة واردة</h2>
           <button type="button" class="close-button" id="closeDocumentModal">✕</button>
         </div>
         <form id="documentForm">
           <div id="documentFormError" class="alert alert-error" hidden></div>
-          <label for="reference">رقم المعاملة *</label>
-          <input id="reference" required maxlength="100" />
-          <label for="title">عنوان المعاملة *</label>
-          <input id="title" required maxlength="200" />
-          <label for="type">نوع المعاملة *</label>
-          <select id="type" required>
-            <option value="incoming">وارد</option>
-            <option value="outgoing">صادر</option>
-          </select>
-          <label for="date">تاريخ المعاملة *</label>
+          <label for="reference">الرقم الاشاري *</label>
+          <input id="reference" required maxlength="200" />
+          <label for="sequenceNumber">رقم التسلسل</label>
+          <input id="sequenceNumber" maxlength="100" />
+          <label for="title">موضوع الرسالة *</label>
+          <input id="title" required maxlength="500" />
+          <label for="date">تاريخ الرسالة *</label>
           <input id="date" type="date" required />
-          <label for="sender">الجهة المرسلة</label>
+          <label for="sender">من</label>
           <input id="sender" maxlength="200" />
-          <label for="recipient">الجهة المستلمة</label>
+          <label for="recipient">إلى</label>
           <input id="recipient" maxlength="200" />
-          <label for="department">الإدارة المختصة</label>
-          <select id="department">
-            <option value="">غير محددة</option>
-          </select>
-          <label for="status">حالة المعاملة</label>
-          <select id="status">
-            <option value="new">جديدة</option>
-            <option value="in_progress">قيد الإجراء</option>
-            <option value="completed">مكتملة</option>
-            <option value="archived">مؤرشفة</option>
-          </select>
+          <div id="departmentField" class="admin-only is-hidden">
+            <label for="department">الإدارة المختصة</label>
+            <select id="department">
+              <option value="">غير محددة</option>
+            </select>
+          </div>
           <label for="notes">ملاحظات</label>
           <textarea id="notes" rows="3" maxlength="2000"></textarea>
 
@@ -488,6 +467,10 @@
             <hr />
             <h3>المرفقات</h3>
             <div id="attachmentList" class="attachment-list"></div>
+            <div id="pendingAttachmentsSection" hidden>
+              <h4 class="attachment-subtitle">ملفات بانتظار الرفع</h4>
+              <div id="pendingAttachmentList" class="attachment-list"></div>
+            </div>
             <div class="attachment-upload">
               <input
                 type="file"
@@ -495,13 +478,11 @@
                 multiple
                 accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.odt,.ods,.rtf,.txt,.csv"
               />
-              <button class="button secondary-button" id="attachmentUploadButton" type="button">
-                رفع المرفقات المحددة
-              </button>
             </div>
             <small class="hint" id="attachmentHint">
-              يتم رفع الملفات فوراً إلى الخادم. الحد الأقصى لحجم الملف يحدده
-              إعداد الخادم (UPLOAD_MAX_MB).
+              اختر ملفاً أو أكثر. في وضع الإنشاء تُرفع الملفات تلقائياً بعد حفظ
+              المراسلة، وفي وضع التعديل يبدأ الرفع فور الاختيار. الحد الأقصى لحجم
+              الملف يحدده إعداد الخادم (UPLOAD_MAX_MB).
             </small>
           </div>
 

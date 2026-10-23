@@ -52,10 +52,10 @@ async function seed(): Promise<void> {
 
   // أربع معاملات في إدارة الموظف الحالية.
   const employeeDocuments = [
-    { reference: 'REP-001', type: 'incoming', status: 'new', date: '2026-01-05' },
-    { reference: 'REP-002', type: 'outgoing', status: 'in_progress', date: '2026-01-06' },
-    { reference: 'REP-003', type: 'incoming', status: 'completed', date: '2026-02-01' },
-    { reference: 'REP-004', type: 'outgoing', status: 'archived', date: '2026-03-01' },
+    { reference: 'REP-001', sequenceNumber: '0012/A', type: 'incoming', date: '2026-01-05' },
+    { reference: 'REP-002', type: 'outgoing', date: '2026-01-06' },
+    { reference: 'REP-003', type: 'incoming', date: '2026-02-01' },
+    { reference: 'REP-004', type: 'outgoing', date: '2026-03-01' },
   ];
   for (const document of employeeDocuments) {
     const response = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
@@ -71,7 +71,6 @@ async function seed(): Promise<void> {
         reference: `ADM-00${index + 1}`,
         title: `معاملة إدارية ${index + 1}`,
         type: index % 2 === 0 ? 'incoming' : 'outgoing',
-        status: ['new', 'in_progress', 'completed', 'archived'][index],
         date: `2026-0${index + 1}-15`,
         departmentId: originalDepartmentId,
       },
@@ -88,7 +87,7 @@ test('dashboard statistics are role-appropriate', async () => {
     deletedDocuments: number;
     incoming: number;
     outgoing: number;
-    byStatus: Record<string, number>;
+    byStatus?: unknown;
     departments: number;
     users: number | null;
     recent: unknown[];
@@ -97,12 +96,7 @@ test('dashboard statistics are role-appropriate', async () => {
   assert.equal(adminStats.deletedDocuments, 0);
   assert.equal(adminStats.incoming, 4);
   assert.equal(adminStats.outgoing, 4);
-  assert.deepEqual(adminStats.byStatus, {
-    new: 2,
-    in_progress: 2,
-    completed: 2,
-    archived: 2,
-  });
+  assert.equal(adminStats.byStatus, undefined);
   assert.equal(adminStats.departments, 2);
   assert.equal(adminStats.users, 2);
   assert.equal(adminStats.recent.length, 5);
@@ -128,20 +122,17 @@ test('dashboard statistics are role-appropriate', async () => {
   assert.ok(employeeStats.recent.every((item) => item.reference.startsWith('REP-')));
 });
 
-test('report summaries aggregate by status, type, department, and month', async () => {
+test('report summaries aggregate by type, department, and month without exposing status', async () => {
   const response = await apiRequest(context.app, employeeClient, 'GET', '/reports/summary');
   assert.equal(response.statusCode, 200);
   const summary = response.json() as {
     total: number;
-    byStatus: Array<{ status: string; count: number }>;
+    byStatus?: unknown;
     byType: Array<{ type: string; count: number }>;
     byDepartment: Array<{ department: string; count: number }>;
   };
   assert.equal(summary.total, 4);
-  assert.deepEqual(
-    summary.byStatus.map((row) => `${row.status}:${row.count}`).sort(),
-    ['archived:1', 'completed:1', 'in_progress:1', 'new:1'],
-  );
+  assert.equal(summary.byStatus, undefined);
   assert.deepEqual(
     summary.byType.map((row) => `${row.type}:${row.count}`).sort(),
     ['incoming:2', 'outgoing:2'],
@@ -150,8 +141,9 @@ test('report summaries aggregate by status, type, department, and month', async 
   assert.equal(general?.count, 4);
   assert.equal(summary.byDepartment.length, 1);
 
+  // مرشِّح الحالة متقاعد: يُقبل للتوافق ولا يغيّر النتيجة.
   const filtered = await apiRequest(context.app, employeeClient, 'GET', '/reports/summary?status=completed');
-  assert.equal((filtered.json() as { total: number }).total, 1);
+  assert.equal((filtered.json() as { total: number }).total, 4);
 });
 
 test('CSV export contains a BOM, Arabic headers, and one row per document', async () => {
@@ -167,9 +159,14 @@ test('CSV export contains a BOM, Arabic headers, and one row per document', asyn
 
   const text = response.body;
   assert.ok(text.startsWith('\uFEFF'));
-  assert.ok(text.includes('رقم المعاملة'));
+  assert.ok(text.includes('الرقم الاشاري'));
+  assert.ok(text.includes('رقم التسلسل'));
+  assert.ok(text.includes('موضوع الرسالة'));
+  assert.ok(text.includes('تاريخ الرسالة'));
   assert.ok(text.includes('REP-001'));
-  assert.ok(text.includes('مكتملة'));
+  assert.ok(text.includes('0012/A'));
+  assert.equal(text.includes('الحالة'), false);
+  assert.equal(text.includes('مكتملة'), false);
 
   const lines = text.trim().split(/\r?\n/);
   assert.equal(lines.length, 5);

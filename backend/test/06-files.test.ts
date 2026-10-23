@@ -96,13 +96,51 @@ test('uploads an attachment, records it, and streams it back on download', async
   assert.match(String(download.headers['content-disposition']), /^attachment;/);
   assert.match(String(download.headers['cache-control']), /no-store/);
 
+  const view = await apiRequest(context.app, employeeClient, 'GET', `/files/${file.id}/view`);
+  assert.equal(view.statusCode, 200, view.body);
+  assert.ok(view.rawPayload.equals(PNG_BYTES));
+  assert.equal(String(view.headers['content-type']), 'image/png');
+  assert.match(String(view.headers['content-disposition']), /^inline;/);
+  assert.match(String(view.headers['cache-control']), /private/);
+  assert.match(String(view.headers['cache-control']), /no-store/);
+  assert.equal(String(view.headers['x-content-type-options']), 'nosniff');
+
   const audit = await context.pool.query(
-    "SELECT action FROM audit_log WHERE action IN ('file.uploaded', 'file.downloaded') ORDER BY id ASC",
+    "SELECT action FROM audit_log WHERE action IN ('file.uploaded', 'file.downloaded', 'file.viewed') ORDER BY id ASC",
   );
   assert.deepEqual(
     audit.rows.map((row) => row.action),
-    ['file.uploaded', 'file.downloaded'],
+    ['file.uploaded', 'file.downloaded', 'file.viewed'],
   );
+});
+
+test('inline viewing permits PDF and safe images only and never serves active content inline', async () => {
+  const documentId = await createDocument('FILE-VIEW');
+  const pdf = await uploadFile(documentId, 'scan.pdf', 'application/pdf', Buffer.from('%PDF-1.4\n%%EOF\n'));
+  assert.equal(pdf.statusCode, 201, pdf.body);
+  const pdfId = (pdf.json() as { file: { id: string } }).file.id;
+  const pdfView = await apiRequest(context.app, employeeClient, 'GET', `/files/${pdfId}/view`);
+  assert.equal(pdfView.statusCode, 200, pdfView.body);
+  assert.equal(String(pdfView.headers['content-type']), 'application/pdf');
+  assert.match(String(pdfView.headers['content-disposition']), /^inline;/);
+  assert.equal(String(pdfView.headers['x-content-type-options']), 'nosniff');
+
+  const csv = await uploadFile(
+    documentId,
+    'report.csv',
+    'text/csv',
+    Buffer.from('reference,title\nCSV-1,test\n'),
+  );
+  assert.equal(csv.statusCode, 201, csv.body);
+  const csvId = (csv.json() as { file: { id: string } }).file.id;
+  const csvView = await apiRequest(context.app, employeeClient, 'GET', `/files/${csvId}/view`);
+  assert.equal(csvView.statusCode, 415);
+  assert.equal((csvView.json() as { error: { code: string } }).error.code, 'unsupported_preview');
+  const csvDownload = await apiRequest(context.app, employeeClient, 'GET', `/files/${csvId}/download`);
+  assert.equal(csvDownload.statusCode, 200);
+  assert.match(String(csvDownload.headers['content-disposition']), /^attachment;/);
+  const viewed = await context.pool.query("SELECT 1 FROM audit_log WHERE action = 'file.viewed'");
+  assert.equal(viewed.rows.length, 1);
 });
 
 test('rejects unsupported types, wrong content types, and missing files', async () => {
@@ -177,23 +215,26 @@ test('attachments cannot be added to deleted documents', async () => {
   assert.equal((response.json() as { error: { code: string } }).error.code, 'deleted_document');
 });
 
-test('file deletion is admin-only and removes the stored object', async () => {
+test('employees may delete attachments on editable documents in their department; admins manage globally', async () => {
   const documentId = await createDocument('FILE-6');
-  const uploaded = await uploadFile(documentId, 'scan.png', 'image/png', PNG_BYTES);
-  const fileId = (uploaded.json() as { file: { id: string } }).file.id;
+  const first = await uploadFile(documentId, 'scan.png', 'image/png', PNG_BYTES);
+  const firstId = (first.json() as { file: { id: string } }).file.id;
 
-  const employeeDelete = await apiRequest(context.app, employeeClient, 'DELETE', `/files/${fileId}`);
-  assert.equal(employeeDelete.statusCode, 403);
-
-  const adminDelete = await apiRequest(context.app, adminClient, 'DELETE', `/files/${fileId}`);
-  assert.equal(adminDelete.statusCode, 200);
+  const employeeDelete = await apiRequest(context.app, employeeClient, 'DELETE', `/files/${firstId}`);
+  assert.equal(employeeDelete.statusCode, 200, employeeDelete.body);
   assert.equal(context.storage.objects.size, 0);
 
   const rows = await context.pool.query('SELECT 1 FROM document_files');
   assert.equal(rows.rows.length, 0);
 
+  const second = await uploadFile(documentId, 'second.png', 'image/png', PNG_BYTES);
+  const secondId = (second.json() as { file: { id: string } }).file.id;
+  const adminDelete = await apiRequest(context.app, adminClient, 'DELETE', `/files/${secondId}`);
+  assert.equal(adminDelete.statusCode, 200, adminDelete.body);
+  assert.equal(context.storage.objects.size, 0);
+
   const audit = await context.pool.query("SELECT 1 FROM audit_log WHERE action = 'file.deleted'");
-  assert.equal(audit.rows.length, 1);
+  assert.equal(audit.rows.length, 2);
 });
 
 test('anonymous users cannot download files; deleted documents hide files from employees only', async () => {
@@ -212,6 +253,11 @@ test('anonymous users cannot download files; deleted documents hide files from e
   const admin = await apiRequest(context.app, adminClient, 'GET', `/files/${fileId}/download`);
   assert.equal(admin.statusCode, 200);
   assert.ok(admin.rawPayload.equals(PNG_BYTES));
+
+  const employeeView = await apiRequest(context.app, employeeClient, 'GET', `/files/${fileId}/view`);
+  assert.equal(employeeView.statusCode, 404);
+  const adminView = await apiRequest(context.app, adminClient, 'GET', `/files/${fileId}/view`);
+  assert.equal(adminView.statusCode, 200);
 
   const missing = await apiRequest(
     context.app,

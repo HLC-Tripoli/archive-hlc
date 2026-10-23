@@ -11,6 +11,8 @@ import {
   attachmentContentDisposition,
   deleteFileRow,
   getFileWithDocument,
+  inlineContentDisposition,
+  isInlinePreviewable,
   storeAttachment,
   type StoredFileWithDocument,
 } from '../services/files.js';
@@ -168,16 +170,68 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
     },
   );
 
-  app.delete(
-    '/files/:id',
-    { preHandler: guards.requireAdmin, schema: { params: ID_PARAMS_SCHEMA } },
-    async (request) => {
+  app.get(
+    '/files/:id/view',
+    { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
+    async (request, reply) => {
       const access = resolveDocumentAccessScope(request.authUser!);
       const { id } = request.params as { id: string };
       if (!isUuid(id)) throw ApiError.notFound('الملف غير موجود.');
 
       const found = await getFileWithDocument(pool, id, access);
       if (!found) throw ApiError.notFound('الملف غير موجود.');
+      if (found.document.deletedAt && !access.isAdmin) {
+        throw ApiError.notFound('الملف غير موجود.');
+      }
+      assertSupportedProvider(request, found.file, storage);
+      if (!isInlinePreviewable(found.file.mimeType)) {
+        throw new ApiError(
+          415,
+          'unsupported_preview',
+          'لا يمكن عرض هذا النوع من الملفات داخل المتصفح. استخدم زر التنزيل.',
+        );
+      }
+
+      const object = await storage.getObject(found.file.storageKey);
+
+      await writeAudit(
+        pool,
+        {
+          actorUserId: request.authUser!.id,
+          actorUsername: request.authUser!.username,
+          action: 'file.viewed',
+          entityType: 'document_file',
+          entityId: id,
+          details: { documentId: found.document.id, name: found.file.originalName },
+        },
+        { ip: request.ip, userAgent: (request.headers['user-agent'] ?? '') || null },
+      );
+
+      reply.header('Content-Type', found.file.mimeType || object.contentType || 'application/octet-stream');
+      reply.header('Content-Length', String(object.contentLength ?? found.file.sizeBytes));
+      reply.header('Content-Disposition', inlineContentDisposition(found.file.originalName));
+      reply.header('Cache-Control', 'private, no-store');
+      reply.header('X-Content-Type-Options', 'nosniff');
+      return reply.send(object.body);
+    },
+  );
+
+  app.delete(
+    '/files/:id',
+    { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
+    async (request) => {
+      const access = resolveDocumentAccessScope(request.authUser!);
+      const { id } = request.params as { id: string };
+      if (!isUuid(id)) throw ApiError.notFound('الملف غير موجود.');
+
+      // getFileWithDocument يقيّد الموظف بإدارته النشطة؛ المدير عام.
+      // الموظف لا يرى مرفقات مستند محذوف، ويبقى الحذف متاحاً للمدير فقط
+      // في سلة المحذوفات (سلوك إداري قائم).
+      const found = await getFileWithDocument(pool, id, access);
+      if (!found) throw ApiError.notFound('الملف غير موجود.');
+      if (found.document.deletedAt && !access.isAdmin) {
+        throw ApiError.notFound('الملف غير موجود.');
+      }
       assertSupportedProvider(request, found.file, storage);
 
       // نحذف الكائن من التخزين أولاً؛ إذا فشل الحذف نُبقي السجل كي لا يبقى الكائن يتيماً.

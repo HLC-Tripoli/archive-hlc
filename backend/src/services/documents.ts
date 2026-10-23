@@ -5,10 +5,25 @@ import { containsPattern } from '../lib/sql.js';
 import { listFilesForDocument, type FileRecordPublic } from './files.js';
 
 export type DocumentTypeDb = 'incoming' | 'outgoing';
+
+/**
+ * حالة المستند قيمة تاريخية داخلية فقط بعد إيقاف الحقل من واجهة المستخدم.
+ * تبقى في قاعدة البيانات للحفاظ على السجلات القديمة والنسخ الاحتياطية،
+ * وتُستخدم قيمتها الافتراضية عند الإدراج كي يبقى القيد NOT NULL صالحاً.
+ */
 export type DocumentStatus = 'new' | 'in_progress' | 'completed' | 'archived';
 
 export const DOCUMENT_TYPES: readonly DocumentTypeDb[] = ['incoming', 'outgoing'];
 export const DOCUMENT_STATUSES: readonly DocumentStatus[] = ['new', 'in_progress', 'completed', 'archived'];
+export const DEFAULT_DOCUMENT_STATUS: DocumentStatus = 'new';
+
+export const SEQUENCE_NUMBER_MAX_LENGTH = 100;
+
+/** يطبّع رقم التسلسل: تشذيب الفراغات الطرفية، والفراغ فقط يصبح NULL. */
+export function normalizeSequenceNumber(value: string | null | undefined): string | null {
+  const trimmed = (value ?? '').trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
 export interface DocumentDepartmentRef {
   id: string;
@@ -18,13 +33,13 @@ export interface DocumentDepartmentRef {
 export interface DocumentListItem {
   id: string;
   reference: string;
+  sequenceNumber: string | null;
   title: string;
   type: DocumentTypeDb;
   date: string;
   sender: string;
   recipient: string;
   department: DocumentDepartmentRef | null;
-  status: DocumentStatus;
   filesCount: number;
   createdByName: string | null;
   createdAt: Date;
@@ -43,12 +58,11 @@ export interface DocumentDetail extends DocumentListItem {
 export interface DocumentListFilters {
   q?: string;
   type?: DocumentTypeDb;
-  status?: DocumentStatus;
   departmentId?: string;
   dateFrom?: string;
   dateTo?: string;
   includeDeleted: boolean;
-  sort: 'date' | 'createdAt' | 'updatedAt' | 'reference' | 'title';
+  sort: 'date' | 'createdAt' | 'updatedAt' | 'reference' | 'sequenceNumber' | 'title';
   order: 'asc' | 'desc';
   page: number;
   pageSize: number;
@@ -59,12 +73,14 @@ const SORT_EXPRESSIONS: Record<DocumentListFilters['sort'], string> = {
   createdAt: 'doc.created_at',
   updatedAt: 'doc.updated_at',
   reference: 'lower(doc.reference)',
+  sequenceNumber: 'lower(doc.sequence_number)',
   title: 'lower(doc.title)',
 };
 
 interface DocumentListRow {
   id: string;
   reference: string;
+  sequence_number: string | null;
   title: string;
   doc_type: DocumentTypeDb;
   transaction_date: string;
@@ -72,7 +88,6 @@ interface DocumentListRow {
   recipient: string;
   department_id: string | null;
   department_name: string | null;
-  status: DocumentStatus;
   files_count: number;
   created_by_name: string | null;
   created_at: Date;
@@ -91,6 +106,7 @@ function toListItem(row: DocumentListRow | DocumentDetailRow): DocumentListItem 
   return {
     id: row.id,
     reference: row.reference,
+    sequenceNumber: row.sequence_number,
     title: row.title,
     type: row.doc_type,
     date: row.transaction_date,
@@ -100,7 +116,6 @@ function toListItem(row: DocumentListRow | DocumentDetailRow): DocumentListItem 
       row.department_id && row.department_name
         ? { id: row.department_id, name: row.department_name }
         : null,
-    status: row.status,
     filesCount: row.files_count,
     createdByName: row.created_by_name,
     createdAt: row.created_at,
@@ -110,10 +125,9 @@ function toListItem(row: DocumentListRow | DocumentDetailRow): DocumentListItem 
 }
 
 const LIST_SELECT = `
-  SELECT doc.id, doc.reference, doc.title, doc.doc_type,
+  SELECT doc.id, doc.reference, doc.sequence_number, doc.title, doc.doc_type,
          to_char(doc.transaction_date, 'YYYY-MM-DD') AS transaction_date,
          doc.sender, doc.recipient, doc.department_id, dep.name AS department_name,
-         doc.status,
          (SELECT count(*)::int FROM document_files f WHERE f.document_id = doc.id) AS files_count,
          creator.display_name AS created_by_name,
          doc.created_at, doc.updated_at, doc.deleted_at
@@ -144,13 +158,13 @@ export async function listDocuments(
   if (filters.q) {
     const pattern = addParam(containsPattern(filters.q));
     conditions.push(
-      `(doc.reference ILIKE ${pattern} ESCAPE '\\' OR doc.title ILIKE ${pattern} ESCAPE '\\' ` +
+      `(doc.reference ILIKE ${pattern} ESCAPE '\\' OR doc.sequence_number ILIKE ${pattern} ESCAPE '\\' ` +
+        `OR doc.title ILIKE ${pattern} ESCAPE '\\' ` +
         `OR doc.sender ILIKE ${pattern} ESCAPE '\\' OR doc.recipient ILIKE ${pattern} ESCAPE '\\' ` +
         `OR dep.name ILIKE ${pattern} ESCAPE '\\')`,
     );
   }
   if (filters.type) conditions.push(`doc.doc_type = ${addParam(filters.type)}`);
-  if (filters.status) conditions.push(`doc.status = ${addParam(filters.status)}`);
   if (filters.departmentId) conditions.push(`doc.department_id = ${addParam(filters.departmentId)}`);
   if (filters.dateFrom) conditions.push(`doc.transaction_date >= ${addParam(filters.dateFrom)}`);
   if (filters.dateTo) conditions.push(`doc.transaction_date <= ${addParam(filters.dateTo)}`);
@@ -200,10 +214,10 @@ export async function getDocumentById(
     conditions.push('doc.deleted_at IS NULL');
   }
   const { rows } = await db.query<DocumentDetailRow>(
-    `SELECT doc.id, doc.reference, doc.title, doc.doc_type,
+    `SELECT doc.id, doc.reference, doc.sequence_number, doc.title, doc.doc_type,
             to_char(doc.transaction_date, 'YYYY-MM-DD') AS transaction_date,
             doc.sender, doc.recipient, doc.department_id, dep.name AS department_name,
-            doc.status, doc.notes,
+            doc.notes,
             (SELECT count(*)::int FROM document_files f WHERE f.document_id = doc.id) AS files_count,
             creator.display_name AS created_by_name,
             updater.display_name AS updated_by_name,
@@ -238,8 +252,8 @@ export interface DocumentInput {
   date: string;
   sender: string;
   recipient: string;
+  sequenceNumber: string | null;
   departmentId: string | null;
-  status: DocumentStatus;
   notes: string;
 }
 
@@ -252,8 +266,8 @@ const PATCH_COLUMNS: Record<keyof DocumentInput, string> = {
   date: 'transaction_date',
   sender: 'sender',
   recipient: 'recipient',
+  sequenceNumber: 'sequence_number',
   departmentId: 'department_id',
-  status: 'status',
   notes: 'notes',
 };
 
@@ -271,8 +285,9 @@ export async function insertDocument(
   }
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO documents
-       (reference, title, doc_type, transaction_date, sender, recipient, department_id, status, notes, created_by, updated_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+       (reference, title, doc_type, transaction_date, sender, recipient, sequence_number,
+        department_id, status, notes, created_by, updated_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
      RETURNING id`,
     [
       input.reference,
@@ -281,8 +296,9 @@ export async function insertDocument(
       input.date,
       input.sender,
       input.recipient,
+      input.sequenceNumber,
       departmentId,
-      input.status,
+      DEFAULT_DOCUMENT_STATUS,
       input.notes,
       userId,
     ],

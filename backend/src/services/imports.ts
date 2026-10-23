@@ -5,6 +5,8 @@ import { withTransaction } from '../db/pool.js';
 import {
   DOCUMENT_TYPES,
   DOCUMENT_STATUSES,
+  normalizeSequenceNumber,
+  SEQUENCE_NUMBER_MAX_LENGTH,
   type DocumentStatus,
   type DocumentTypeDb,
 } from './documents.js';
@@ -14,7 +16,7 @@ import { writeAudit } from './audit.js';
  * استيراد بيانات النموذج القديم (localStorage) والنسخ الاحتياطية JSON.
  * الضمانات:
  *   * العملية كلها داخل معاملة واحدة (نجاح كامل أو تراجع كامل).
- *   * التكرار يُكتشف عبر المعرّف القديم (legacy_id) أو رقم المعاملة النشط،
+ *   * التكرار يُكتشف عبر المعرّف القديم (legacy_id) أو الرقم الاشاري النشط،
  *     لذا إعادة تشغيل الاستيراد لا تُنشئ سجلات مكرّرة.
  *   * كل سجل مرفوض يُعاد مع سبب واضح بالعربية.
  *   * يُسجَّل ملخّص العملية في data_imports وسجل التدقيق.
@@ -44,6 +46,8 @@ export interface ImportDocumentInput {
   date: string;
   sender?: string | null;
   recipient?: string | null;
+  sequenceNumber?: string | null;
+  /** حالة تاريخية من نسخة قديمة؛ تُحفظ في قاعدة البيانات ولا تُعرض في الواجهة. */
   status?: string | null;
   notes?: string | null;
   createdAt?: string | null;
@@ -122,14 +126,18 @@ async function prepareDepartmentMaps(
 }
 
 function validateDocumentInput(doc: ImportDocumentInput): string | null {
-  if (!doc.reference || !doc.reference.trim()) return 'رقم المعاملة مفقود.';
-  if (doc.reference.trim().length > 200) return 'رقم المعاملة أطول من الحد المسموح.';
-  if (!doc.title || !doc.title.trim()) return 'عنوان المعاملة مفقود.';
-  if (doc.title.trim().length > 500) return 'عنوان المعاملة أطول من الحد المسموح.';
+  if (!doc.reference || !doc.reference.trim()) return 'الرقم الاشاري مفقود.';
+  if (doc.reference.trim().length > 200) return 'الرقم الاشاري أطول من الحد المسموح.';
+  if (!doc.title || !doc.title.trim()) return 'موضوع الرسالة مفقود.';
+  if (doc.title.trim().length > 500) return 'موضوع الرسالة أطول من الحد المسموح.';
+  const sequenceNumber = normalizeSequenceNumber(doc.sequenceNumber);
+  if (sequenceNumber && sequenceNumber.length > SEQUENCE_NUMBER_MAX_LENGTH) {
+    return `رقم التسلسل أطول من الحد المسموح (${SEQUENCE_NUMBER_MAX_LENGTH} حرفاً).`;
+  }
   if (!(DOCUMENT_TYPES as readonly string[]).includes(doc.type)) {
     return 'نوع المعاملة غير معروف (يجب أن يكون وارداً أو صادراً).';
   }
-  if (!isValidIsoDate(doc.date)) return 'تاريخ المعاملة غير صالح (الصيغة المطلوبة YYYY-MM-DD).';
+  if (!isValidIsoDate(doc.date)) return 'تاريخ الرسالة غير صالح (الصيغة المطلوبة YYYY-MM-DD).';
   if (doc.notes && doc.notes.length > 4000) return 'الملاحظات أطول من الحد المسموح.';
   return null;
 }
@@ -169,7 +177,7 @@ async function importDocumentsCore(
     );
     if (duplicateReference.rows.length > 0) {
       duplicates += 1;
-      results.push({ index, legacyId, status: 'duplicate', reason: 'يوجد مستند نشط بنفس رقم المعاملة.' });
+      results.push({ index, legacyId, status: 'duplicate', reason: 'يوجد مستند نشط بنفس الرقم الاشاري.' });
       continue;
     }
 
@@ -185,16 +193,19 @@ async function importDocumentsCore(
       warnings.push(`السجل رقم ${index + 1}: تعذّر مطابقة القسم «${departmentName ?? legacyDepartmentId}»؛ استُورد بدون قسم.`);
     }
 
+    // نحفظ الحالة التاريخية القادمة من النسخ القديمة كما هي إن كانت معروفة،
+    // لكنها لا تدخل في أي استجابة أو تصدير جديد.
     const status = normalizeStatus(doc.status) ?? 'new';
+    const sequenceNumber = normalizeSequenceNumber(doc.sequenceNumber);
     const createdAt = isValidIsoDateTime(doc.createdAt) ? doc.createdAt : null;
     const updatedAt = isValidIsoDateTime(doc.updatedAt) ? doc.updatedAt : null;
 
     await client.query(
       `INSERT INTO documents
-         (reference, title, doc_type, transaction_date, sender, recipient, department_id, status, notes,
-          created_by, updated_by, legacy_id, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11,
-               COALESCE($12::timestamptz, now()), COALESCE($13::timestamptz, COALESCE($12::timestamptz, now())))`,
+         (reference, title, doc_type, transaction_date, sender, recipient, sequence_number,
+          department_id, status, notes, created_by, updated_by, legacy_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11, $12,
+               COALESCE($13::timestamptz, now()), COALESCE($14::timestamptz, COALESCE($13::timestamptz, now())))`,
       [
         doc.reference.trim(),
         doc.title.trim(),
@@ -202,6 +213,7 @@ async function importDocumentsCore(
         doc.date,
         (doc.sender ?? '').trim().slice(0, 200),
         (doc.recipient ?? '').trim().slice(0, 200),
+        sequenceNumber,
         departmentId,
         status,
         (doc.notes ?? '').slice(0, 4000),
@@ -338,12 +350,12 @@ export async function buildBackupExport(pool: Pool): Promise<BackupExport> {
   );
   const documents = await pool.query<{
     reference: string;
+    sequence_number: string | null;
     title: string;
     doc_type: DocumentTypeDb;
     transaction_date: string;
     sender: string;
     recipient: string;
-    status: DocumentStatus;
     notes: string;
     legacy_id: string | null;
     created_at: Date;
@@ -351,9 +363,9 @@ export async function buildBackupExport(pool: Pool): Promise<BackupExport> {
     department_name: string | null;
     file_count: number;
   }>(
-    `SELECT doc.reference, doc.title, doc.doc_type,
+    `SELECT doc.reference, doc.sequence_number, doc.title, doc.doc_type,
             to_char(doc.transaction_date, 'YYYY-MM-DD') AS transaction_date,
-            doc.sender, doc.recipient, doc.status, doc.notes, doc.legacy_id,
+            doc.sender, doc.recipient, doc.notes, doc.legacy_id,
             doc.created_at, doc.updated_at,
             dep.name AS department_name,
             (SELECT count(*)::int FROM document_files f WHERE f.document_id = doc.id) AS file_count
@@ -372,12 +384,12 @@ export async function buildBackupExport(pool: Pool): Promise<BackupExport> {
     departments: departments.rows.map((row) => ({ name: row.name, isActive: row.is_active })),
     documents: documents.rows.map((row) => ({
       reference: row.reference,
+      sequenceNumber: row.sequence_number,
       title: row.title,
       type: row.doc_type,
       date: row.transaction_date,
       sender: row.sender,
       recipient: row.recipient,
-      status: row.status,
       notes: row.notes,
       legacyId: row.legacy_id,
       createdAt: row.created_at.toISOString(),

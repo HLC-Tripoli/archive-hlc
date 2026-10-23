@@ -512,7 +512,8 @@ textarea:focus {
   overflow-x: auto;
 }
 table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   white-space: nowrap;
 }
@@ -863,10 +864,20 @@ hr,
     padding: 15px;
   }
   .topbar {
-    align-items: flex-start;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
   }
   .topbar h1 {
     font-size: 20px;
+  }
+  .topbar-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .user-badge {
+    flex: 1 1 auto;
+    justify-content: flex-end;
   }
   .user-badge {
     padding: 7px;
@@ -1300,6 +1311,53 @@ hr,
 .attachment-upload input[type="file"] {
   flex: 1 1 240px;
   max-width: 100%;
+}
+.attachment-subtitle {
+  margin: 16px 0 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.attachment-status {
+  color: var(--muted);
+}
+.attachment-status.is-error {
+  color: var(--danger-text);
+}
+.attachment-item.is-failed {
+  border-color: var(--btn-danger);
+}
+.attachment-item.is-uploading {
+  opacity: 0.9;
+}
+.attachment-progress {
+  display: block;
+  height: 3px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border);
+}
+.attachment-progress span {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: attachment-progress-slide 1.1s ease-in-out infinite;
+}
+@keyframes attachment-progress-slide {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(360%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .attachment-progress span {
+    animation: none;
+    width: 100%;
+  }
 }
 
 /* نتائج الاستيراد والترحيل */

@@ -31,6 +31,7 @@ const LEGACY_PAYLOAD = {
       date: '2024-05-01',
       sender: 'جهة أ',
       recipient: 'هاتف ليبيا',
+      sequenceNumber: '  0042/B  ',
       departmentLegacyId: 'd1',
       status: 'جديدة',
       notes: '',
@@ -104,14 +105,16 @@ test('legacy import validates records, maps statuses and departments, and report
     ['imported', 'imported', 'duplicate', 'rejected', 'rejected'],
   );
   assert.match(outcome.results[3]!.reason ?? '', /تاريخ/);
-  assert.match(outcome.results[4]!.reason ?? '', /عنوان/);
+  assert.match(outcome.results[4]!.reason ?? '', /موضوع الرسالة/);
 
-  const documents = await context.pool.query<{ reference: string; status: string }>(
-    'SELECT reference, status FROM documents ORDER BY reference',
-  );
+  const documents = await context.pool.query<{
+    reference: string;
+    status: string;
+    sequence_number: string | null;
+  }>('SELECT reference, status, sequence_number FROM documents ORDER BY reference');
   assert.deepEqual(
-    documents.rows.map((row) => `${row.reference}:${row.status}`),
-    ['LEG-001:new', 'LEG-002:in_progress'],
+    documents.rows.map((row) => `${row.reference}:${row.status}:${row.sequence_number ?? ''}`),
+    ['LEG-001:new:0042/B', 'LEG-002:in_progress:'],
   );
 
   const department = await context.pool.query<{ name: string }>(
@@ -173,10 +176,13 @@ test('backup export contains the metadata of active documents and departments', 
     formatVersion: number;
     app: string;
     departments: Array<{ name: string }>;
-    documents: Array<{ reference: string }>;
+    documents: Array<{ reference: string; sequenceNumber: string | null; status?: unknown }>;
   };
   assert.equal(backup.formatVersion, 1);
   assert.equal(backup.app, 'archive-hlc');
+  const exported = backup.documents.find((document) => document.reference === 'LEG-001');
+  assert.equal(exported?.sequenceNumber, '0042/B');
+  assert.ok(backup.documents.every((document) => document.status === undefined));
   // إدارة الاختبار الافتراضية + إدارتان من الترحيل.
   assert.equal(backup.departments.length, 3);
   assert.deepEqual(
@@ -201,9 +207,16 @@ test('backup import adds new documents, skips duplicates, and warns about attach
           title: 'من نسخة احتياطية',
           type: 'incoming',
           date: '2025-02-01',
+          sequenceNumber: '  0009  ',
           departmentName: 'إدارة جديدة',
           status: 'مكتملة',
           files: [{ name: 'attachment.pdf' }],
+        },
+        {
+          reference: 'BAK-002',
+          title: 'نسخة قديمة بلا رقم تسلسل',
+          type: 'outgoing',
+          date: '2025-02-03',
         },
         {
           reference: 'leg-001',
@@ -217,20 +230,32 @@ test('backup import adds new documents, skips duplicates, and warns about attach
   assert.equal(response.statusCode, 200, response.body);
   const outcome = response.json() as ImportOutcomeBody;
   assert.deepEqual(outcome.summary, {
-    documentsImported: 1,
+    documentsImported: 2,
     departmentsCreated: 1,
     duplicates: 1,
     rejected: 0,
   });
   assert.ok(outcome.warnings.some((warning) => warning.includes('مرفق')));
 
-  const imported = await context.pool.query<{ status: string; department: string | null }>(
-    `SELECT doc.status, dep.name AS department FROM documents doc
+  const imported = await context.pool.query<{
+    reference: string;
+    status: string;
+    sequence_number: string | null;
+    department: string | null;
+  }>(
+    `SELECT doc.reference, doc.status, doc.sequence_number, dep.name AS department
+       FROM documents doc
        LEFT JOIN departments dep ON dep.id = doc.department_id
-      WHERE doc.reference = 'BAK-001'`,
+      WHERE doc.reference IN ('BAK-001', 'BAK-002')
+      ORDER BY doc.reference`,
   );
+  // الحالة القديمة تُحفظ في قاعدة البيانات ولا تُعرض في الواجهة أو التصدير.
   assert.equal(imported.rows[0]!.status, 'completed');
+  assert.equal(imported.rows[0]!.sequence_number, '0009');
   assert.equal(imported.rows[0]!.department, 'إدارة جديدة');
+  // نسخة احتياطية قديمة بلا الحقل تُستورد بقيمة NULL وتظل قابلة للعرض.
+  assert.equal(imported.rows[1]!.sequence_number, null);
+  assert.equal(imported.rows[1]!.department, null);
 
   const kinds = await context.pool.query<{ kind: string }>('SELECT kind FROM data_imports');
   assert.deepEqual(

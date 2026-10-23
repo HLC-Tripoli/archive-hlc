@@ -150,6 +150,9 @@
     setCsrfToken: setCsrfToken,
     setUnauthorizedHandler: setUnauthorizedHandler,
     withQuery: withQuery,
+    url: function (path) {
+      return BASE + path;
+    },
     get: function (path, query) {
       return request("GET", withQuery(path, query));
     },

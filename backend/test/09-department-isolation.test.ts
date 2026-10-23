@@ -121,7 +121,6 @@ test('employee list is scoped server-side and no filter, search, sort, or paging
   const a1 = await createDocument(adminClient, 'ISO-A-1', departmentA);
   await createDocument(adminClient, 'ISO-A-2', departmentA, {
     type: 'outgoing',
-    status: 'completed',
   });
   const b1 = await createDocument(adminClient, 'ISO-B-1', departmentB);
   const nullDoc = await createDocument(adminClient, 'ISO-NULL-1', null);
@@ -249,6 +248,27 @@ test('cross-department detail, update, delete visibility, and attachments are no
     `/files/${bFile}/download`,
   );
   assert.equal(foreignDownload.statusCode, 404);
+  const ownView = await apiRequest(
+    context.app,
+    employeeAClient,
+    'GET',
+    `/files/${aFile}/view`,
+  );
+  assert.equal(ownView.statusCode, 200, ownView.body);
+  const foreignView = await apiRequest(
+    context.app,
+    employeeAClient,
+    'GET',
+    `/files/${bFile}/view`,
+  );
+  assert.equal(foreignView.statusCode, 404);
+  const foreignFileDelete = await apiRequest(
+    context.app,
+    employeeAClient,
+    'DELETE',
+    `/files/${bFile}`,
+  );
+  assert.equal(foreignFileDelete.statusCode, 404);
   const deletedDownload = await apiRequest(
     context.app,
     employeeAClient,
@@ -261,8 +281,23 @@ test('cross-department detail, update, delete visibility, and attachments are no
   assert.equal(foreignUpload.statusCode, 404);
   const ownUpload = await uploadFile(employeeAClient, a1, 'own.png');
   assert.equal(ownUpload.statusCode, 201, ownUpload.body);
+  const ownUploadId = uploadFileId(ownUpload);
+  const ownFileDelete = await apiRequest(
+    context.app,
+    employeeAClient,
+    'DELETE',
+    `/files/${ownUploadId}`,
+  );
+  assert.equal(ownFileDelete.statusCode, 200, ownFileDelete.body);
+  const foreignFileStillThere = await apiRequest(
+    context.app,
+    adminClient,
+    'GET',
+    `/files/${bFile}/download`,
+  );
+  assert.equal(foreignFileStillThere.statusCode, 200);
 
-  // مرفق مستند محذوف لا يُنزَّل للموظف.
+  // مرفق مستند محذوف لا يُنزَّل ولا يُحذف للموظف.
   const deletedFileDownload = await apiRequest(
     context.app,
     employeeAClient,
@@ -270,6 +305,20 @@ test('cross-department detail, update, delete visibility, and attachments are no
     `/files/${deletedFile}/download`,
   );
   assert.equal(deletedFileDownload.statusCode, 404);
+  const deletedFileView = await apiRequest(
+    context.app,
+    employeeAClient,
+    'GET',
+    `/files/${deletedFile}/view`,
+  );
+  assert.equal(deletedFileView.statusCode, 404);
+  const deletedFileDelete = await apiRequest(
+    context.app,
+    employeeAClient,
+    'DELETE',
+    `/files/${deletedFile}`,
+  );
+  assert.equal(deletedFileDelete.statusCode, 404);
 
   // المدير يرى التفاصيل المحذوفة عالمياً.
   const adminDeletedDetail = await apiRequest(
@@ -350,16 +399,10 @@ test('employee writes always use the current assigned department and cannot move
 });
 
 test('dashboard, reports, and CSV export are scoped to the employee department', async () => {
-  await createDocument(adminClient, 'ISO-DASH-A1', departmentA, { type: 'incoming', status: 'new' });
-  await createDocument(adminClient, 'ISO-DASH-A2', departmentA, {
-    type: 'outgoing',
-    status: 'completed',
-  });
-  await createDocument(adminClient, 'ISO-DASH-B1', departmentB, { type: 'incoming', status: 'new' });
-  await createDocument(adminClient, 'ISO-DASH-B2', departmentB, {
-    type: 'outgoing',
-    status: 'archived',
-  });
+  await createDocument(adminClient, 'ISO-DASH-A1', departmentA, { type: 'incoming' });
+  await createDocument(adminClient, 'ISO-DASH-A2', departmentA, { type: 'outgoing' });
+  await createDocument(adminClient, 'ISO-DASH-B1', departmentB, { type: 'incoming' });
+  await createDocument(adminClient, 'ISO-DASH-B2', departmentB, { type: 'outgoing' });
   await createDocument(adminClient, 'ISO-DASH-NULL', null);
 
   const dashboard = await apiRequest(context.app, employeeAClient, 'GET', '/stats/dashboard');

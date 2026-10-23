@@ -17,8 +17,6 @@ let adminClient: AuthedClient;
 let employeeClient: AuthedClient;
 let employeeDepartmentId: string;
 
-const STATUSES = ['new', 'in_progress', 'completed', 'archived'] as const;
-
 before(async () => {
   context = await createTestContext();
   await ensureMigrated(context.pool);
@@ -64,7 +62,6 @@ async function seedDocuments(departmentId: string, count = 25): Promise<void> {
       title: `معاملة تجريبية ${index}`,
       type: index % 2 === 0 ? 'outgoing' : 'incoming',
       date: `2026-0${(index % 3) + 1}-${String(index).padStart(2, '0')}`,
-      status: STATUSES[(index - 1) % 4]!,
     };
     if (index % 2 === 0) payload.departmentId = departmentId;
     await createDocument(payload);
@@ -84,8 +81,10 @@ test('employee creates a document in the assigned department; invalid payloads a
   });
   const detail = await apiRequest(context.app, employeeClient, 'GET', `/documents/${created.id}`);
   assert.equal(detail.statusCode, 200);
-  const document = (detail.json() as { document: { status: string; department: { name: string }; notes: string } }).document;
-  assert.equal(document.status, 'new');
+  const document = (detail.json() as {
+    document: { department: { name: string }; notes: string; status?: unknown };
+  }).document;
+  assert.equal(document.status, undefined);
   assert.ok(document.department.name);
   assert.equal(document.notes, 'ملاحظة');
 
@@ -218,6 +217,83 @@ test('duplicate references are rejected regardless of letter case', async () => 
   assert.equal((duplicate.json() as { error: { code: string } }).error.code, 'duplicate_reference');
 });
 
+test('sequence number is optional text and survives create/edit/read/search/sort with leading zeros and letters', async () => {
+  const created = await createDocument({
+    reference: 'SEQ-001',
+    sequenceNumber: '  0012/A  ',
+    title: 'مراسلة برقم تسلسل',
+    type: 'incoming',
+    date: '2026-02-01',
+  });
+  const detail = await apiRequest(context.app, employeeClient, 'GET', `/documents/${created.id}`);
+  assert.equal(detail.statusCode, 200);
+  assert.equal(
+    (detail.json() as { document: { sequenceNumber: string | null } }).document.sequenceNumber,
+    '0012/A',
+  );
+
+  const blank = await createDocument({
+    reference: 'SEQ-002',
+    sequenceNumber: '   ',
+    title: 'مراسلة بلا رقم تسلسل',
+    type: 'incoming',
+    date: '2026-02-02',
+  });
+  const blankDetail = await apiRequest(context.app, employeeClient, 'GET', `/documents/${blank.id}`);
+  assert.equal(
+    (blankDetail.json() as { document: { sequenceNumber: string | null } }).document.sequenceNumber,
+    null,
+  );
+
+  const tooLong = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
+    payload: {
+      reference: 'SEQ-003',
+      sequenceNumber: '0'.repeat(101),
+      title: 'رقم تسلسل طويل',
+      type: 'incoming',
+      date: '2026-02-03',
+    },
+  });
+  assert.equal(tooLong.statusCode, 400);
+
+  const padded = await createDocument({
+    reference: 'SEQ-010',
+    sequenceNumber: '0007',
+    title: 'أصفار بادئة',
+    type: 'outgoing',
+    date: '2026-02-04',
+  });
+
+  const bySequence = await apiRequest(context.app, employeeClient, 'GET', '/documents?q=0012');
+  const bySequenceBody = bySequence.json() as { items: Array<{ reference: string }>; total: number };
+  assert.equal(bySequenceBody.total, 1);
+  assert.equal(bySequenceBody.items[0]!.reference, 'SEQ-001');
+
+  const byLetters = await apiRequest(context.app, employeeClient, 'GET', '/documents?q=A');
+  assert.equal((byLetters.json() as { total: number }).total, 1);
+
+  const sorted = await apiRequest(
+    context.app,
+    employeeClient,
+    'GET',
+    '/documents?sort=sequenceNumber&order=asc',
+  );
+  const sortedBody = sorted.json() as { items: Array<{ reference: string; sequenceNumber: string | null }> };
+  assert.deepEqual(
+    sortedBody.items.map((item) => item.reference),
+    ['SEQ-010', 'SEQ-001', 'SEQ-002'],
+  );
+
+  const cleared = await apiRequest(context.app, employeeClient, 'PATCH', `/documents/${padded.id}`, {
+    payload: { sequenceNumber: '   ' },
+  });
+  assert.equal(cleared.statusCode, 200);
+  assert.equal(
+    (cleared.json() as { document: { sequenceNumber: string | null } }).document.sequenceNumber,
+    null,
+  );
+});
+
 test('listing supports filters, Arabic search, sorting, and pagination within the employee department', async () => {
   await seedDocuments(employeeDepartmentId);
 
@@ -228,8 +304,11 @@ test('listing supports filters, Arabic search, sorting, and pagination within th
   assert.equal(pageBody.items.length, 10);
   assert.equal(pageBody.page, 1);
 
-  const byStatus = await apiRequest(context.app, employeeClient, 'GET', '/documents?status=new');
-  assert.equal((byStatus.json() as { total: number }).total, 7);
+  // الحالة متقاعدة: تمريرها للتوافق لا يغيّر النتائج ولا يعيدها في العناصر.
+  const retiredStatus = await apiRequest(context.app, employeeClient, 'GET', '/documents?status=new');
+  assert.equal((retiredStatus.json() as { total: number }).total, 25);
+  const retiredItems = (retiredStatus.json() as { items: Array<{ status?: unknown }> }).items;
+  assert.ok(retiredItems.every((item) => item.status === undefined));
 
   const byType = await apiRequest(context.app, employeeClient, 'GET', '/documents?type=outgoing');
   assert.equal((byType.json() as { total: number }).total, 12);
@@ -287,16 +366,17 @@ test('updates report changed fields and reject empty or unknown payloads', async
   });
 
   const updated = await apiRequest(context.app, employeeClient, 'PATCH', `/documents/${created.id}`, {
-    payload: { status: 'completed', recipient: 'إدارة الأرشيف' },
+    payload: { sequenceNumber: '  0012/A  ', recipient: 'إدارة الأرشيف' },
   });
   assert.equal(updated.statusCode, 200);
   const updatedBody = updated.json() as {
-    document: { status: string; recipient: string };
+    document: { status?: unknown; sequenceNumber: string | null; recipient: string };
     changedFields: string[];
   };
-  assert.equal(updatedBody.document.status, 'completed');
+  assert.equal(updatedBody.document.status, undefined);
+  assert.equal(updatedBody.document.sequenceNumber, '0012/A');
   assert.equal(updatedBody.document.recipient, 'إدارة الأرشيف');
-  assert.ok(updatedBody.changedFields.includes('status'));
+  assert.ok(updatedBody.changedFields.includes('sequenceNumber'));
   assert.ok(updatedBody.changedFields.includes('recipient'));
 
   const empty = await apiRequest(context.app, employeeClient, 'PATCH', `/documents/${created.id}`, {
@@ -314,7 +394,7 @@ test('updates report changed fields and reject empty or unknown payloads', async
     employeeClient,
     'PATCH',
     '/documents/00000000-0000-4000-8000-000000000000',
-    { payload: { status: 'new' } },
+    { payload: { title: 'غير موجود' } },
   );
   assert.equal(unknownId.statusCode, 404);
 
@@ -347,7 +427,7 @@ test('soft delete hides the document from employees; admin can list and restore 
   assert.equal(employeeHidden.statusCode, 404);
 
   const editDeleted = await apiRequest(context.app, employeeClient, 'PATCH', `/documents/${created.id}`, {
-    payload: { status: 'completed' },
+    payload: { title: 'محاولة تعديل محذوفة' },
   });
   assert.equal(editDeleted.statusCode, 404);
 

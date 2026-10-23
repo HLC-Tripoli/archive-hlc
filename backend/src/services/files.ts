@@ -77,13 +77,39 @@ export function buildStorageKey(documentId: string, fileId: string, extension: s
   return `documents/${documentId}/${fileId}.${extension}`;
 }
 
-export function attachmentContentDisposition(filename: string): string {
-  const asciiFallback = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_') || 'attachment';
+function encodedFilenameDisposition(type: 'attachment' | 'inline', filename: string): string {
+  const asciiFallback = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_') || 'file';
   const encoded = encodeURIComponent(filename).replace(
     /['()*]/g,
     (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
   );
-  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
+  return `${type}; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
+}
+
+export function attachmentContentDisposition(filename: string): string {
+  return encodedFilenameDisposition('attachment', filename);
+}
+
+/** ترويسة عرض داخل المتصفح: تُستخدم فقط مع أنواع محتوى سلبية مسموحة. */
+export function inlineContentDisposition(filename: string): string {
+  return encodedFilenameDisposition('inline', filename);
+}
+
+/**
+ * أنواع المرفقات التي يمكن عرضها داخل المتصفح بأمان (PDF وصور نقطية سلبية).
+ * لا تُعرض HTML/CSV/Office/النصوص لأنها قد تنفّذ محتوى نشطاً أو تُحمَّل كملف.
+ */
+export const INLINE_PREVIEW_MIME_TYPES: readonly string[] = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/bmp',
+];
+
+export function isInlinePreviewable(mimeType: string): boolean {
+  return INLINE_PREVIEW_MIME_TYPES.includes(mimeType);
 }
 
 export interface FileRecordPublic {

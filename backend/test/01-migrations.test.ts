@@ -53,6 +53,7 @@ test('schema is created from scratch, applied once, and migrations are idempoten
     '0001_init.sql',
     '0002_employee_number.sql',
     '0003_user_department.sql',
+    '0004_document_sequence_number.sql',
   ]);
 
   const { rows } = await pool.query<{ table_name: string }>(
@@ -99,6 +100,19 @@ test('schema is created from scratch, applied once, and migrations are idempoten
   );
   assert.equal(departmentIndex.rows.length, 1, 'users department index is missing');
 
+  const sequenceColumn = await pool.query(
+    `SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'documents' AND column_name = 'sequence_number'`,
+  );
+  assert.equal(sequenceColumn.rows.length, 1, 'sequence_number column is missing');
+
+  const sequenceIndex = await pool.query(
+    `SELECT 1 FROM pg_indexes
+      WHERE schemaname = 'public' AND tablename = 'documents'
+        AND indexname = 'documents_sequence_number_trgm_idx'`,
+  );
+  assert.equal(sequenceIndex.rows.length, 1, 'sequence-number search index is missing');
+
   const foreignKey = await pool.query<{ delete_rule: string }>(
     `SELECT rc.delete_rule
        FROM information_schema.table_constraints tc
@@ -117,6 +131,7 @@ test('schema is created from scratch, applied once, and migrations are idempoten
     '0001_init.sql',
     '0002_employee_number.sql',
     '0003_user_department.sql',
+    '0004_document_sequence_number.sql',
   ]);
 });
 
@@ -143,6 +158,7 @@ test('employee-number migration preserves existing users and leaves their number
     assert.deepEqual(second.applied, [
       '0002_employee_number.sql',
       '0003_user_department.sql',
+      '0004_document_sequence_number.sql',
     ]);
 
     const preserved = await pool.query<{
@@ -229,7 +245,10 @@ test('department migration preserves existing departments, users, documents, and
     );
 
     const after = await runMigrations(pool);
-    assert.deepEqual(after.applied, ['0003_user_department.sql']);
+    assert.deepEqual(after.applied, [
+      '0003_user_department.sql',
+      '0004_document_sequence_number.sql',
+    ]);
 
     const preserved = await pool.query<{
       department_id: string | null;
@@ -260,6 +279,88 @@ test('department migration preserves existing departments, users, documents, and
     await assert.rejects(
       () => pool.query('DELETE FROM departments WHERE id = $1', [departmentId]),
       /violates RESTRICT setting of foreign key constraint/,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('sequence-number migration preserves existing documents and files and leaves the new value NULL', async () => {
+  await pool.query('DROP SCHEMA public CASCADE');
+  await pool.query('CREATE SCHEMA public');
+
+  const directory = await mkdtemp(path.join(tmpdir(), 'hlc-migrations-'));
+  try {
+    // قاعدة بيانات على المخطط السابق مباشرة: 0001 + 0002 + 0003 فقط.
+    for (const name of ['0001_init.sql', '0002_employee_number.sql', '0003_user_department.sql']) {
+      await writeFile(
+        path.join(directory, name),
+        await readFile(path.join(MIGRATIONS_DIR, name), 'utf8'),
+      );
+    }
+    const before = await runMigrations(pool, { migrationsDir: directory });
+    assert.deepEqual(before.applied, [
+      '0001_init.sql',
+      '0002_employee_number.sql',
+      '0003_user_department.sql',
+    ]);
+
+    const department = await pool.query<{ id: string }>(
+      "INSERT INTO departments (name) VALUES ('إدارة المراسلات') RETURNING id",
+    );
+    const departmentId = department.rows[0]!.id;
+    const employee = await pool.query<{ id: string }>(
+      `INSERT INTO users (username, display_name, role, password_hash, employee_number, department_id)
+       VALUES ('seq.emp', 'موظف تسلسل', 'employee', 'hash', 'SEQ-1', $1)
+       RETURNING id`,
+      [departmentId],
+    );
+    const employeeId = employee.rows[0]!.id;
+    const document = await pool.query<{ id: string }>(
+      `INSERT INTO documents
+         (reference, title, doc_type, transaction_date, sender, recipient, department_id,
+          status, notes, created_by, updated_by)
+       VALUES ('SEQ-OLD-1', 'مراسلة قديمة', 'incoming', '2025-03-01', 'جهة', 'هاتف ليبيا', $1,
+               'completed', 'ملاحظة قديمة', $2, $2)
+       RETURNING id`,
+      [departmentId, employeeId],
+    );
+    const documentId = document.rows[0]!.id;
+    await pool.query(
+      `INSERT INTO document_files
+         (document_id, original_name, mime_type, size_bytes, storage_provider, storage_key)
+       VALUES ($1, 'old.pdf', 'application/pdf', 8, 'local', 'legacy/old-seq.pdf')`,
+      [documentId],
+    );
+
+    const after = await runMigrations(pool);
+    assert.deepEqual(after.applied, ['0004_document_sequence_number.sql']);
+
+    const preserved = await pool.query<{
+      reference: string;
+      sequence_number: string | null;
+      status: string;
+      notes: string;
+    }>('SELECT reference, sequence_number, status, notes FROM documents WHERE id = $1', [documentId]);
+    assert.deepEqual(preserved.rows[0], {
+      reference: 'SEQ-OLD-1',
+      sequence_number: null,
+      status: 'completed',
+      notes: 'ملاحظة قديمة',
+    });
+
+    const counts = await pool.query<{ documents: number; files: number }>(
+      `SELECT
+         (SELECT count(*)::int FROM documents) AS documents,
+         (SELECT count(*)::int FROM document_files) AS files`,
+    );
+    assert.deepEqual(counts.rows[0], { documents: 1, files: 1 });
+
+    // القيد يسمح بالأصفار البادئة والحروف، ويمنع السلسلة الفارغة.
+    await pool.query("UPDATE documents SET sequence_number = '0012/A' WHERE id = $1", [documentId]);
+    await assert.rejects(
+      () => pool.query("UPDATE documents SET sequence_number = '' WHERE id = $1", [documentId]),
+      /violates check constraint/,
     );
   } finally {
     await rm(directory, { recursive: true, force: true });

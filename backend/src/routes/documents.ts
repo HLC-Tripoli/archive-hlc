@@ -14,12 +14,13 @@ import {
   getDocumentById,
   insertDocument,
   listDocuments,
+  normalizeSequenceNumber,
   restoreDocument,
+  SEQUENCE_NUMBER_MAX_LENGTH,
   softDeleteDocument,
   updateDocument,
   type DocumentInput,
   type DocumentPatch,
-  type DocumentStatus,
   type DocumentTypeDb,
 } from '../services/documents.js';
 
@@ -35,9 +36,13 @@ const BODY_PROPERTIES = {
   date: { type: 'string', maxLength: 10 },
   sender: { type: 'string', maxLength: 200 },
   recipient: { type: 'string', maxLength: 200 },
+  // نسمح بفراغات زائدة في المخطط ثم نطبّق الحد بعد التشذيب في الخدمة.
+  sequenceNumber: { type: ['string', 'null'], maxLength: SEQUENCE_NUMBER_MAX_LENGTH + 200 },
   // ملاحظة: استخدام مصفوفة الأنواع (بدل anyOf) ضروري لأن Fastify/Ajv مع coerceTypes
   // يحوّل null إلى "" عند مطابقة فرع string في anyOf، فيفشل إدراج uuid لفارغ.
   departmentId: { type: ['string', 'null'], maxLength: 64 },
+  // حالة المعاملة متقاعدة من واجهة المستخدم. يبقى قبولها في المخطط للتوافق مع
+  // عملاء API القدامى، لكنها تُهمَل ولا تُعاد في أي استجابة أو تصدير.
   status: { type: 'string', enum: DOCUMENT_STATUSES as unknown as string[] },
   notes: { type: 'string', maxLength: 4000 },
 } as const;
@@ -48,12 +53,17 @@ const LIST_QUERY_SCHEMA = {
   properties: {
     q: { type: 'string', maxLength: 200 },
     type: { type: 'string', enum: DOCUMENT_TYPES as unknown as string[] },
+    // مرشِّح متقاعد: يُقبل للتوافق ولا يؤثر في النتائج.
     status: { type: 'string', enum: DOCUMENT_STATUSES as unknown as string[] },
     departmentId: { type: 'string', maxLength: 64 },
     dateFrom: { type: 'string', maxLength: 10 },
     dateTo: { type: 'string', maxLength: 10 },
     includeDeleted: { type: 'boolean', default: false },
-    sort: { type: 'string', enum: ['date', 'createdAt', 'updatedAt', 'reference', 'title'], default: 'date' },
+    sort: {
+      type: 'string',
+      enum: ['date', 'createdAt', 'updatedAt', 'reference', 'sequenceNumber', 'title'],
+      default: 'date',
+    },
     order: { type: 'string', enum: ['asc', 'desc'], default: 'desc' },
     page: { type: 'integer', minimum: 1, default: 1 },
     pageSize: { type: 'integer', minimum: 1, maximum: 100, default: 25 },
@@ -69,12 +79,11 @@ const ID_PARAMS_SCHEMA = {
 interface DocumentListQuery {
   q?: string;
   type?: DocumentTypeDb;
-  status?: DocumentStatus;
   departmentId?: string;
   dateFrom?: string;
   dateTo?: string;
   includeDeleted: boolean;
-  sort: 'date' | 'createdAt' | 'updatedAt' | 'reference' | 'title';
+  sort: 'date' | 'createdAt' | 'updatedAt' | 'reference' | 'sequenceNumber' | 'title';
   order: 'asc' | 'desc';
   page: number;
   pageSize: number;
@@ -118,7 +127,6 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
         {
           q: query.q?.trim() || undefined,
           type: query.type,
-          status: query.status,
           departmentId: query.departmentId,
           dateFrom: query.dateFrom,
           dateTo: query.dateTo,
@@ -169,12 +177,19 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
       };
       const access = resolveDocumentAccessScope(request.authUser!);
       if (!isValidIsoDate(body.date)) {
-        throw ApiError.badRequest('invalid_date', 'تاريخ المعاملة غير صالح. استخدم الصيغة YYYY-MM-DD.');
+        throw ApiError.badRequest('invalid_date', 'تاريخ الرسالة غير صالح. استخدم الصيغة YYYY-MM-DD.');
       }
       const reference = body.reference.trim();
       const title = body.title.trim();
+      const sequenceNumber = normalizeSequenceNumber(body.sequenceNumber);
       if (!reference || !title) {
-        throw ApiError.badRequest('missing_fields', 'رقم المعاملة والعنوان مطلوبان.');
+        throw ApiError.badRequest('missing_fields', 'الرقم الاشاري وموضوع الرسالة مطلوبان.');
+      }
+      if (sequenceNumber && sequenceNumber.length > SEQUENCE_NUMBER_MAX_LENGTH) {
+        throw ApiError.badRequest(
+          'sequence_number_too_long',
+          `رقم التسلسل أطول من الحد المسموح (${SEQUENCE_NUMBER_MAX_LENGTH} حرفاً).`,
+        );
       }
       if (!access.isAdmin && body.departmentId !== undefined && body.departmentId !== access.departmentId) {
         throw new ApiError(
@@ -202,8 +217,8 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
             date: body.date,
             sender: (body.sender ?? '').trim(),
             recipient: (body.recipient ?? '').trim(),
+            sequenceNumber,
             departmentId: body.departmentId ?? null,
-            status: body.status ?? 'new',
             notes: (body.notes ?? '').trim(),
           },
           userId,
@@ -251,7 +266,7 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
       const body = request.body as Partial<DocumentInput>;
 
       if (body.date !== undefined && !isValidIsoDate(body.date)) {
-        throw ApiError.badRequest('invalid_date', 'تاريخ المعاملة غير صالح. استخدم الصيغة YYYY-MM-DD.');
+        throw ApiError.badRequest('invalid_date', 'تاريخ الرسالة غير صالح. استخدم الصيغة YYYY-MM-DD.');
       }
       if (body.departmentId !== undefined && body.departmentId !== null) {
         if (!isUuid(body.departmentId)) {
@@ -281,14 +296,23 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
       if (body.date !== undefined) patch.date = body.date;
       if (body.sender !== undefined) patch.sender = body.sender.trim();
       if (body.recipient !== undefined) patch.recipient = body.recipient.trim();
+      if (body.sequenceNumber !== undefined) {
+        const sequenceNumber = normalizeSequenceNumber(body.sequenceNumber);
+        if (sequenceNumber && sequenceNumber.length > SEQUENCE_NUMBER_MAX_LENGTH) {
+          throw ApiError.badRequest(
+            'sequence_number_too_long',
+            `رقم التسلسل أطول من الحد المسموح (${SEQUENCE_NUMBER_MAX_LENGTH} حرفاً).`,
+          );
+        }
+        patch.sequenceNumber = sequenceNumber;
+      }
       if (body.departmentId !== undefined) patch.departmentId = body.departmentId;
-      if (body.status !== undefined) patch.status = body.status;
       if (body.notes !== undefined) patch.notes = body.notes.trim();
       if (patch.reference !== undefined && !patch.reference) {
-        throw ApiError.badRequest('invalid_reference', 'رقم المعاملة مطلوب.');
+        throw ApiError.badRequest('invalid_reference', 'الرقم الاشاري مطلوب.');
       }
       if (patch.title !== undefined && !patch.title) {
-        throw ApiError.badRequest('invalid_title', 'عنوان المعاملة مطلوب.');
+        throw ApiError.badRequest('invalid_title', 'موضوع الرسالة مطلوب.');
       }
 
       const userId = request.authUser!.id;
@@ -371,7 +395,7 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
         if (result === 'conflict') {
           throw ApiError.conflict(
             'restore_conflict',
-            'تعذّرت الاستعادة: يوجد مستند نشط آخر بنفس رقم المعاملة.',
+            'تعذّرت الاستعادة: يوجد مستند نشط آخر بنفس الرقم الاشاري.',
           );
         }
         await writeAudit(

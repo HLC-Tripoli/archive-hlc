@@ -30,6 +30,7 @@ const IMPORT_DOCUMENT_ITEM_SCHEMA = {
     date: { type: 'string', maxLength: 40 },
     sender: { type: 'string', maxLength: 300 },
     recipient: { type: 'string', maxLength: 300 },
+    sequenceNumber: { type: ['string', 'null'], maxLength: 300 },
     status: { type: 'string', maxLength: 60 },
     notes: { type: 'string', maxLength: 5000 },
     createdAt: { type: 'string', maxLength: 40 },

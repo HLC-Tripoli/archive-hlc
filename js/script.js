@@ -24,13 +24,15 @@
     settings: "إعدادات المنظومة"
   };
   var TYPE_LABELS = { incoming: "وارد", outgoing: "صادر" };
-  var STATUS_LABELS = {
-    new: "جديدة",
-    in_progress: "قيد الإجراء",
-    completed: "مكتملة",
-    archived: "مؤرشفة"
-  };
   var ROLE_LABELS = { admin: "مدير النظام", employee: "موظف الأرشيف" };
+  var PREVIEWABLE_MIME_TYPES = {
+    "application/pdf": true,
+    "image/jpeg": true,
+    "image/png": true,
+    "image/webp": true,
+    "image/gif": true,
+    "image/bmp": true
+  };
   var ACTION_LABELS = {
     "auth.login.success": "دخول ناجح",
     "auth.login.failed": "محاولة دخول فاشلة",
@@ -42,6 +44,7 @@
     "document.restored": "استعادة معاملة",
     "file.uploaded": "رفع مرفق",
     "file.downloaded": "تنزيل مرفق",
+    "file.viewed": "عرض مرفق",
     "file.deleted": "حذف مرفق",
     "user.created": "إنشاء مستخدم",
     "user.updated": "تعديل مستخدم",
@@ -72,7 +75,6 @@
         pageSize: 10,
         q: "",
         type: "",
-        status: "",
         departmentId: "",
         dateFrom: "",
         dateTo: "",
@@ -86,7 +88,12 @@
     },
     editingDocumentId: null,
     editingUserId: null,
-    detailDocumentId: null
+    detailDocumentId: null,
+    // نية الإنشاء تُحدَّد من الزر الذي فتح النافذة، لا من حقل نموذج.
+    documentType: "incoming",
+    pendingFiles: [],
+    pendingCounter: 0,
+    uploadingAttachments: false
   };
 
   function el(id) {
@@ -235,6 +242,14 @@
 
   function hideModal(id) {
     el(id).classList.remove("show");
+  }
+
+  function closeDocumentModal() {
+    if (state.uploadingAttachments) {
+      toast("انتظر انتهاء رفع المرفقات قبل إغلاق النافذة.", "error");
+      return;
+    }
+    hideModal("documentModal");
   }
 
   function showFormError(id, message) {
@@ -633,11 +648,11 @@
      الجداول والتقارير
      ======================================================================== */
   var DOC_COLUMNS = [
-    "رقم المعاملة",
-    "العنوان",
+    "الرقم الاشاري",
+    "رقم التسلسل",
+    "موضوع الرسالة",
     "النوع",
-    "التاريخ",
-    "الحالة",
+    "تاريخ الرسالة",
     "الإدارة",
     "الإجراءات"
   ];
@@ -651,10 +666,6 @@
     var rows = items
       .map(function (document) {
         var deleted = Boolean(document.deletedAt);
-        var statusClass =
-          document.status === "completed" || document.status === "archived"
-            ? document.status
-            : "";
         var actions = [
           '<button type="button" class="small-button" data-doc-action="view" data-id="' +
             escapeHTML(document.id) +
@@ -688,17 +699,15 @@
           "><td>" +
           escapeHTML(document.reference) +
           "</td><td>" +
+          escapeHTML(document.sequenceNumber || "—") +
+          "</td><td>" +
           escapeHTML(document.title) +
           (deleted ? ' <span class="badge badge-deleted">محذوفة</span>' : "") +
           "</td><td>" +
           escapeHTML(TYPE_LABELS[document.type] || document.type) +
           "</td><td>" +
           escapeHTML(document.date) +
-          '</td><td><span class="status ' +
-          statusClass +
-          '">' +
-          escapeHTML(STATUS_LABELS[document.status] || document.status) +
-          "</span></td><td>" +
+          "</td><td>" +
           escapeHTML(document.department ? document.department.name : "غير محددة") +
           '</td><td><div class="action-buttons">' +
           actions.join("") +
@@ -740,7 +749,6 @@
     return {
       q: view.q,
       type: view.type,
-      status: view.status,
       // الموظف لا يرسل departmentId إطلاقاً: الخادم يشتق النطاق من
       // department_id الحالي في قاعدة البيانات، فلا تؤثر أي حالة قديمة
       // في المتصفح ولا يمكن فرض إدارة أخرى عبر المرشِّح.
@@ -779,13 +787,13 @@
       el("incomingCount").textContent = stats.incoming;
       el("outgoingCount").textContent = stats.outgoing;
       el("totalCount").textContent = stats.activeDocuments;
-      el("pendingCount").textContent = stats.byStatus ? stats.byStatus.in_progress : 0;
+      el("monthCount").textContent = stats.thisMonth || 0;
     } catch (error) {
       if (isDepartmentBlocked()) {
         el("incomingCount").textContent = "0";
         el("outgoingCount").textContent = "0";
         el("totalCount").textContent = "0";
-        el("pendingCount").textContent = "0";
+        el("monthCount").textContent = "0";
       }
     }
   }
@@ -793,16 +801,15 @@
   async function loadReports() {
     try {
       var summary = await api.get("/reports/summary", {});
-      var statusCount = function (status) {
-        var entry = (summary.byStatus || []).find(function (row) {
-          return row.status === status;
+      var typeCount = function (type) {
+        var entry = (summary.byType || []).find(function (row) {
+          return row.type === type;
         });
         return entry ? entry.count : 0;
       };
       el("reportTotal").textContent = summary.total;
-      el("reportCompleted").textContent = statusCount("completed");
-      el("reportPending").textContent = statusCount("in_progress");
-      el("reportArchived").textContent = statusCount("archived");
+      el("reportIncoming").textContent = typeCount("incoming");
+      el("reportOutgoing").textContent = typeCount("outgoing");
       renderReportList(
         "reportByType",
         (summary.byType || []).map(function (row) {
@@ -848,7 +855,41 @@
   /* ========================================================================
      المعاملات: النموذج والتفاصيل والحذف والاستعادة
      ======================================================================== */
+  function canDeleteAttachments() {
+    return Boolean(isAdmin() || (state.user && state.user.role === "employee" && !isDepartmentBlocked()));
+  }
+
+  function attachmentActions(file) {
+    var actions = [];
+    if (PREVIEWABLE_MIME_TYPES[file.mimeType]) {
+      actions.push(
+        '<button type="button" class="small-button" data-file-action="view" data-id="' +
+          escapeHTML(file.id) +
+          '">عرض</button>'
+      );
+    }
+    actions.push(
+      '<button type="button" class="small-button" data-file-action="download" data-id="' +
+        escapeHTML(file.id) +
+        '">تنزيل</button>'
+    );
+    if (canDeleteAttachments()) {
+      actions.push(
+        '<button type="button" class="small-button delete-button" data-file-action="delete" data-id="' +
+          escapeHTML(file.id) +
+          '"' +
+          (state.uploadingAttachments ? " disabled" : "") +
+          '>حذف</button>'
+      );
+    }
+    return actions.join("");
+  }
+
   async function openDocumentForm(mode, documentId, defaultType) {
+    if (state.uploadingAttachments) {
+      toast("انتظر انتهاء رفع المرفقات قبل فتح نافذة أخرى.", "error");
+      return;
+    }
     if (isDepartmentBlocked()) {
       toast(departmentAccessMessage(), "error");
       return;
@@ -864,18 +905,23 @@
       }
     }
     state.editingDocumentId = doc ? doc.id : null;
+    // نية الإنشاء من الزر المفتوح فقط؛ لا يوجد حقل نوع في النموذج.
+    state.documentType = doc ? doc.type : defaultType === "outgoing" ? "outgoing" : "incoming";
+    state.pendingFiles = [];
+    state.pendingCounter = 0;
+    state.uploadingAttachments = false;
     var form = el("documentForm");
     form.reset();
     showFormError("documentFormError", "");
     await loadDepartmentsForSelects();
 
     el("formTitle").textContent = doc
-      ? "تعديل بيانات المعاملة"
+      ? "تعديل بيانات المراسلة"
       : defaultType === "outgoing"
         ? "تسجيل مراسلة صادرة"
         : "تسجيل مراسلة واردة";
-    el("type").value = doc ? doc.type : defaultType || "incoming";
     el("reference").value = doc ? doc.reference : "";
+    el("sequenceNumber").value = doc && doc.sequenceNumber ? doc.sequenceNumber : "";
     el("title").value = doc ? doc.title : "";
     el("date").value = doc ? doc.date : todayString();
     el("sender").value = doc ? doc.sender : "";
@@ -887,26 +933,25 @@
         : state.user && state.user.departmentId
           ? state.user.departmentId
           : "";
-    el("status").value = doc ? doc.status : "new";
     el("notes").value = doc ? doc.notes : "";
 
     var attachmentsSection = el("attachmentsSection");
     var attachmentInput = el("attachmentInput");
     var attachmentHint = el("attachmentHint");
     attachmentInput.value = "";
+    attachmentInput.disabled = false;
     attachmentsSection.hidden = false;
     if (doc) {
-      el("attachmentUploadButton").hidden = false;
       attachmentHint.textContent =
-        "يتم رفع الملفات فوراً إلى الخادم. الحد الأقصى لحجم الملف يحدده إعداد الخادم (UPLOAD_MAX_MB).";
+        "اختر ملفاً أو أكثر؛ يبدأ الرفع تلقائياً فور الاختيار. يمكنك اختيار دفعات إضافية بعد انتهاء الرفع. الحد الأقصى لحجم الملف يحدده إعداد الخادم (UPLOAD_MAX_MB).";
       await refreshAttachmentList(doc.id);
     } else {
-      // وضع الإنشاء: يختار المستخدم الملفات الآن وتُرفع تلقائياً بعد حفظ المعاملة.
-      el("attachmentUploadButton").hidden = true;
+      // وضع الإنشاء: يختار المستخدم الملفات الآن وتُرفع تلقائياً بعد حفظ المراسلة.
       attachmentHint.textContent =
-        "اختر الملفات المطلوبة؛ ستُرفع تلقائياً عند حفظ المعاملة. الحد الأقصى لحجم الملف يحدده إعداد الخادم (UPLOAD_MAX_MB).";
-      renderEmpty(el("attachmentList"), "لم تُحدد ملفات بعد.");
+        "اختر ملفاً أو أكثر؛ ستُرفع الملفات المحددة تلقائياً بعد حفظ المراسلة. يمكنك إلغاء أي ملف قبل الحفظ. الحد الأقصى لحجم الملف يحدده إعداد الخادم (UPLOAD_MAX_MB).";
+      renderEmpty(el("attachmentList"), "لا توجد مرفقات محفوظة بعد.");
     }
+    renderPendingAttachments();
     showModal("documentModal");
     el("reference").focus();
   }
@@ -925,18 +970,11 @@
   function renderAttachmentList(files) {
     var container = el("attachmentList");
     if (!files.length) {
-      renderEmpty(container, "لا توجد مرفقات لهذه المعاملة.");
+      renderEmpty(container, "لا توجد مرفقات لهذه المراسلة.");
       return;
     }
     container.innerHTML = files
       .map(function (file) {
-        var deleteButton = "";
-        if (isAdmin()) {
-          deleteButton =
-            '<button type="button" class="small-button delete-button" data-file-action="delete" data-id="' +
-            escapeHTML(file.id) +
-            '">حذف</button>';
-        }
         return (
           '<div class="attachment-item">' +
           '<div class="attachment-meta"><strong>' +
@@ -950,143 +988,219 @@
             : "") +
           "</small></div>" +
           '<div class="action-buttons">' +
-          '<button type="button" class="small-button" data-file-action="download" data-id="' +
-          escapeHTML(file.id) +
-          '">تنزيل</button>' +
-          deleteButton +
+          attachmentActions(file) +
           "</div></div>"
         );
       })
       .join("");
   }
 
-  /** عرض الملفات المختارة في وضع الإنشاء (تُرفع تلقائياً عند حفظ المعاملة). */
-  function renderPendingAttachments(files) {
-    var container = el("attachmentList");
-    if (!files.length) {
-      renderEmpty(container, "لم تُحدد ملفات بعد.");
+  function pendingStatusText(entry) {
+    if (entry.status === "uploading") return "جارٍ الرفع…";
+    if (entry.status === "failed") return "تعذّر الرفع: " + (entry.error || "خطأ غير معروف");
+    return state.editingDocumentId
+      ? "بانتظار الرفع"
+      : "بانتظار حفظ المراسلة ثم الرفع تلقائياً";
+  }
+
+  /** يعرض الملفات المختارة غير المحفوظة بعد (إنشاء) أو الفاشلة (تعديل). */
+  function renderPendingAttachments() {
+    var section = el("pendingAttachmentsSection");
+    var container = el("pendingAttachmentList");
+    if (!state.pendingFiles.length) {
+      section.hidden = true;
+      container.innerHTML = "";
       return;
     }
-    container.innerHTML = files
-      .map(function (file) {
+    section.hidden = false;
+    container.innerHTML = state.pendingFiles
+      .map(function (entry) {
+        var actions = "";
+        if (entry.status !== "uploading") {
+          if (entry.status === "failed") {
+            actions +=
+              '<button type="button" class="small-button" data-pending-action="retry" data-key="' +
+              entry.key +
+              '">إعادة المحاولة</button>';
+          }
+          actions +=
+            '<button type="button" class="small-button secondary-button" data-pending-action="remove" data-key="' +
+            entry.key +
+            '">إلغاء</button>';
+        }
+        var classes =
+          "attachment-item" +
+          (entry.status === "failed" ? " is-failed" : "") +
+          (entry.status === "uploading" ? " is-uploading" : "");
         return (
-          '<div class="attachment-item"><div class="attachment-meta"><strong>' +
-          escapeHTML(file.name) +
+          '<div class="' +
+          classes +
+          '">' +
+          '<div class="attachment-meta"><strong>' +
+          escapeHTML(entry.file.name) +
           "</strong><small>" +
-          escapeHTML(formatBytes(file.size)) +
-          " — ستُرفع عند حفظ المعاملة</small></div></div>"
+          escapeHTML(formatBytes(entry.file.size)) +
+          ' — <span class="attachment-status' +
+          (entry.status === "failed" ? " is-error" : "") +
+          '">' +
+          escapeHTML(pendingStatusText(entry)) +
+          "</span>" +
+          (entry.status === "uploading"
+            ? '<span class="attachment-progress" aria-hidden="true"><span></span></span>'
+            : "") +
+          "</small></div>" +
+          '<div class="action-buttons">' +
+          actions +
+          "</div></div>"
         );
       })
       .join("");
+  }
+
+  function addPendingFiles(fileList) {
+    Array.prototype.slice.call(fileList || []).forEach(function (file) {
+      state.pendingCounter += 1;
+      state.pendingFiles.push({
+        key: state.pendingCounter,
+        file: file,
+        status: "queued",
+        error: null
+      });
+    });
+    // تصفير الحقل يسمح باختيار الملف نفسه مرة أخرى دون استبدال القائمة.
+    el("attachmentInput").value = "";
+    renderPendingAttachments();
+  }
+
+  function removePendingFile(key) {
+    state.pendingFiles = state.pendingFiles.filter(function (entry) {
+      return entry.key !== key;
+    });
+    renderPendingAttachments();
+  }
+
+  async function uploadPendingEntries(documentId, onlyKey) {
+    if (!documentId || state.uploadingAttachments) return;
+    var entries = state.pendingFiles.filter(function (entry) {
+      if (onlyKey !== undefined) return entry.key === onlyKey;
+      return entry.status === "queued" || entry.status === "failed";
+    });
+    if (!entries.length) return;
+
+    state.uploadingAttachments = true;
+    el("attachmentInput").disabled = true;
+    el("saveDocumentButton").disabled = true;
+    var uploadedNames = [];
+    var failedNames = [];
+    try {
+      for (var index = 0; index < entries.length; index += 1) {
+        var entry = entries[index];
+        entry.status = "uploading";
+        entry.error = null;
+        renderPendingAttachments();
+        var formData = new FormData();
+        formData.append("file", entry.file);
+        try {
+          await api.postForm("/documents/" + documentId + "/files", formData);
+          state.pendingFiles = state.pendingFiles.filter(function (item) {
+            return item.key !== entry.key;
+          });
+          uploadedNames.push(entry.file.name);
+        } catch (uploadError) {
+          entry.status = "failed";
+          entry.error = errorMessage(uploadError);
+          failedNames.push(entry.file.name);
+        }
+        renderPendingAttachments();
+      }
+    } finally {
+      state.uploadingAttachments = false;
+      el("attachmentInput").disabled = false;
+      el("saveDocumentButton").disabled = false;
+      renderPendingAttachments();
+    }
+
+    await refreshAttachmentList(documentId);
+    refreshDocumentsAndStats();
+    if (failedNames.length) {
+      toast(
+        (uploadedNames.length ? "تم رفع " + uploadedNames.length + " ملفاً، " : "") +
+          "وتعذّر رفع: " +
+          failedNames.join("، ") +
+          ". يمكنك إعادة المحاولة من قائمة الملفات.",
+        "error"
+      );
+    } else if (uploadedNames.length) {
+      toast(
+        uploadedNames.length === 1
+          ? "تم رفع المرفق."
+          : "تم رفع " + uploadedNames.length + " مرفقات."
+      );
+    }
+  }
+
+  function handleAttachmentSelection() {
+    var input = el("attachmentInput");
+    var files = Array.prototype.slice.call(input.files || []);
+    if (!files.length) return;
+    addPendingFiles(files);
+    if (state.editingDocumentId) uploadPendingEntries(state.editingDocumentId);
   }
 
   async function submitDocumentForm(event) {
     event.preventDefault();
     var button = el("saveDocumentButton");
     showFormError("documentFormError", "");
+    var createMode = !state.editingDocumentId;
     var payload = {
       reference: el("reference").value.trim(),
+      sequenceNumber: el("sequenceNumber").value.trim(),
       title: el("title").value.trim(),
-      type: el("type").value,
       date: el("date").value,
       sender: el("sender").value.trim(),
       recipient: el("recipient").value.trim(),
-      status: el("status").value,
       notes: el("notes").value.trim()
     };
+    // نوع المراسلة نية إنشاء صريحة من القسم الذي فتح النافذة. في التعديل
+    // لا نرسله إطلاقاً كي يبقى النوع المخزَّن دون تغيير.
+    if (createMode) payload.type = state.documentType;
     // المدير وحده يختار الإدارة؛ أما الموظف فيفرض الخادم إدارته الحالية
     // من قاعدة البيانات، ولا نرسل قيمة محلية قد تكون قديمة.
     if (isAdmin()) payload.departmentId = el("department").value || null;
-    // في وضع الإنشاء: الملفات المختارة تُرفع بعد إنشاء المعاملة مباشرة.
-    var pendingFiles = state.editingDocumentId
-      ? []
-      : Array.prototype.slice.call(el("attachmentInput").files || []);
-    setBusy(button, true, pendingFiles.length ? "جارٍ الحفظ والرفع…" : "جارٍ الحفظ…");
+    var queued = state.pendingFiles.length > 0;
+    setBusy(button, true, createMode && queued ? "جارٍ الحفظ ورفع المرفقات…" : "جارٍ الحفظ…");
     try {
-      if (state.editingDocumentId) {
+      if (!createMode) {
         await api.patch("/documents/" + state.editingDocumentId, payload);
-        toast("تم تحديث المعاملة.");
+        if (state.pendingFiles.length) {
+          toast("تم تحديث المراسلة. ما زالت هناك ملفات لم تُرفع؛ أعد المحاولة أو ألغِها.", "error");
+        } else {
+          toast("تم تحديث المراسلة.");
+          hideModal("documentModal");
+        }
       } else {
         var created = await api.post("/documents", payload);
         var newDocumentId =
           created && created.document && created.document.id ? created.document.id : null;
-        var uploaded = 0;
-        var failedNames = [];
-        var lastUploadError = null;
-        for (var index = 0; index < pendingFiles.length && newDocumentId; index += 1) {
-          var formData = new FormData();
-          formData.append("file", pendingFiles[index]);
-          try {
-            await api.postForm("/documents/" + newDocumentId + "/files", formData);
-            uploaded += 1;
-          } catch (uploadError) {
-            lastUploadError = uploadError;
-            failedNames.push(pendingFiles[index].name);
-          }
-        }
-        if (!newDocumentId && pendingFiles.length) {
-          failedNames = pendingFiles.map(function (file) {
-            return file.name;
-          });
-        }
-        if (failedNames.length) {
-          toast(
-            "تم تسجيل المعاملة، لكن تعذّر رفع: " +
-              failedNames.join("، ") +
-              (lastUploadError ? " — " + errorMessage(lastUploadError) : ""),
-            "error"
-          );
-        } else if (uploaded > 0) {
-          toast(
-            uploaded === 1
-              ? "تم تسجيل المعاملة ورفع المرفق."
-              : "تم تسجيل المعاملة ورفع " + uploaded + " مرفقات."
-          );
+        if (!newDocumentId) throw new Error("تعذّر تحديد المراسلة المنشأة.");
+        // ننتقل إلى وضع التعديل فوراً كي تظهر المرفقات المخزَّنة وأزرارها،
+        // مع إبقاء الملفات الفاشلة قابلة لإعادة المحاولة دون تكرار الناجحة.
+        state.editingDocumentId = newDocumentId;
+        el("formTitle").textContent = "تعديل بيانات المراسلة";
+        el("attachmentHint").textContent =
+          "اختر ملفاً أو أكثر؛ يبدأ الرفع تلقائياً فور الاختيار. يمكنك اختيار دفعات إضافية بعد انتهاء الرفع. الحد الأقصى لحجم الملف يحدده إعداد الخادم (UPLOAD_MAX_MB).";
+        refreshDocumentsAndStats();
+        if (state.pendingFiles.length) {
+          await uploadPendingEntries(newDocumentId);
+          // تبقى النافذة مفتوحة لعرض المرفقات المرفوعة ونتائج أي فشل جزئي.
         } else {
-          toast("تم تسجيل المعاملة بنجاح.");
+          toast("تم تسجيل المراسلة بنجاح.");
+          hideModal("documentModal");
         }
       }
-      hideModal("documentModal");
-      refreshDocumentsAndStats();
     } catch (error) {
+      // في وضع الإنشاء تبقى الملفات في قائمة الانتظار للسماح بإعادة المحاولة.
       showFormError("documentFormError", errorMessage(error));
-    } finally {
-      setBusy(button, false);
-    }
-  }
-
-  async function uploadSelectedAttachments() {
-    var documentId = state.editingDocumentId;
-    var input = el("attachmentInput");
-    if (!documentId || !input.files || !input.files.length) {
-      toast("اختر ملفاً واحداً على الأقل أولاً.", "error");
-      return;
-    }
-    var button = el("attachmentUploadButton");
-    var files = Array.prototype.slice.call(input.files);
-    setBusy(button, true, "جارٍ الرفع…");
-    var uploaded = 0;
-    try {
-      for (var index = 0; index < files.length; index += 1) {
-        var formData = new FormData();
-        formData.append("file", files[index]);
-        await api.postForm("/documents/" + documentId + "/files", formData);
-        uploaded += 1;
-      }
-      toast(
-        uploaded === 1
-          ? "تم رفع المرفق."
-          : "تم رفع " + uploaded + " مرفقات."
-      );
-      input.value = "";
-      await refreshAttachmentList(documentId);
-      refreshDocumentsAndStats();
-    } catch (error) {
-      toast(
-        (uploaded > 0 ? "تم رفع " + uploaded + " ملفاً، " : "") + errorMessage(error),
-        "error"
-      );
-      await refreshAttachmentList(documentId);
     } finally {
       setBusy(button, false);
     }
@@ -1101,13 +1215,24 @@
     }
   }
 
+  function previewFile(fileId) {
+    window.open(api.url("/files/" + encodeURIComponent(fileId) + "/view"), "_blank", "noopener");
+  }
+
   async function deleteFile(fileId) {
+    if (state.uploadingAttachments) {
+      toast("انتظر انتهاء رفع الملفات قبل حذف مرفق محفوظ.", "error");
+      return;
+    }
     var confirmed = await confirmDialog("هل تريد حذف هذا المرفق نهائياً؟");
     if (!confirmed) return;
     try {
       await api.del("/files/" + fileId);
       toast("تم حذف المرفق.");
       if (state.editingDocumentId) await refreshAttachmentList(state.editingDocumentId);
+      if (state.detailDocumentId && el("detailModal").classList.contains("show")) {
+        await openDocumentDetail(state.detailDocumentId);
+      }
       refreshDocumentsAndStats();
     } catch (error) {
       toast(errorMessage(error), "error");
@@ -1124,16 +1249,16 @@
       var data = await api.get("/documents/" + documentId);
       var doc = data.document;
       var deleted = Boolean(doc.deletedAt);
-      el("detailTitle").textContent = "تفاصيل المعاملة " + doc.reference;
+      el("detailTitle").textContent = "تفاصيل المراسلة " + doc.reference;
       var fields = [
-        ["رقم المعاملة", doc.reference],
-        ["العنوان", doc.title],
+        ["الرقم الاشاري", doc.reference],
+        ["رقم التسلسل", doc.sequenceNumber || "—"],
+        ["موضوع الرسالة", doc.title],
         ["النوع", TYPE_LABELS[doc.type] || doc.type],
-        ["التاريخ", doc.date],
-        ["الحالة", STATUS_LABELS[doc.status] || doc.status],
+        ["تاريخ الرسالة", doc.date],
         ["الإدارة", doc.department ? doc.department.name : "غير محددة"],
-        ["الجهة المرسلة", doc.sender || "—"],
-        ["الجهة المستلمة", doc.recipient || "—"],
+        ["من", doc.sender || "—"],
+        ["إلى", doc.recipient || "—"],
         ["الملاحظات", doc.notes || "—"],
         ["سُجلت بواسطة", doc.createdByName || "—"],
         ["تاريخ التسجيل", formatDateTime(doc.createdAt)],
@@ -1167,9 +1292,8 @@
                 " — " +
                 escapeHTML(formatDateTime(file.createdAt)) +
                 '</small></div><div class="action-buttons">' +
-                '<button type="button" class="small-button" data-file-action="download" data-id="' +
-                escapeHTML(file.id) +
-                '">تنزيل</button></div></div>'
+                attachmentActions(file) +
+                "</div></div>"
               );
             })
             .join("")
@@ -1732,6 +1856,7 @@
             date: (document && document.date) || "",
             sender: (document && document.sender) || "",
             recipient: (document && document.recipient) || "",
+            sequenceNumber: (document && document.sequenceNumber) || null,
             status: (document && document.status) || null,
             notes: (document && document.notes) || "",
             createdAt: (document && document.createdAt) || null,
@@ -1906,9 +2031,6 @@
       });
     });
 
-    el("addDocumentButton").addEventListener("click", function () {
-      openDocumentForm("create", null, "incoming");
-    });
     el("addIncomingButton").addEventListener("click", function () {
       openDocumentForm("create", null, "incoming");
     });
@@ -1917,19 +2039,11 @@
     });
 
     el("documentForm").addEventListener("submit", submitDocumentForm);
-    el("closeDocumentModal").addEventListener("click", function () {
-      hideModal("documentModal");
-    });
-    el("cancelDocumentButton").addEventListener("click", function () {
-      hideModal("documentModal");
-    });
-    el("attachmentUploadButton").addEventListener("click", uploadSelectedAttachments);
-    el("attachmentInput").addEventListener("change", function () {
-      if (state.editingDocumentId) return;
-      renderPendingAttachments(Array.prototype.slice.call(el("attachmentInput").files || []));
-    });
+    el("closeDocumentModal").addEventListener("click", closeDocumentModal);
+    el("cancelDocumentButton").addEventListener("click", closeDocumentModal);
+    el("attachmentInput").addEventListener("change", handleAttachmentSelection);
     el("documentModal").addEventListener("click", function (event) {
-      if (event.target === el("documentModal")) hideModal("documentModal");
+      if (event.target === el("documentModal")) closeDocumentModal();
     });
 
     el("closeDetailModal").addEventListener("click", function () {
@@ -1987,6 +2101,10 @@
 
     document.addEventListener("keydown", function (event) {
       if (event.key !== "Escape") return;
+      if (state.uploadingAttachments) {
+        toast("انتظر انتهاء رفع المرفقات قبل إغلاق النافذة.", "error");
+        return;
+      }
       hideModal("documentModal");
       hideModal("detailModal");
       hideModal("userModal");
@@ -2005,8 +2123,18 @@
         if (action === "restore") performDocumentAction("restore", id);
         return;
       }
+      var pendingButton = event.target.closest("[data-pending-action]");
+      if (pendingButton) {
+        var pendingKey = Number(pendingButton.dataset.key);
+        if (pendingButton.dataset.pendingAction === "remove") removePendingFile(pendingKey);
+        if (pendingButton.dataset.pendingAction === "retry" && state.editingDocumentId) {
+          uploadPendingEntries(state.editingDocumentId, pendingKey);
+        }
+        return;
+      }
       var fileButton = event.target.closest("[data-file-action]");
       if (fileButton) {
+        if (fileButton.dataset.fileAction === "view") previewFile(fileButton.dataset.id);
         if (fileButton.dataset.fileAction === "download") downloadFile(fileButton.dataset.id);
         if (fileButton.dataset.fileAction === "delete") deleteFile(fileButton.dataset.id);
         return;
@@ -2044,7 +2172,6 @@
 
     var archiveSelects = [
       ["typeFilter", "type"],
-      ["statusFilter", "status"],
       ["departmentFilter", "departmentId"],
       ["dateFromFilter", "dateFrom"],
       ["dateToFilter", "dateTo"],
@@ -2073,7 +2200,6 @@
     el("clearArchiveFilters").addEventListener("click", function () {
       el("archiveSearch").value = "";
       el("typeFilter").value = "";
-      el("statusFilter").value = "";
       el("departmentFilter").value = "";
       el("dateFromFilter").value = "";
       el("dateToFilter").value = "";
@@ -2084,7 +2210,6 @@
         pageSize: 10,
         q: "",
         type: "",
-        status: "",
         departmentId: "",
         dateFrom: "",
         dateTo: "",
