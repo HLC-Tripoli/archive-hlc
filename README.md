@@ -13,7 +13,7 @@ Docker Compose خلف خادم Angie الذي يقدّم الواجهة ويوك
 An Arabic RTL correspondence archive for Hatif Libya: a static frontend served by Angie,
 a Fastify (TypeScript) REST API, PostgreSQL 18, and private attachments on a persistent
 host directory (no S3 dependency). Development happens from the source repository;
-GitHub Actions builds and publishes both images to `ghcr.io/mohandl3g/archive-hlc`;
+GitHub Actions builds and publishes both images to `ghcr.io/hlc-tripoli/archive-hlc`;
 production hosts only need the standalone `docker-compose.yml` plus a configured `.env`
 file and pull prebuilt images. All application data lives on the server; the browser
 keeps only the theme preference and optional legacy demo data awaiting migration.
@@ -86,8 +86,8 @@ Angie — صورة web المنشورة من GHCR (المنفذ 80 داخل ال
   قاعدة البيانات تحتفظ بالمفاتيح النسبية والأحجام والبصمات فقط، ولا تُخزَّن أي ملفات
   ثنائية في PostgreSQL.
 - **الصور**: صورتان منفصلتان يُنشئهما سير عمل واحد وينشرهما إلى GHCR:
-  `ghcr.io/mohandl3g/archive-hlc:api-*` (خادم Fastify من `backend/Dockerfile`) و
-  `ghcr.io/mohandl3g/archive-hlc:web-*` (Angie + الملفات الثابتة من
+  `ghcr.io/hlc-tripoli/archive-hlc:api-*` (خادم Fastify من `backend/Dockerfile`) و
+  `ghcr.io/hlc-tripoli/archive-hlc:web-*` (Angie + الملفات الثابتة من
   `deploy/angie/Dockerfile`). خدمة الترحيلات (`migrate`) تستخدم صورة api نفسها مع
   أمر الترحيل — فلا صورة ثالثة ولا حاويات زائدة.
 
@@ -247,9 +247,9 @@ python3 -m http.server 8081
 
 | الوسم | المعنى |
 | --- | --- |
-| `ghcr.io/mohandl3g/archive-hlc:api-latest` / `web-latest` | أحدث بناء ناجح على `main` |
-| `ghcr.io/mohandl3g/archive-hlc:api-sha-<short-sha>` / `web-sha-<short-sha>` | التزام محدد — للتثبيت الدقيق |
-| `ghcr.io/mohandl3g/archive-hlc:api-v1.2.3` / `web-v1.2.3` | وسم إصدار (`v*`) |
+| `ghcr.io/hlc-tripoli/archive-hlc:api-latest` / `web-latest` | أحدث بناء ناجح على `main` |
+| `ghcr.io/hlc-tripoli/archive-hlc:api-sha-<short-sha>` / `web-sha-<short-sha>` | التزام محدد — للتثبيت الدقيق |
+| `ghcr.io/hlc-tripoli/archive-hlc:api-v1.2.3` / `web-v1.2.3` | وسم إصدار (`v*`) |
 
 لا يُستخدم `latest` أبداً لصورتين مختلفتين؛ كل صورة لها وسومها المسبوقة باسم المكوّن.
 خدمة `migrate` في ملف الإنتاج تستخدم `ARCHIVE_API_IMAGE` نفسها التي يستخدمها `api`.
@@ -280,8 +280,8 @@ python3 -m http.server 8081
 
 ```bash
 docker logout ghcr.io   # تأكيد أن السحب مجهول الهوية
-docker pull ghcr.io/mohandl3g/archive-hlc:api-latest
-docker pull ghcr.io/mohandl3g/archive-hlc:web-latest
+docker pull ghcr.io/hlc-tripoli/archive-hlc:api-latest
+docker pull ghcr.io/hlc-tripoli/archive-hlc:web-latest
 ```
 
 > لا تضع أي رمز GitHub في ملف `.env` للنشر — الصور عامة والسحب لا يحتاج مصادقة.
@@ -577,8 +577,8 @@ curl -s http://localhost:8080/api/v1/ready
 عدّل `.env`:
 
 ```env
-ARCHIVE_API_IMAGE=ghcr.io/mohandl3g/archive-hlc:api-sha-ab12cd3
-ARCHIVE_WEB_IMAGE=ghcr.io/mohandl3g/archive-hlc:web-sha-ab12cd3
+ARCHIVE_API_IMAGE=ghcr.io/hlc-tripoli/archive-hlc:api-sha-ab12cd3
+ARCHIVE_WEB_IMAGE=ghcr.io/hlc-tripoli/archive-hlc:web-sha-ab12cd3
 ```
 
 ثم `docker compose pull && docker compose up -d`. قائمة الوسوم المنشورة (sha/إصدارات):

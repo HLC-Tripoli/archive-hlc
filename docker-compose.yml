@@ -14,7 +14,7 @@
 # ملاحظات:
 #   - لا يحتوي هذا الملف أي build: ولا يعتمد على شيفرة المصدر — لا نسخ المستودع
 #     ولا Dockerfiles ولا Node.js مطلوبة على جهاز النشر.
-#   - الصور المنشورة (انظر .env.example): ghcr.io/mohandl3g/archive-hlc:api-latest
+#   - الصور المنشورة (انظر .env.example): ghcr.io/hlc-tripoli/archive-hlc:api-latest
 #     و:web-latest، مع وسوم sha-/v- لتثبيت نسخة محددة (Reproducible pinning).
 #   - اسم المشروع `archive-hlc` ثابت هنا عمداً: أسماء الحجم الدائم وأسماء الحاويات
 #     لا تتغير حتى لو نُقل مجلد النشر (نقل الملف إلى مسار آخر لا يبدأ قاعدة فارغة).
@@ -54,7 +54,7 @@ services:
   # تستخدم صورة API المنشورة نفسها (نفس وسم ARCHIVE_API_IMAGE) مع أمر الترحيل.
   # ---------------------------------------------------------------------------
   migrate:
-    image: ${ARCHIVE_API_IMAGE:-ghcr.io/mohandl3g/archive-hlc:api-latest}
+    image: ${ARCHIVE_API_IMAGE:-ghcr.io/hlc-tripoli/archive-hlc:api-latest}
     command: ["node", "dist/db/migrate-cli.js"]
     env_file:
       - .env
@@ -71,7 +71,7 @@ services:
   # ويصل إليه الخادم وحده عبر المسار الداخلي /data/uploads.
   # ---------------------------------------------------------------------------
   api:
-    image: ${ARCHIVE_API_IMAGE:-ghcr.io/mohandl3g/archive-hlc:api-latest}
+    image: ${ARCHIVE_API_IMAGE:-ghcr.io/hlc-tripoli/archive-hlc:api-latest}
     restart: unless-stopped
     env_file:
       - .env
@@ -104,7 +104,7 @@ services:
   # المنفذ المنشور الوحيد للخارج هو منفذ الواجهة (افتراضياً 8080).
   # ---------------------------------------------------------------------------
   web:
-    image: ${ARCHIVE_WEB_IMAGE:-ghcr.io/mohandl3g/archive-hlc:web-latest}
+    image: ${ARCHIVE_WEB_IMAGE:-ghcr.io/hlc-tripoli/archive-hlc:web-latest}
     restart: unless-stopped
     ports:
       - "${WEB_PORT:-8080}:80"

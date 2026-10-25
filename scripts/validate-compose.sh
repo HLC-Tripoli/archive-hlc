@@ -58,7 +58,7 @@ web_image="$(echo "$prod_json" | jq -r '.services.web.image')"
 [ "$api_image" = "$migrate_image" ] \
   || fail "api وmigrate يجب أن يستخدما نفس وسم صورة API (api=$api_image migrate=$migrate_image)"
 
-expected_prefix="ghcr.io/mohandl3g/archive-hlc:"
+expected_prefix="ghcr.io/hlc-tripoli/archive-hlc:"
 case "$api_image" in
   "${expected_prefix}api-"*) ;;
   *) fail "صورة api يجب أن تبدأ بـ ${expected_prefix}api- — وجد: $api_image" ;;
