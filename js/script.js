@@ -942,11 +942,11 @@
     attachmentInput.disabled = false;
     attachmentsSection.hidden = false;
     if (doc) {
-      attachmentHint.textContent = "اختر ملفاً أو أكثر.(UPLOAD_MAX_MB).";
+      attachmentHint.textContent = "اختر ملفاً أو أكثر.";
       await refreshAttachmentList(doc.id);
     } else {
       // وضع الإنشاء: يختار المستخدم الملفات الآن وتُرفع تلقائياً بعد حفظ المراسلة.
-      attachmentHint.textContent = "اختر ملفاً أو أكثر.(UPLOAD_MAX_MB).";
+      attachmentHint.textContent = "اختر ملفاً أو أكثر.";
       renderEmpty(el("attachmentList"), "لا توجد مرفقات محفوظة بعد.");
     }
     renderPendingAttachments();
@@ -1185,7 +1185,7 @@
         // مع إبقاء الملفات الفاشلة قابلة لإعادة المحاولة دون تكرار الناجحة.
         state.editingDocumentId = newDocumentId;
         el("formTitle").textContent = "تعديل بيانات المراسلة";
-        el("attachmentHint").textContent = "اختر ملفاً أو أكثر.(UPLOAD_MAX_MB).";
+        el("attachmentHint").textContent = "اختر ملفاً أو أكثر.";
         refreshDocumentsAndStats();
         if (state.pendingFiles.length) {
           await uploadPendingEntries(newDocumentId);
