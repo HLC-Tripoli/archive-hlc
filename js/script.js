@@ -390,6 +390,14 @@
     var firstLetter = state.user.displayName.trim().charAt(0);
     el("userAvatar").textContent = firstLetter || "؟";
 
+    var dashboardGreeting = el("dashboardGreeting");
+    if (dashboardGreeting) {
+      var displayName = (state.user && state.user.displayName) ? state.user.displayName.trim() : "";
+      dashboardGreeting.textContent = displayName
+        ? "مرحباً، " + displayName + "، بك في الأرشيف الإلكتروني"
+        : "مرحباً بك في الأرشيف الإلكتروني";
+    }
+
     var notice = el("departmentAccessNotice");
     var message = departmentAccessMessage();
     notice.hidden = !message;
@@ -457,6 +465,10 @@
     api.setCsrfToken(null);
     el("loginPassword").value = "";
     el("loginUsername").value = "";
+    var dashboardGreeting = el("dashboardGreeting");
+    if (dashboardGreeting) {
+      dashboardGreeting.textContent = "مرحباً بك في الأرشيف الإلكتروني";
+    }
     showLogin();
     toast("تم تسجيل الخروج.");
   }
