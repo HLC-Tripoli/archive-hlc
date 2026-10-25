@@ -11,12 +11,12 @@
 #               طلبات السحب تبني الصور للتحقق دون نشر.
 #
 # الوسوم المنشورة (حزمة GHCR واحدة باسم المستودع):
-#   ghcr.io/mohandl3g/archive-hlc:api-latest            — أحدث بناء ناجح على main
-#   ghcr.io/mohandl3g/archive-hlc:web-latest            — أحدث بناء ناجح على main
-#   ghcr.io/mohandl3g/archive-hlc:api-sha-<short-sha>   — تثبيت التزام محدد
-#   ghcr.io/mohandl3g/archive-hlc:web-sha-<short-sha>
-#   ghcr.io/mohandl3g/archive-hlc:api-v1.2.3            — وسم إصدار (v*)
-#   ghcr.io/mohandl3g/archive-hlc:web-v1.2.3
+#   ghcr.io/hlc-tripoli/archive-hlc:api-latest            — أحدث بناء ناجح على main
+#   ghcr.io/hlc-tripoli/archive-hlc:web-latest            — أحدث بناء ناجح على main
+#   ghcr.io/hlc-tripoli/archive-hlc:api-sha-<short-sha>   — تثبيت التزام محدد
+#   ghcr.io/hlc-tripoli/archive-hlc:web-sha-<short-sha>
+#   ghcr.io/hlc-tripoli/archive-hlc:api-v1.2.3            — وسم إصدار (v*)
+#   ghcr.io/hlc-tripoli/archive-hlc:web-v1.2.3
 #
 # ملاحظة: الإجراءات الخارجية مثبّتة على SHA التزامات المراجَعة مع تعليق الإصدار
 # (يحدّثها Dependabot أسبوعياً — راجع .github/dependabot.yml).
@@ -41,7 +41,7 @@ permissions:
   contents: read
 
 env:
-  IMAGE_REPO: ghcr.io/mohandl3g/archive-hlc
+  IMAGE_REPO: ghcr.io/hlc-tripoli/archive-hlc
 
 jobs:
   # ---------------------------------------------------------------------------
