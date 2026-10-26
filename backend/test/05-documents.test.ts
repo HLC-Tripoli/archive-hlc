@@ -329,6 +329,24 @@ test('listing supports filters, Arabic search, sorting, and pagination within th
   );
   assert.equal((byDate.json() as { total: number }).total, 8);
 
+  const badDateFrom = await apiRequest(
+    context.app,
+    employeeClient,
+    'GET',
+    '/documents?dateFrom=2026-13-01',
+  );
+  assert.equal(badDateFrom.statusCode, 400);
+  assert.equal((badDateFrom.json() as { error: { code: string } }).error.code, 'invalid_date_from');
+
+  const badDateTo = await apiRequest(
+    context.app,
+    employeeClient,
+    'GET',
+    '/documents?dateTo=2026-13-40',
+  );
+  assert.equal(badDateTo.statusCode, 400);
+  assert.equal((badDateTo.json() as { error: { code: string } }).error.code, 'invalid_date_to');
+
   const byReference = await apiRequest(context.app, employeeClient, 'GET', '/documents?q=DOC-013');
   const referenceBody = byReference.json() as { items: Array<{ reference: string }>; total: number };
   assert.equal(referenceBody.total, 1);

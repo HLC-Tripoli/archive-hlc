@@ -6,7 +6,7 @@
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
     <script src="./js/theme-pre.js"></script>
-    <link rel="stylesheet" href="./css/style.css?v=1.0.10" />
+    <link rel="stylesheet" href="./css/style.css?v=1.0.11" />
     <link rel="icon" href="./img/logo.svg" />
     <meta name="referrer" content="same-origin" />
   </head>
@@ -246,8 +246,32 @@
               <select id="departmentFilter">
                 <option value="">جميع الإدارات</option>
               </select>
-              <input id="dateFromFilter" type="date" aria-label="من تاريخ" />
-              <input id="dateToFilter" type="date" aria-label="إلى تاريخ" />
+              <div class="date-field">
+                <input
+                  id="dateFromFilter"
+                  type="text"
+                  class="date-input"
+                  placeholder="من تاريخ (DD/MM/YYYY)"
+                  aria-label="من تاريخ"
+                  inputmode="numeric"
+                  autocomplete="off"
+                />
+                <button type="button" class="date-picker-btn" tabindex="-1" aria-label="اختر التاريخ من التقويم" title="فتح التقويم">📅</button>
+                <input type="date" class="date-native-picker" tabindex="-1" aria-hidden="true" />
+              </div>
+              <div class="date-field">
+                <input
+                  id="dateToFilter"
+                  type="text"
+                  class="date-input"
+                  placeholder="إلى تاريخ (DD/MM/YYYY)"
+                  aria-label="إلى تاريخ"
+                  inputmode="numeric"
+                  autocomplete="off"
+                />
+                <button type="button" class="date-picker-btn" tabindex="-1" aria-label="اختر التاريخ من التقويم" title="فتح التقويم">📅</button>
+                <input type="date" class="date-native-picker" tabindex="-1" aria-hidden="true" />
+              </div>
               <select id="sortFilter" aria-label="ترتيب النتائج">
                 <option value="date:desc">التاريخ (الأحدث أولاً)</option>
                 <option value="date:asc">التاريخ (الأقدم أولاً)</option>
@@ -386,8 +410,32 @@
             <div class="filters">
               <input id="auditActionFilter" class="search" placeholder="نوع العملية (مثال: document.created)" />
               <input id="auditEntityFilter" placeholder="نوع الكيان (مثال: document)" />
-              <input id="auditDateFrom" type="date" aria-label="من تاريخ" />
-              <input id="auditDateTo" type="date" aria-label="إلى تاريخ" />
+              <div class="date-field">
+                <input
+                  id="auditDateFrom"
+                  type="text"
+                  class="date-input"
+                  placeholder="من تاريخ (DD/MM/YYYY)"
+                  aria-label="من تاريخ"
+                  inputmode="numeric"
+                  autocomplete="off"
+                />
+                <button type="button" class="date-picker-btn" tabindex="-1" aria-label="اختر التاريخ من التقويم" title="فتح التقويم">📅</button>
+                <input type="date" class="date-native-picker" tabindex="-1" aria-hidden="true" />
+              </div>
+              <div class="date-field">
+                <input
+                  id="auditDateTo"
+                  type="text"
+                  class="date-input"
+                  placeholder="إلى تاريخ (DD/MM/YYYY)"
+                  aria-label="إلى تاريخ"
+                  inputmode="numeric"
+                  autocomplete="off"
+                />
+                <button type="button" class="date-picker-btn" tabindex="-1" aria-label="اختر التاريخ من التقويم" title="فتح التقويم">📅</button>
+                <input type="date" class="date-native-picker" tabindex="-1" aria-hidden="true" />
+              </div>
               <button class="button secondary-button" id="auditRefreshButton" type="button">
                 تحديث
               </button>
@@ -568,7 +616,19 @@
         <form id="documentForm">
           <div id="documentFormError" class="alert alert-error" hidden></div>
           <label for="date">تاريخ المراسلة *</label>
-          <input id="date" type="date" required />
+          <div class="date-field">
+            <input
+              id="date"
+              type="text"
+              class="date-input"
+              placeholder="يوم/شهر/سنة (DD/MM/YYYY)"
+              inputmode="numeric"
+              autocomplete="off"
+              required
+            />
+            <button type="button" class="date-picker-btn" tabindex="-1" aria-label="اختر التاريخ من التقويم" title="فتح التقويم">📅</button>
+            <input type="date" class="date-native-picker" tabindex="-1" aria-hidden="true" />
+          </div>
           <label for="reference">الرقم الإشاري *</label>
           <input id="reference" required maxlength="200" placeholder="مثال: 2026/و/001" />
           <label for="sequenceNumber">رقم التسلسل</label>
@@ -763,6 +823,6 @@
 
     <script src="./js/theme.js"></script>
     <script src="./js/api.js"></script>
-    <script src="./js/script.js?v=1.0.10"></script>
+    <script src="./js/script.js?v=1.0.11"></script>
   </body>
 </html>
