@@ -1608,3 +1608,108 @@ hr,
   border-top: 1px solid var(--border);
   margin: 24px 0;
 }
+
+/* صفحة حول المنظومة */
+.about-hero {
+  margin-bottom: 24px;
+}
+.about-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.about-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.about-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+.about-card-icon {
+  font-size: 28px;
+  margin-bottom: 12px;
+}
+.about-card h3 {
+  font-size: 16px;
+  margin: 0 0 10px;
+  color: var(--text);
+}
+.about-card p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
+}
+.about-roles-panel {
+  margin-bottom: 24px;
+}
+.about-roles-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin-top: 18px;
+}
+.about-role-box {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+.about-role-header {
+  margin-bottom: 14px;
+}
+.role-badge {
+  display: inline-block;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: bold;
+}
+.role-badge.admin {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+.role-badge.employee {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.about-role-box ul {
+  margin: 0;
+  padding-right: 20px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.about-architecture-panel p {
+  font-size: 13.5px;
+  line-height: 1.8;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+.about-architecture-panel p:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 1024px) {
+  .about-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 760px) {
+  .about-grid {
+    grid-template-columns: 1fr;
+  }
+  .about-roles-grid {
+    grid-template-columns: 1fr;
+  }
+}
