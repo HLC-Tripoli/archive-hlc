@@ -2046,6 +2046,20 @@
       });
     });
 
+    document.querySelectorAll(".stat-card[data-page]").forEach(function (card) {
+      function navigate() {
+        var page = card.dataset.page;
+        if (page) showPage(page);
+      }
+      card.addEventListener("click", navigate);
+      card.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          navigate();
+        }
+      });
+    });
+
     el("addIncomingButton").addEventListener("click", function () {
       openDocumentForm("create", null, "incoming");
     });
