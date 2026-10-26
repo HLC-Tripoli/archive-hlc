@@ -342,7 +342,7 @@ test('listing supports filters, Arabic search, sorting, and pagination within th
     context.app,
     employeeClient,
     'GET',
-    '/documents?dateTo=invalid-date',
+    '/documents?dateTo=2026-13-40',
   );
   assert.equal(badDateTo.statusCode, 400);
   assert.equal((badDateTo.json() as { error: { code: string } }).error.code, 'invalid_date_to');
