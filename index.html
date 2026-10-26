@@ -6,7 +6,7 @@
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
     <script src="./js/theme-pre.js"></script>
-    <link rel="stylesheet" href="./css/style.css?v=1.0.3" />
+    <link rel="stylesheet" href="./css/style.css?v=1.0.4" />
     <link rel="icon" href="./img/logo.svg" />
     <meta name="referrer" content="same-origin" />
   </head>
@@ -99,17 +99,17 @@
             </div>
           </div>
           <div class="stats">
-            <div class="stat-card">
+            <div class="stat-card clickable" id="incomingStatCard" data-page="incoming" role="button" tabindex="0" title="الانتقال إلى المراسلات الواردة">
               <div class="stat-top"><span>الوارد</span><span>📥</span></div>
               <h2 id="incomingCount">0</h2>
               <small>إجمالي المراسلات الواردة</small>
             </div>
-            <div class="stat-card">
+            <div class="stat-card clickable" id="outgoingStatCard" data-page="outgoing" role="button" tabindex="0" title="الانتقال إلى المراسلات الصادرة">
               <div class="stat-top"><span>الصادر</span><span>📤</span></div>
               <h2 id="outgoingCount">0</h2>
               <small>إجمالي المراسلات الصادرة</small>
             </div>
-            <div class="stat-card">
+            <div class="stat-card clickable" id="archiveStatCard" data-page="archive" role="button" tabindex="0" title="الانتقال إلى الأرشيف الإلكتروني">
               <div class="stat-top"><span>الأرشيف</span><span>🗄️</span></div>
               <h2 id="totalCount">0</h2>
               <small>إجمالي الوثائق المسجلة</small>
@@ -623,6 +623,6 @@
 
     <script src="./js/theme.js"></script>
     <script src="./js/api.js"></script>
-    <script src="./js/script.js?v=1.0.3"></script>
+    <script src="./js/script.js?v=1.0.4"></script>
   </body>
 </html>
