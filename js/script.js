@@ -2000,6 +2000,10 @@
       button.classList.toggle("active", button.dataset.page === pageId);
     });
     el("pageTitle").textContent = PAGE_TITLES[pageId];
+    var backBtn = el("backToDashboardButton");
+    if (backBtn) {
+      backBtn.hidden = (pageId === "dashboard");
+    }
     if (pageId === "dashboard") {
       loadDashboardStats();
       loadDocumentsView("dashboard");
@@ -2059,6 +2063,13 @@
         }
       });
     });
+
+    var backToDashboardBtn = el("backToDashboardButton");
+    if (backToDashboardBtn) {
+      backToDashboardBtn.addEventListener("click", function () {
+        showPage("dashboard");
+      });
+    }
 
     el("addIncomingButton").addEventListener("click", function () {
       openDocumentForm("create", null, "incoming");

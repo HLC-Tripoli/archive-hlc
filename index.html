@@ -6,7 +6,7 @@
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
     <script src="./js/theme-pre.js"></script>
-    <link rel="stylesheet" href="./css/style.css?v=1.0.5" />
+    <link rel="stylesheet" href="./css/style.css?v=1.0.6" />
     <link rel="icon" href="./img/logo.svg" />
     <meta name="referrer" content="same-origin" />
   </head>
@@ -65,9 +65,24 @@
 
       <main class="main">
         <header class="topbar">
-          <div>
-            <h1 id="pageTitle">لوحة التحكم</h1>
-            <p id="today"></p>
+          <div class="topbar-title-wrap">
+            <button
+              id="backToDashboardButton"
+              class="back-button"
+              type="button"
+              title="الرجوع إلى لوحة التحكم"
+              aria-label="الرجوع إلى لوحة التحكم"
+              hidden
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+            </button>
+            <div>
+              <h1 id="pageTitle">لوحة التحكم</h1>
+              <p id="today"></p>
+            </div>
           </div>
           <div class="topbar-actions">
             <div class="theme-toggle-slot" data-theme-toggle></div>
@@ -624,6 +639,6 @@
 
     <script src="./js/theme.js"></script>
     <script src="./js/api.js"></script>
-    <script src="./js/script.js?v=1.0.5"></script>
+    <script src="./js/script.js?v=1.0.6"></script>
   </body>
 </html>
