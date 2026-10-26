@@ -934,6 +934,10 @@
       : defaultType === "outgoing"
         ? "تسجيل مراسلة صادرة"
         : "تسجيل مراسلة واردة";
+    var isOutgoing = state.documentType === "outgoing";
+    el("reference").placeholder = isOutgoing ? "مثال: 2026/ص/001" : "مثال: 2026/و/001";
+    el("sender").placeholder = isOutgoing ? "مثال: شركة هاتف ليبيا" : "مثال: إدارة الشؤون الإدارية";
+    el("recipient").placeholder = isOutgoing ? "مثال: وزارة الاتصالات" : "مثال: شركة هاتف ليبيا";
     el("reference").value = doc ? doc.reference : "";
     el("sequenceNumber").value = doc && doc.sequenceNumber ? doc.sequenceNumber : "";
     el("title").value = doc ? doc.title : "";
