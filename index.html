@@ -6,7 +6,7 @@
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
     <script src="./js/theme-pre.js"></script>
-    <link rel="stylesheet" href="./css/style.css?v=1.0.6" />
+    <link rel="stylesheet" href="./css/style.css?v=1.0.7" />
     <link rel="icon" href="./img/logo.svg" />
     <meta name="referrer" content="same-origin" />
   </head>
@@ -66,6 +66,20 @@
       <main class="main">
         <header class="topbar">
           <div class="topbar-title-wrap">
+            <button
+              id="sidebarToggle"
+              class="sidebar-toggle-button"
+              type="button"
+              title="إخفاء القائمة الجانبية"
+              aria-label="إخفاء القائمة الجانبية"
+              aria-expanded="true"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
             <button
               id="backToDashboardButton"
               class="back-button"
@@ -639,6 +653,6 @@
 
     <script src="./js/theme.js"></script>
     <script src="./js/api.js"></script>
-    <script src="./js/script.js?v=1.0.6"></script>
+    <script src="./js/script.js?v=1.0.7"></script>
   </body>
 </html>

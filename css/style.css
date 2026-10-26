@@ -208,6 +208,7 @@ button {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  transition: transform 0.25s ease;
 }
 .brand {
   display: flex;
@@ -282,6 +283,14 @@ button {
   margin-right: 260px;
   padding: 28px;
   min-width: 0;
+  transition: margin-right 0.25s ease;
+}
+.app.sidebar-collapsed .sidebar {
+  transform: translateX(100%);
+  pointer-events: none;
+}
+.app.sidebar-collapsed .main {
+  margin-right: 0;
 }
 .topbar {
   display: flex;
@@ -294,6 +303,30 @@ button {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+.sidebar-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.sidebar-toggle-button:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.sidebar-toggle-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .back-button {
   display: inline-flex;
@@ -842,6 +875,7 @@ body,
 .brand,
 .menu,
 .topbar,
+.sidebar-toggle-button,
 .back-button,
 .user-badge,
 .welcome,
@@ -882,6 +916,9 @@ hr,
   }
 }
 @media (max-width: 760px) {
+  .app.sidebar-collapsed .sidebar {
+    display: none !important;
+  }
   .sidebar {
     position: relative;
     width: 100%;
