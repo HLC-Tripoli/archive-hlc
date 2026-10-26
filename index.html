@@ -6,7 +6,7 @@
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
     <script src="./js/theme-pre.js"></script>
-    <link rel="stylesheet" href="./css/style.css?v=1.0.4" />
+    <link rel="stylesheet" href="./css/style.css?v=1.0.5" />
     <link rel="icon" href="./img/logo.svg" />
     <meta name="referrer" content="same-origin" />
   </head>
@@ -442,26 +442,24 @@
         </div>
         <form id="documentForm">
           <div id="documentFormError" class="alert alert-error" hidden></div>
+          <label for="date">تاريخ المراسلة *</label>
+          <input id="date" type="date" required />
           <label for="reference">الرقم الإشاري *</label>
           <input id="reference" required maxlength="200" placeholder="مثال: 2026/و/001" />
           <label for="sequenceNumber">رقم التسلسل</label>
           <input id="sequenceNumber" maxlength="100" placeholder="مثال: 142" />
-          <label for="title">موضوع المراسلة *</label>
-          <input id="title" required maxlength="500" placeholder="مثال: طلب تزويد بمعدات حاسوبية" />
-          <label for="date">تاريخ المراسلة *</label>
-          <input id="date" type="date" required />
           <label for="sender">من</label>
           <input id="sender" maxlength="200" placeholder="مثال: إدارة الشؤون الإدارية" />
           <label for="recipient">إلى</label>
           <input id="recipient" maxlength="200" placeholder="مثال: شركة هاتف ليبيا" />
+          <label for="title">موضوع المراسلة *</label>
+          <input id="title" required maxlength="500" placeholder="مثال: طلب تزويد بمعدات حاسوبية" />
           <div id="departmentField" class="admin-only is-hidden">
             <label for="department">الإدارة المختصة</label>
             <select id="department">
               <option value="">غير محددة</option>
             </select>
           </div>
-          <label for="notes">ملاحظات</label>
-          <textarea id="notes" rows="3" maxlength="2000" placeholder="اكتب أي ملاحظات أو تفاصيل إضافية هنا..."></textarea>
 
           <div id="attachmentsSection" hidden>
             <hr />
@@ -481,6 +479,9 @@
             </div>
             <small class="hint" id="attachmentHint">اختر ملفاً أو أكثر.</small>
           </div>
+
+          <label for="notes">ملاحظات</label>
+          <textarea id="notes" rows="3" maxlength="2000" placeholder="اكتب أي ملاحظات أو تفاصيل إضافية هنا..."></textarea>
 
           <div class="form-actions">
             <button type="submit" class="button" id="saveDocumentButton">
@@ -623,6 +624,6 @@
 
     <script src="./js/theme.js"></script>
     <script src="./js/api.js"></script>
-    <script src="./js/script.js?v=1.0.4"></script>
+    <script src="./js/script.js?v=1.0.5"></script>
   </body>
 </html>
