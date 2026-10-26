@@ -392,9 +392,11 @@
 
     var dashboardGreeting = el("dashboardGreeting");
     if (dashboardGreeting) {
-      var displayName = (state.user && state.user.displayName) ? state.user.displayName.trim() : "";
-      dashboardGreeting.textContent = displayName
-        ? "مرحباً، " + displayName + "، بك في الأرشيف الإلكتروني"
+      var name = (state.user && (state.user.displayName || state.user.username))
+        ? (state.user.displayName || state.user.username).trim()
+        : "";
+      dashboardGreeting.textContent = name
+        ? 'مرحبا بك "' + name + '" في الأرشيف الإلكتروني'
         : "مرحباً بك في الأرشيف الإلكتروني";
     }
 
