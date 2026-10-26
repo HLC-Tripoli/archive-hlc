@@ -641,6 +641,13 @@ tbody tr:hover {
 .small-button:hover {
   background: var(--btn-neutral-hover-bg);
 }
+.accent-button {
+  background: var(--accent);
+  color: #fff;
+}
+.accent-button:hover {
+  background: var(--accent-hover);
+}
 .delete-button {
   color: var(--accent-text);
   background: var(--accent-soft);

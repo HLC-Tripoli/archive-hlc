@@ -1011,11 +1011,44 @@
       .join("");
   }
 
+  function isPreviewableFile(file) {
+    if (!file) return false;
+    if (file.type && PREVIEWABLE_MIME_TYPES[file.type]) return true;
+    var name = (file.name || "").toLowerCase();
+    return (
+      name.endsWith(".pdf") ||
+      name.endsWith(".png") ||
+      name.endsWith(".jpg") ||
+      name.endsWith(".jpeg") ||
+      name.endsWith(".webp") ||
+      name.endsWith(".gif") ||
+      name.endsWith(".bmp")
+    );
+  }
+
+  function previewPendingFile(key) {
+    var entry = state.pendingFiles.find(function (item) {
+      return item.key === key;
+    });
+    if (!entry || !entry.file) return;
+
+    var objectUrl = URL.createObjectURL(entry.file);
+    var win = window.open(objectUrl, "_blank", "noopener");
+    if (!win) {
+      toast("يرجى السماح بالنوافذ المنبثقة لمعاينة الملف.", "error");
+    }
+    setTimeout(function () {
+      try {
+        URL.revokeObjectURL(objectUrl);
+      } catch (_) {}
+    }, 60000);
+  }
+
   function pendingStatusText(entry) {
     if (entry.status === "uploading") return "جارٍ الرفع…";
     if (entry.status === "failed") return "تعذّر الرفع: " + (entry.error || "خطأ غير معروف");
     return state.editingDocumentId
-      ? "بانتظار الرفع"
+      ? "بانتظار الرفع أو الحفظ"
       : "بانتظار حفظ المراسلة ثم الرفع تلقائياً";
   }
 
@@ -1033,6 +1066,18 @@
       .map(function (entry) {
         var actions = "";
         if (entry.status !== "uploading") {
+          if (isPreviewableFile(entry.file)) {
+            actions +=
+              '<button type="button" class="small-button" data-pending-action="view" data-key="' +
+              entry.key +
+              '">عرض</button>';
+          }
+          if (state.editingDocumentId && entry.status === "queued") {
+            actions +=
+              '<button type="button" class="small-button accent-button" data-pending-action="upload" data-key="' +
+              entry.key +
+              '">رفع</button>';
+          }
           if (entry.status === "failed") {
             actions +=
               '<button type="button" class="small-button" data-pending-action="retry" data-key="' +
@@ -1160,7 +1205,6 @@
     var files = Array.prototype.slice.call(input.files || []);
     if (!files.length) return;
     addPendingFiles(files);
-    if (state.editingDocumentId) uploadPendingEntries(state.editingDocumentId);
   }
 
   async function submitDocumentForm(event) {
@@ -1189,7 +1233,11 @@
       if (!createMode) {
         await api.patch("/documents/" + state.editingDocumentId, payload);
         if (state.pendingFiles.length) {
-          toast("تم تحديث المراسلة. ما زالت هناك ملفات لم تُرفع؛ أعد المحاولة أو ألغِها.", "error");
+          await uploadPendingEntries(state.editingDocumentId);
+          if (!state.pendingFiles.length) {
+            toast("تم تحديث المراسلة وحفظ المرفقات.");
+            hideModal("documentModal");
+          }
         } else {
           toast("تم تحديث المراسلة.");
           hideModal("documentModal");
@@ -2200,8 +2248,13 @@
       var pendingButton = event.target.closest("[data-pending-action]");
       if (pendingButton) {
         var pendingKey = Number(pendingButton.dataset.key);
-        if (pendingButton.dataset.pendingAction === "remove") removePendingFile(pendingKey);
-        if (pendingButton.dataset.pendingAction === "retry" && state.editingDocumentId) {
+        var pendingAction = pendingButton.dataset.pendingAction;
+        if (pendingAction === "view") previewPendingFile(pendingKey);
+        if (pendingAction === "upload" && state.editingDocumentId) {
+          uploadPendingEntries(state.editingDocumentId, pendingKey);
+        }
+        if (pendingAction === "remove") removePendingFile(pendingKey);
+        if (pendingAction === "retry" && state.editingDocumentId) {
           uploadPendingEntries(state.editingDocumentId, pendingKey);
         }
         return;
