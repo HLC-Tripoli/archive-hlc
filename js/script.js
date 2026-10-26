@@ -21,7 +21,8 @@
     reports: "التقارير والإحصائيات",
     users: "إدارة المستخدمين",
     audit: "سجل التدقيق",
-    settings: "إعدادات المنظومة"
+    settings: "إعدادات المنظومة",
+    about: "حول المنظومة"
   };
   var TYPE_LABELS = { incoming: "وارد", outgoing: "صادر" };
   var ROLE_LABELS = { admin: "مدير النظام", employee: "موظف الأرشيف" };
@@ -2201,6 +2202,13 @@
     if (backToDashboardBtn) {
       backToDashboardBtn.addEventListener("click", function () {
         showPage("dashboard");
+      });
+    }
+
+    var openAboutBtn = el("openAboutPageBtn");
+    if (openAboutBtn) {
+      openAboutBtn.addEventListener("click", function () {
+        showPage("about");
       });
     }
 

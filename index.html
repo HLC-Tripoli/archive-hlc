@@ -6,7 +6,7 @@
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
     <script src="./js/theme-pre.js"></script>
-    <link rel="stylesheet" href="./css/style.css?v=1.0.9" />
+    <link rel="stylesheet" href="./css/style.css?v=1.0.10" />
     <link rel="icon" href="./img/logo.svg" />
     <meta name="referrer" content="same-origin" />
   </head>
@@ -56,6 +56,9 @@
         </button>
         <button class="menu" data-page="settings" type="button">
           ⚙️ الإعدادات
+        </button>
+        <button class="menu" data-page="about" type="button">
+          ℹ️ حول المنظومة
         </button>
         <div class="sidebar-footer">
           منظومة إدارة الوثائق<br />
@@ -454,9 +457,102 @@
 
           <div class="panel">
             <h2>حول المنظومة</h2>
-            <p>اسم النظام: منظومة الأرشيف الإلكتروني</p>
-            <p>الجهة: هاتف ليبيا</p>
-            <p>الواجهة: عربية بالكامل (RTL)، نسخة الواجهة 1.0</p>
+            <p>منظومة إدارة الوثائق والأرشيف الإلكتروني — هاتف ليبيا (الإصدار 1.0).</p>
+            <p class="hint">يمكنك استعراض دليل الميزات والقدرات وصلاحيات الوصول والنبذة التقنية الكاملة.</p>
+            <div class="form-actions">
+              <button class="button secondary-button" id="openAboutPageBtn" type="button">
+                فتح صفحة حول المنظومة
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- صفحة حول المنظومة -->
+        <section id="about" class="page">
+          <div class="welcome about-hero">
+            <div>
+              <h2>منظومة الأرشيف الإلكتروني — هاتف ليبيا</h2>
+              <p>منصة رقمية موحدة لتسجيل وتنظيم وأرشفة المراسلات الإدارية والوثائق الرسمية ومتابعتها بدقة وأمان.</p>
+            </div>
+          </div>
+
+          <div class="about-grid">
+            <div class="about-card">
+              <div class="about-card-icon">📥📤</div>
+              <h3>إدارة المراسلات والوثائق</h3>
+              <p>تسجيل المراسلات الواردة والصادرة بدقة عالية، وتعيين الأرقام الإشارية والتسلسل والتواريخ والجهات، ومتابعة حالات المعاملة (جديدة، قيد المعالجة، مكتملة، مؤرشفة).</p>
+            </div>
+
+            <div class="about-card">
+              <div class="about-card-icon">🗄️🔍</div>
+              <h3>الأرشيف الإلكتروني والبحث</h3>
+              <p>أرشفة مركزية منظمة توفر بحثاً ذكياً بالرقم الإشاري أو التسلسل أو الموضوع، وتصفية شاملة حسب الإدارة المختصة والنطاق الزمني وحالة المراسلة.</p>
+            </div>
+
+            <div class="about-card">
+              <div class="about-card-icon">📎👁️</div>
+              <h3>المرفقات والمعاينة الفورية</h3>
+              <p>إرفاق المستندات الرسمية بصيغة PDF والصور عالية الدقة، مع ميزة المعاينة المباشرة للمرفقات داخل المنظومة قبل الحفظ وبعده وتنزيلها بسهولة.</p>
+            </div>
+
+            <div class="about-card">
+              <div class="about-card-icon">📊📈</div>
+              <h3>التقارير والإحصائيات</h3>
+              <p>متابعة حركة المراسلات عبر لوحات بيانية تفاعلية ورسوم إحصائية توضح نسب الإنجاز وتوزيع المعاملات على الإدارات، مع إمكانية تصدير التقارير إلى صيغة CSV.</p>
+            </div>
+
+            <div class="about-card">
+              <div class="about-card-icon">💾🔒</div>
+              <h3>النسخ الاحتياطي وحماية البيانات</h3>
+              <p>دعم كامل لتصدير النسخ الاحتياطية واستيرادها بصيغة JSON الموحدة، مع تخزين آمن للمرفقات في مسار محمي وتشفير كلمات المرور وحماية الجلسات.</p>
+            </div>
+
+            <div class="about-card">
+              <div class="about-card-icon">👥📜</div>
+              <h3>الصلاحيات وسجل التدقيق</h3>
+              <p>فصل دقيق للمهام بين مديري النظام وموظفي الأرشيف، مع توثيق زمني غير قابل للتعديل لجميع العمليات الإدارية وسجلات الدخول في سجل التدقيق.</p>
+            </div>
+          </div>
+
+          <div class="panel about-roles-panel">
+            <h2>الأدوار وصلاحيات الوصول</h2>
+            <div class="about-roles-grid">
+              <div class="about-role-box">
+                <div class="about-role-header">
+                  <span class="role-badge admin">مدير النظام (Administrator)</span>
+                </div>
+                <ul>
+                  <li>إدارة وتعديل بيانات الإدارات والأقسام في الشركة.</li>
+                  <li>إنشاء حسابات المستخدمين وتحديد أدوارهم وتعيينهم للإدارات.</li>
+                  <li>الاطلاع الكامل على سجل التدقيق الأمني ومراقبة كافة الحركات.</li>
+                  <li>تصدير واستيراد النسخ الاحتياطية وإدارة الإعدادات العامة.</li>
+                  <li>تسجيل وتعديل واستعراض المراسلات والأرشيف والتقارير.</li>
+                </ul>
+              </div>
+
+              <div class="about-role-box">
+                <div class="about-role-header">
+                  <span class="role-badge employee">موظف الأرشيف (Employee)</span>
+                </div>
+                <ul>
+                  <li>تسجيل المراسلات الواردة والصادرة للإدارات المصرح له بالوصول إليها.</li>
+                  <li>إرفاق الملفات والمستندات واستعراض المرفقات وتحميلها.</li>
+                  <li>البحث في الأرشيف ومتابعة حالة المعاملات وتحديثها.</li>
+                  <li>توليد وتصدير التقارير الإحصائية المعتمدة.</li>
+                  <li>تغيير كلمة المرور وتخصيص المظهر (الوضع الفاتح / الداكن).</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel about-architecture-panel">
+            <h2>البنية التقنية ومعايير الأمان</h2>
+            <p>
+              تعمل المنظومة بواجهة استخدام عربية متكاملة تتوافق مع معايير القراءة من اليمين إلى اليسار (RTL) وتتواصل بأمان مع واجهة برمجة التطبيقات (REST API) الخلفية وقاعدة بيانات PostgreSQL الموثوقة.
+            </p>
+            <p>
+              يتم تخزين المرفقات بشكل منفصل وآمن على الخادم دون إتاحة الوصول المباشر إليها إلا بعد التحقق من صحة جلسة المستخدم وصلاحياته، مع الالتزام بسياسات أمان صارمة تشمل الحماية من هجمات CSRF و XSS وحظر النوافذ غير المصرح بها (Content Security Policy).
+            </p>
           </div>
         </section>
       </main>
@@ -667,6 +763,6 @@
 
     <script src="./js/theme.js"></script>
     <script src="./js/api.js"></script>
-    <script src="./js/script.js?v=1.0.9"></script>
+    <script src="./js/script.js?v=1.0.10"></script>
   </body>
 </html>
