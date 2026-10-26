@@ -205,6 +205,68 @@
     );
   }
 
+  function parseDateInput(text) {
+    if (!text || !text.trim()) {
+      return { valid: true, iso: "", display: "" };
+    }
+    var trimmed = text.trim();
+    var match = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (!match) {
+      return {
+        valid: false,
+        error: "صيغة التاريخ غير صالحة. يرجى إدخال التاريخ بالصيغة: يوم/شهر/سنة (مثال: 20/10/2026)."
+      };
+    }
+    var day = parseInt(match[1], 10);
+    var month = parseInt(match[2], 10);
+    var year = parseInt(match[3], 10);
+
+    if (year < 1900 || year > 2100) {
+      return { valid: false, error: "السنة المدخلة خارج النطاق المقبول (1900 - 2100)." };
+    }
+    if (month < 1 || month > 12) {
+      return { valid: false, error: "الشهر غير صالح (يجب أن يكون بين 1 و 12)." };
+    }
+    var testDate = new Date(year, month - 1, day);
+    if (
+      testDate.getFullYear() !== year ||
+      testDate.getMonth() !== month - 1 ||
+      testDate.getDate() !== day
+    ) {
+      return { valid: false, error: "اليوم المحدد غير موجود في هذا الشهر." };
+    }
+    var pad = function (n) {
+      return String(n).padStart(2, "0");
+    };
+    return {
+      valid: true,
+      iso: year + "-" + pad(month) + "-" + pad(day),
+      display: pad(day) + "/" + pad(month) + "/" + year
+    };
+  }
+
+  function formatDate(value) {
+    if (!value) return "—";
+    if (typeof value === "string") {
+      var match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) {
+        return match[3] + "/" + match[2] + "/" + match[1];
+      }
+    }
+    var date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    var pad = function (part) {
+      return String(part).padStart(2, "0");
+    };
+    return (
+      pad(date.getDate()) +
+      "/" +
+      pad(date.getMonth() + 1) +
+      "/" +
+      date.getFullYear()
+    );
+  }
+
   function formatDateTime(value) {
     if (!value) return "—";
     var date = new Date(value);
@@ -213,11 +275,11 @@
       return String(part).padStart(2, "0");
     };
     return (
-      date.getFullYear() +
-      "-" +
-      pad(date.getMonth() + 1) +
-      "-" +
       pad(date.getDate()) +
+      "/" +
+      pad(date.getMonth() + 1) +
+      "/" +
+      date.getFullYear() +
       " " +
       pad(date.getHours()) +
       ":" +
@@ -721,7 +783,7 @@
           "</td><td>" +
           escapeHTML(TYPE_LABELS[document.type] || document.type) +
           "</td><td>" +
-          escapeHTML(document.date) +
+          escapeHTML(formatDate(document.date)) +
           "</td><td>" +
           escapeHTML(document.department ? document.department.name : "غير محددة") +
           '</td><td><div class="action-buttons">' +
@@ -1262,12 +1324,21 @@
     event.preventDefault();
     var button = el("saveDocumentButton");
     showFormError("documentFormError", "");
+    var dateVal = el("date").value;
+    if (!dateVal) {
+      showFormError(
+        "documentFormError",
+        "تاريخ المراسلة غير صالح. يرجى إدخال التاريخ بالصيغة: يوم/شهر/سنة (مثال: 20/10/2026)."
+      );
+      el("date").focus();
+      return;
+    }
     var createMode = !state.editingDocumentId;
     var payload = {
       reference: el("reference").value.trim(),
       sequenceNumber: el("sequenceNumber").value.trim(),
       title: el("title").value.trim(),
-      date: el("date").value,
+      date: dateVal,
       sender: el("sender").value.trim(),
       recipient: el("recipient").value.trim(),
       notes: el("notes").value.trim()
@@ -1370,7 +1441,7 @@
         ["رقم التسلسل", doc.sequenceNumber || "—"],
         ["موضوع الرسالة", doc.title],
         ["النوع", TYPE_LABELS[doc.type] || doc.type],
-        ["تاريخ الرسالة", doc.date],
+        ["تاريخ الرسالة", formatDate(doc.date)],
         ["الإدارة", doc.department ? doc.department.name : "غير محددة"],
         ["من", doc.sender || "—"],
         ["إلى", doc.recipient || "—"],
@@ -2137,10 +2208,119 @@
     };
   }
 
+  function setupDateControl(input) {
+    if (!input || input.dataset.dateControlInitialized) return;
+    input.dataset.dateControlInitialized = "true";
+
+    var wrapper = input.closest(".date-field");
+    var picker = wrapper ? wrapper.querySelector(".date-native-picker") : null;
+    var pickerBtn = wrapper ? wrapper.querySelector(".date-picker-btn") : null;
+
+    var _isoValue = "";
+    var protoDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+
+    Object.defineProperty(input, "value", {
+      get: function () {
+        return _isoValue;
+      },
+      set: function (val) {
+        if (!val) {
+          _isoValue = "";
+          if (protoDesc) protoDesc.set.call(input, "");
+          if (picker) picker.value = "";
+          input.setCustomValidity("");
+          return;
+        }
+        var isoMatch = String(val).match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (isoMatch) {
+          _isoValue = isoMatch[1] + "-" + isoMatch[2] + "-" + isoMatch[3];
+          var disp = isoMatch[3] + "/" + isoMatch[2] + "/" + isoMatch[1];
+          if (protoDesc) protoDesc.set.call(input, disp);
+          if (picker) picker.value = _isoValue;
+          input.setCustomValidity("");
+          return;
+        }
+        var parsed = parseDateInput(String(val));
+        if (parsed.valid) {
+          _isoValue = parsed.iso;
+          if (protoDesc) protoDesc.set.call(input, parsed.display || val);
+          if (picker) picker.value = parsed.iso;
+          input.setCustomValidity("");
+          return;
+        }
+        _isoValue = "";
+        if (protoDesc) protoDesc.set.call(input, val);
+        input.setCustomValidity(parsed.error || "تاريخ غير صالح");
+      },
+      configurable: true
+    });
+
+    var handleInputOrChange = function () {
+      var raw = protoDesc ? protoDesc.get.call(input).trim() : input.value.trim();
+      if (!raw) {
+        _isoValue = "";
+        if (picker) picker.value = "";
+        input.setCustomValidity("");
+        return;
+      }
+      var parsed = parseDateInput(raw);
+      if (parsed.valid) {
+        _isoValue = parsed.iso;
+        if (picker) picker.value = parsed.iso;
+        input.setCustomValidity("");
+      } else {
+        _isoValue = "";
+        input.setCustomValidity(parsed.error || "تاريخ غير صالح");
+      }
+    };
+
+    input.addEventListener("input", handleInputOrChange);
+    input.addEventListener("change", function () {
+      handleInputOrChange();
+      var raw = protoDesc ? protoDesc.get.call(input).trim() : input.value.trim();
+      if (raw) {
+        var parsed = parseDateInput(raw);
+        if (parsed.valid && protoDesc && parsed.display) {
+          protoDesc.set.call(input, parsed.display);
+        }
+      }
+    });
+
+    if (pickerBtn && picker) {
+      pickerBtn.addEventListener("click", function () {
+        if (typeof picker.showPicker === "function") {
+          try {
+            picker.showPicker();
+          } catch (e) {
+            picker.click();
+          }
+        } else {
+          picker.click();
+        }
+      });
+
+      picker.addEventListener("change", function () {
+        if (picker.value) {
+          input.value = picker.value;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      });
+    }
+  }
+
+  function initDateControls() {
+    ["date", "dateFromFilter", "dateToFilter", "auditDateFrom", "auditDateTo"].forEach(function (id) {
+      var input = el(id);
+      if (input) setupDateControl(input);
+    });
+  }
+
   /* ========================================================================
      الربط بالأحداث
      ======================================================================== */
   function bindEvents() {
+    initDateControls();
     el("loginForm").addEventListener("submit", doLogin);
     el("logoutButton").addEventListener("click", doLogout);
 
@@ -2502,7 +2682,7 @@
      الإقلاع
      ======================================================================== */
   async function boot() {
-    el("today").textContent = "تاريخ اليوم: " + todayString();
+    el("today").textContent = "تاريخ اليوم: " + formatDate(todayString());
     api.setUnauthorizedHandler(function () {
       if (state.user) {
         toast("انتهت صلاحية الجلسة. الرجاء تسجيل الدخول من جديد.", "error");
