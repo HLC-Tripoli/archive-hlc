@@ -2044,9 +2044,43 @@
     el("loginForm").addEventListener("submit", doLogin);
     el("logoutButton").addEventListener("click", doLogout);
 
+    var sidebarToggleBtn = el("sidebarToggle");
+    var appContainer = el("app");
+    if (sidebarToggleBtn && appContainer) {
+      function setSidebarCollapsed(collapsed) {
+        appContainer.classList.toggle("sidebar-collapsed", collapsed);
+        sidebarToggleBtn.setAttribute("aria-expanded", String(!collapsed));
+        sidebarToggleBtn.title = collapsed ? "إظهار القائمة الجانبية" : "إخفاء القائمة الجانبية";
+        sidebarToggleBtn.setAttribute("aria-label", collapsed ? "إظهار القائمة الجانبية" : "إخفاء القائمة الجانبية");
+        try {
+          localStorage.setItem("archive_sidebar_collapsed", String(collapsed));
+        } catch (_) {}
+      }
+
+      sidebarToggleBtn.addEventListener("click", function () {
+        var isCollapsed = appContainer.classList.contains("sidebar-collapsed");
+        setSidebarCollapsed(!isCollapsed);
+      });
+
+      try {
+        var savedPreference = localStorage.getItem("archive_sidebar_collapsed");
+        if (savedPreference === "true") {
+          setSidebarCollapsed(true);
+        }
+      } catch (_) {}
+    }
+
     document.querySelectorAll(".menu").forEach(function (button) {
       button.addEventListener("click", function () {
         showPage(button.dataset.page);
+        if (window.innerWidth <= 760 && appContainer) {
+          appContainer.classList.add("sidebar-collapsed");
+          if (sidebarToggleBtn) {
+            sidebarToggleBtn.setAttribute("aria-expanded", "false");
+            sidebarToggleBtn.title = "إظهار القائمة الجانبية";
+            sidebarToggleBtn.setAttribute("aria-label", "إظهار القائمة الجانبية");
+          }
+        }
       });
     });
 
