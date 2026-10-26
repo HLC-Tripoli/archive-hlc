@@ -6,7 +6,7 @@
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
     <script src="./js/theme-pre.js"></script>
-    <link rel="stylesheet" href="./css/style.css?v=1.0.2" />
+    <link rel="stylesheet" href="./css/style.css?v=1.0.3" />
     <link rel="icon" href="./img/logo.svg" />
     <meta name="referrer" content="same-origin" />
   </head>
@@ -128,7 +128,7 @@
               <input
                 id="dashboardSearch"
                 class="search"
-                placeholder="الرقم الاشاري أو موضوع الرسالة أو الجهة..."
+                placeholder="ابحث بالرقم الإشاري أو الموضوع أو الجهة..."
                 type="search"
               />
             </div>
@@ -153,7 +153,7 @@
               <input
                 id="incomingSearch"
                 class="search"
-                placeholder="الرقم الاشاري أو موضوع الرسالة أو رقم التسلسل أو الجهة..."
+                placeholder="ابحث بالرقم الإشاري أو الموضوع أو رقم التسلسل أو الجهة..."
                 type="search"
               />
             </div>
@@ -178,7 +178,7 @@
               <input
                 id="outgoingSearch"
                 class="search"
-                placeholder="الرقم الاشاري أو موضوع الرسالة أو رقم التسلسل أو الجهة..."
+                placeholder="ابحث بالرقم الإشاري أو الموضوع أو رقم التسلسل أو الجهة..."
                 type="search"
               />
             </div>
@@ -203,7 +203,7 @@
               <input
                 id="archiveSearch"
                 class="search"
-                placeholder="الرقم الاشاري أو موضوع الرسالة أو رقم التسلسل أو الجهة..."
+                placeholder="ابحث بالرقم الإشاري أو الموضوع أو رقم التسلسل أو الجهة..."
                 type="search"
               />
               <select id="typeFilter">
@@ -254,7 +254,7 @@
             <form id="departmentForm" class="department-form">
               <input
                 id="departmentName"
-                placeholder="اسم الإدارة أو القسم"
+                placeholder="اسم الإدارة أو القسم (مثال: إدارة تقنية المعلومات)"
                 required
                 maxlength="100"
               />
@@ -373,9 +373,9 @@
             <p>تغيير كلمة المرور الخاصة بحسابك. سيؤدي ذلك إلى إنهاء الجلسات الأخرى.</p>
             <form id="changePasswordForm" class="stacked-form">
               <label for="currentPassword">كلمة المرور الحالية</label>
-              <input id="currentPassword" type="password" autocomplete="current-password" required />
+              <input id="currentPassword" type="password" autocomplete="current-password" required placeholder="أدخل كلمة المرور الحالية" />
               <label for="newPassword">كلمة المرور الجديدة</label>
-              <input id="newPassword" type="password" autocomplete="new-password" minlength="8" required />
+              <input id="newPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="8 أحرف على الأقل" />
               <div id="changePasswordError" class="alert alert-error" hidden></div>
               <div class="form-actions">
                 <button class="button" type="submit">تغيير كلمة المرور</button>
@@ -442,18 +442,18 @@
         </div>
         <form id="documentForm">
           <div id="documentFormError" class="alert alert-error" hidden></div>
-          <label for="reference">الرقم الاشاري *</label>
-          <input id="reference" required maxlength="200" />
+          <label for="reference">الرقم الإشاري *</label>
+          <input id="reference" required maxlength="200" placeholder="مثال: 2026/و/001" />
           <label for="sequenceNumber">رقم التسلسل</label>
-          <input id="sequenceNumber" maxlength="100" />
-          <label for="title">موضوع الرسالة *</label>
-          <input id="title" required maxlength="500" />
-          <label for="date">تاريخ الرسالة *</label>
+          <input id="sequenceNumber" maxlength="100" placeholder="مثال: 142" />
+          <label for="title">موضوع المراسلة *</label>
+          <input id="title" required maxlength="500" placeholder="مثال: طلب تزويد بمعدات حاسوبية" />
+          <label for="date">تاريخ المراسلة *</label>
           <input id="date" type="date" required />
           <label for="sender">من</label>
-          <input id="sender" maxlength="200" />
+          <input id="sender" maxlength="200" placeholder="مثال: إدارة الشؤون الإدارية" />
           <label for="recipient">إلى</label>
-          <input id="recipient" maxlength="200" />
+          <input id="recipient" maxlength="200" placeholder="مثال: شركة هاتف ليبيا" />
           <div id="departmentField" class="admin-only is-hidden">
             <label for="department">الإدارة المختصة</label>
             <select id="department">
@@ -461,7 +461,7 @@
             </select>
           </div>
           <label for="notes">ملاحظات</label>
-          <textarea id="notes" rows="3" maxlength="2000"></textarea>
+          <textarea id="notes" rows="3" maxlength="2000" placeholder="اكتب أي ملاحظات أو تفاصيل إضافية هنا..."></textarea>
 
           <div id="attachmentsSection" hidden>
             <hr />
@@ -517,12 +517,12 @@
           <div id="userFormError" class="alert alert-error" hidden></div>
           <div id="userUsernameField">
             <label for="userUsername">اسم المستخدم *</label>
-            <input id="userUsername" minlength="3" maxlength="32" autocomplete="off" />
+            <input id="userUsername" minlength="3" maxlength="32" autocomplete="off" placeholder="مثال: m.benyousef" />
           </div>
           <label for="userEmployeeNumber">الرقم الوظيفي (اختياري)</label>
-          <input id="userEmployeeNumber" maxlength="64" autocomplete="off" />
+          <input id="userEmployeeNumber" maxlength="64" autocomplete="off" placeholder="مثال: 1042" />
           <label for="userDisplayName">الاسم الكامل *</label>
-          <input id="userDisplayName" maxlength="200" />
+          <input id="userDisplayName" maxlength="200" placeholder="مثال: مهند عبدالفتاح بن يوسف" />
           <label for="userRole">الدور *</label>
           <select id="userRole">
             <option value="employee">موظف الأرشيف</option>
@@ -539,7 +539,7 @@
           </div>
           <div id="userPasswordField">
             <label for="userPassword">كلمة المرور *</label>
-            <input id="userPassword" type="password" minlength="8" maxlength="200" autocomplete="new-password" />
+            <input id="userPassword" type="password" minlength="8" maxlength="200" autocomplete="new-password" placeholder="8 أحرف على الأقل" />
           </div>
           <div class="form-actions">
             <button type="submit" class="button" id="saveUserButton">حفظ المستخدم</button>
@@ -559,7 +559,7 @@
         <form id="promptForm">
           <div id="promptError" class="alert alert-error" hidden></div>
           <label for="promptInput" id="promptLabel">القيمة</label>
-          <input id="promptInput" />
+          <input id="promptInput" placeholder="أدخل القيمة هنا..." />
           <div class="form-actions">
             <button type="submit" class="button" id="promptOk">تأكيد</button>
             <button type="button" class="button secondary-button" id="promptCancel">
@@ -599,7 +599,7 @@
           <input
             id="loginUsername"
             type="text"
-            placeholder="أدخل الرقم الوظيفي أو اسم المستخدم"
+            placeholder="مثال: admin أو 1042"
             autocomplete="username"
             autocapitalize="none"
             spellcheck="false"
@@ -623,6 +623,6 @@
 
     <script src="./js/theme.js"></script>
     <script src="./js/api.js"></script>
-    <script src="./js/script.js?v=1.0.2"></script>
+    <script src="./js/script.js?v=1.0.3"></script>
   </body>
 </html>
