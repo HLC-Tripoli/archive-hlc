@@ -6,7 +6,7 @@
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
     <script src="./js/theme-pre.js"></script>
-    <link rel="stylesheet" href="./css/style.css?v=1.0.8" />
+    <link rel="stylesheet" href="./css/style.css?v=1.0.9" />
     <link rel="icon" href="./img/logo.svg" />
     <meta name="referrer" content="same-origin" />
   </head>
@@ -615,6 +615,20 @@
       </div>
     </div>
 
+    <!-- نافذة معاينة المرفق -->
+    <div class="modal" id="previewModal" role="dialog" aria-modal="true" aria-labelledby="previewModalTitle">
+      <div class="modal-box preview-modal-box">
+        <div class="modal-header">
+          <h2 id="previewModalTitle">معاينة المرفق</h2>
+          <button type="button" class="close-button" id="closePreviewModal" aria-label="إغلاق">✕</button>
+        </div>
+        <div class="preview-modal-body" id="previewModalBody"></div>
+        <div class="form-actions preview-modal-actions">
+          <button type="button" class="button secondary-button" id="closePreviewModalBtn">إغلاق</button>
+        </div>
+      </div>
+    </div>
+
     <div id="toast" class="toast"></div>
 
     <!-- شاشة تسجيل الدخول -->
@@ -653,6 +667,6 @@
 
     <script src="./js/theme.js"></script>
     <script src="./js/api.js"></script>
-    <script src="./js/script.js?v=1.0.8"></script>
+    <script src="./js/script.js?v=1.0.9"></script>
   </body>
 </html>
