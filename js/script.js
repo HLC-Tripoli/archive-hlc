@@ -1026,22 +1026,72 @@
     );
   }
 
+  var currentPreviewObjectUrl = null;
+
+  function closePreviewModal() {
+    hideModal("previewModal");
+    var body = el("previewModalBody");
+    if (body) body.innerHTML = "";
+    if (currentPreviewObjectUrl) {
+      try {
+        URL.revokeObjectURL(currentPreviewObjectUrl);
+      } catch (_) {}
+      currentPreviewObjectUrl = null;
+    }
+  }
+
+  function openPreviewModal(title, url, isImage) {
+    el("previewModalTitle").textContent = title ? ("معاينة: " + title) : "معاينة المرفق";
+    var body = el("previewModalBody");
+    body.innerHTML = "";
+    if (isImage) {
+      var img = document.createElement("img");
+      img.className = "preview-img";
+      img.alt = title || "معاينة المرفق";
+      img.src = url;
+      body.appendChild(img);
+    } else {
+      var iframe = document.createElement("iframe");
+      iframe.className = "preview-frame";
+      iframe.title = title || "معاينة المستند";
+      iframe.src = url;
+      body.appendChild(iframe);
+    }
+    showModal("previewModal");
+  }
+
   function previewPendingFile(key) {
     var entry = state.pendingFiles.find(function (item) {
       return item.key === key;
     });
     if (!entry || !entry.file) return;
 
-    var objectUrl = URL.createObjectURL(entry.file);
-    var win = window.open(objectUrl, "_blank", "noopener");
-    if (!win) {
-      toast("يرجى السماح بالنوافذ المنبثقة لمعاينة الملف.", "error");
+    var file = entry.file;
+    var mime = (file.type || "").toLowerCase();
+    var name = (file.name || "").toLowerCase();
+    var isImage = (mime.indexOf("image/") === 0) ||
+      name.endsWith(".png") ||
+      name.endsWith(".jpg") ||
+      name.endsWith(".jpeg") ||
+      name.endsWith(".webp") ||
+      name.endsWith(".gif") ||
+      name.endsWith(".bmp");
+
+    if (currentPreviewObjectUrl) {
+      try { URL.revokeObjectURL(currentPreviewObjectUrl); } catch (_) {}
+      currentPreviewObjectUrl = null;
     }
-    setTimeout(function () {
-      try {
-        URL.revokeObjectURL(objectUrl);
-      } catch (_) {}
-    }, 60000);
+
+    if (isImage) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        openPreviewModal(file.name, reader.result, true);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      currentPreviewObjectUrl = URL.createObjectURL(file);
+      openPreviewModal(file.name, currentPreviewObjectUrl, false);
+    }
   }
 
   function pendingStatusText(entry) {
@@ -1279,7 +1329,8 @@
   }
 
   function previewFile(fileId) {
-    window.open(api.url("/files/" + encodeURIComponent(fileId) + "/view"), "_blank", "noopener");
+    var url = api.url("/files/" + encodeURIComponent(fileId) + "/view");
+    openPreviewModal("مستند مرفق", url, false);
   }
 
   async function deleteFile(fileId) {
@@ -2175,6 +2226,17 @@
       if (event.target === el("detailModal")) hideModal("detailModal");
     });
 
+    var closePrevX = el("closePreviewModal");
+    if (closePrevX) closePrevX.addEventListener("click", closePreviewModal);
+    var closePrevBtn = el("closePreviewModalBtn");
+    if (closePrevBtn) closePrevBtn.addEventListener("click", closePreviewModal);
+    var prevModal = el("previewModal");
+    if (prevModal) {
+      prevModal.addEventListener("click", function (event) {
+        if (event.target === prevModal) closePreviewModal();
+      });
+    }
+
     el("userForm").addEventListener("submit", submitUserForm);
     el("userRole").addEventListener("change", updateUserDepartmentField);
     el("closeUserModal").addEventListener("click", function () {
@@ -2223,6 +2285,11 @@
 
     document.addEventListener("keydown", function (event) {
       if (event.key !== "Escape") return;
+      var prevModal = el("previewModal");
+      if (prevModal && prevModal.classList.contains("show")) {
+        closePreviewModal();
+        return;
+      }
       if (state.uploadingAttachments) {
         toast("انتظر انتهاء رفع المرفقات قبل إغلاق النافذة.", "error");
         return;
