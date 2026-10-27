@@ -12,6 +12,13 @@
   /* ========================================================================
      ثوابت وتسميات
      ======================================================================== */
+  function _t(key, params) {
+    if (window.I18N && typeof window.I18N.t === "function") {
+      return window.I18N.t(key, params);
+    }
+    return key;
+  }
+
   var PAGE_TITLES = {
     dashboard: "لوحة التحكم",
     incoming: "المراسلات الواردة",
@@ -24,8 +31,25 @@
     settings: "إعدادات المنظومة",
     about: "حول المنظومة"
   };
-  var TYPE_LABELS = { incoming: "وارد", outgoing: "صادر" };
-  var ROLE_LABELS = { admin: "مدير النظام", employee: "موظف الأرشيف" };
+
+  function getPageTitle(pageId) {
+    var key = "nav_" + pageId;
+    var res = _t(key);
+    return res !== key ? res : (PAGE_TITLES[pageId] || pageId);
+  }
+
+  function getTypeLabel(type) {
+    if (type === "incoming") return _t("type_incoming");
+    if (type === "outgoing") return _t("type_outgoing");
+    return type || _t("none");
+  }
+
+  function getRoleLabel(role) {
+    if (role === "admin") return _t("role_admin");
+    if (role === "employee") return _t("role_employee");
+    return role || _t("none");
+  }
+
   var PREVIEWABLE_MIME_TYPES = {
     "application/pdf": true,
     "image/jpeg": true,
@@ -34,6 +58,30 @@
     "image/gif": true,
     "image/bmp": true
   };
+
+  var ACTION_KEY_MAP = {
+    "auth.login.success": "action_login_success",
+    "auth.login.failed": "action_login_failed",
+    "auth.logout": "action_logout",
+    "auth.password.changed": "action_password_changed",
+    "document.created": "action_document_created",
+    "document.updated": "action_document_updated",
+    "document.deleted": "action_document_deleted",
+    "document.restored": "action_document_restored",
+    "file.uploaded": "action_file_uploaded",
+    "file.downloaded": "action_file_downloaded",
+    "file.viewed": "action_file_viewed",
+    "file.deleted": "action_file_deleted",
+    "user.created": "action_user_created",
+    "user.updated": "action_user_updated",
+    "user.password_reset": "action_user_password_reset",
+    "department.created": "action_dept_created",
+    "department.updated": "action_dept_updated",
+    "department.deleted": "action_dept_deleted",
+    "import.legacy": "action_import_legacy",
+    "import.backup": "action_import_backup"
+  };
+
   var ACTION_LABELS = {
     "auth.login.success": "دخول ناجح",
     "auth.login.failed": "محاولة دخول فاشلة",
@@ -56,6 +104,15 @@
     "import.legacy": "ترحيل بيانات من المتصفح",
     "import.backup": "استيراد نسخة احتياطية"
   };
+
+  function getActionLabel(action) {
+    var key = ACTION_KEY_MAP[action];
+    if (key) {
+      var res = _t(key);
+      if (res !== key) return res;
+    }
+    return ACTION_LABELS[action] || action;
+  }
   var LEGACY_DOCUMENTS_KEY = "hl_archive_data_v1";
   var LEGACY_DEPARTMENTS_KEY = "hl_archive_departments_v1";
 
@@ -345,20 +402,17 @@
       container.innerHTML = "";
       return;
     }
+    var infoText = _t("pager_info", { page: view.page, totalPages: totalPages, total: view.total });
     container.innerHTML =
       '<button type="button" class="small-button" data-pager="prev"' +
       (view.page <= 1 ? " disabled" : "") +
-      ">السابق</button>" +
-      '<span class="pager-info">صفحة ' +
-      view.page +
-      " من " +
-      totalPages +
-      " — إجمالي " +
-      view.total +
+      ">" + escapeHTML(_t("pager_prev")) + "</button>" +
+      '<span class="pager-info">' +
+      escapeHTML(infoText) +
       "</span>" +
       '<button type="button" class="small-button" data-pager="next"' +
       (view.page >= totalPages ? " disabled" : "") +
-      ">التالي</button>";
+      ">" + escapeHTML(_t("pager_next")) + "</button>";
     container.querySelectorAll("[data-pager]").forEach(function (button) {
       button.addEventListener("click", function () {
         onChange(button.dataset.pager === "next" ? 1 : -1);
@@ -407,7 +461,8 @@
     return new Promise(function (resolve) {
       confirmResolver = resolve;
       el("confirmMessage").textContent = message;
-      el("confirmOk").textContent = confirmLabel || "تأكيد";
+      el("confirmOk").textContent = confirmLabel || _t("confirm");
+      el("confirmCancel").textContent = _t("cancel");
       showModal("confirmModal");
     });
   }
@@ -445,13 +500,13 @@
     });
 
     el("userName").textContent = state.user.displayName;
-    var roleLabel = ROLE_LABELS[state.user.role] || state.user.role;
+    var roleLabel = getRoleLabel(state.user.role);
     if (state.user.role === "employee" && currentDepartmentName()) {
       roleLabel += " — " + currentDepartmentName();
     }
     el("userRoleLabel").textContent = roleLabel;
     var firstLetter = state.user.displayName.trim().charAt(0);
-    el("userAvatar").textContent = firstLetter || "؟";
+    el("userAvatar").textContent = firstLetter || _t("unknown");
 
     var dashboardGreeting = el("dashboardGreeting");
     if (dashboardGreeting) {
@@ -459,8 +514,10 @@
         ? (state.user.displayName || state.user.username).trim()
         : "";
       dashboardGreeting.textContent = name
-        ? 'مرحبا بك "' + name + '" في الأرشيف الإلكتروني'
-        : "مرحباً بك في الأرشيف الإلكتروني";
+        ? (window.I18N && window.I18N.getLanguage() === "en"
+            ? 'Welcome "' + name + '" to the Electronic Archive'
+            : 'مرحبا بك "' + name + '" في الأرشيف الإلكتروني')
+        : _t("dashboard_greeting");
     }
 
     var notice = el("departmentAccessNotice");
@@ -582,8 +639,8 @@
         archiveSelect.value = own.id;
         formSelect.value = own.id;
       } else {
-        archiveSelect.innerHTML = '<option value="">لا توجد إدارة</option>';
-        formSelect.innerHTML = '<option value="">لا توجد إدارة</option>';
+        archiveSelect.innerHTML = '<option value="">' + escapeHTML(_t("unspecified")) + '</option>';
+        formSelect.innerHTML = '<option value="">' + escapeHTML(_t("unspecified")) + '</option>';
       }
       archiveSelect.disabled = true;
       formSelect.disabled = true;
@@ -594,13 +651,13 @@
     var currentForm = formSelect.value;
     archiveSelect.disabled = false;
     formSelect.disabled = false;
-    archiveSelect.innerHTML = '<option value="">جميع الإدارات</option>';
-    formSelect.innerHTML = '<option value="">غير محددة</option>';
+    archiveSelect.innerHTML = '<option value="">' + escapeHTML(_t("all_departments")) + '</option>';
+    formSelect.innerHTML = '<option value="">' + escapeHTML(_t("unspecified")) + '</option>';
     state.departments.forEach(function (department) {
       var filterOption = document.createElement("option");
       filterOption.value = department.id;
       filterOption.textContent =
-        department.name + (department.isActive ? "" : " (معطّلة)");
+        department.name + (department.isActive ? "" : " (" + _t("disabled") + ")");
       archiveSelect.appendChild(filterOption);
       formSelect.appendChild(filterOption.cloneNode(true));
     });
@@ -611,7 +668,7 @@
   async function loadDepartmentListPage() {
     var container = el("departmentList");
     var includeInactive = isAdmin() && el("includeInactiveDepartments").checked;
-    renderLoading(container, "جارٍ تحميل الإدارات…");
+    renderLoading(container, _t("loading"));
     try {
       var data = await api.get("/departments", {
         includeInactive: includeInactive || undefined
@@ -627,38 +684,42 @@
   function renderDepartmentList(items) {
     var container = el("departmentList");
     if (!items.length) {
-      renderEmpty(container, "لم تتم إضافة إدارات بعد.");
+      renderEmpty(container, _t("no_departments"));
       return;
     }
     container.innerHTML = items
       .map(function (department) {
         var actions = "";
         if (isAdmin()) {
+          var toggleText = department.isActive
+            ? (window.I18N && window.I18N.getLanguage() === "en" ? "Disable" : "تعطيل")
+            : (window.I18N && window.I18N.getLanguage() === "en" ? "Enable" : "تفعيل");
           actions =
             '<button type="button" class="small-button" data-dept-action="rename" data-id="' +
             escapeHTML(department.id) +
-            '">تعديل الاسم</button>' +
+            '">' + escapeHTML(_t("edit")) + '</button>' +
             '<button type="button" class="small-button" data-dept-action="toggle" data-id="' +
             escapeHTML(department.id) +
             '">' +
-            (department.isActive ? "تعطيل" : "تفعيل") +
+            escapeHTML(toggleText) +
             "</button>" +
             '<button type="button" class="small-button delete-button" data-dept-action="delete" data-id="' +
             escapeHTML(department.id) +
-            '">حذف</button>';
+            '">' + escapeHTML(_t("delete")) + '</button>';
         }
+        var countLabel = window.I18N && window.I18N.getLanguage() === "en" ? "Documents: " : "عدد المعاملات: ";
         return (
           '<div class="department-item">' +
           '<div class="department-meta">' +
           "<strong>" +
           escapeHTML(department.name) +
           "</strong>" +
-          '<small>عدد المعاملات: ' +
+          "<small>" + countLabel +
           escapeHTML(department.documentCount) +
           "</small>" +
           (department.isActive
             ? ""
-            : ' <span class="badge badge-inactive">معطّلة</span>') +
+            : ' <span class="badge badge-inactive">' + escapeHTML(_t("disabled")) + '</span>') +
           "</div>" +
           '<div class="action-buttons">' +
           actions +
@@ -724,19 +785,21 @@
   /* ========================================================================
      الجداول والتقارير
      ======================================================================== */
-  var DOC_COLUMNS = [
-    "الرقم الاشاري",
-    "رقم التسلسل",
-    "موضوع الرسالة",
-    "النوع",
-    "تاريخ الرسالة",
-    "الإدارة",
-    "الإجراءات"
-  ];
+  function getDocColumns() {
+    return [
+      _t("col_ref"),
+      _t("col_seq"),
+      _t("col_title"),
+      _t("col_type"),
+      _t("col_date"),
+      _t("col_party"),
+      _t("actions")
+    ];
+  }
 
   function renderDocuments(container, items) {
     if (!items.length) {
-      renderEmpty(container, "لا توجد معاملات لعرضها.");
+      renderEmpty(container, _t("no_documents"));
       return;
     }
     var admin = isAdmin();
@@ -746,13 +809,13 @@
         var actions = [
           '<button type="button" class="small-button" data-doc-action="view" data-id="' +
             escapeHTML(document.id) +
-            '">عرض</button>'
+            '">' + escapeHTML(_t("view")) + '</button>'
         ];
         if (!deleted) {
           actions.push(
             '<button type="button" class="small-button" data-doc-action="edit" data-id="' +
               escapeHTML(document.id) +
-              '">تعديل</button>'
+              '">' + escapeHTML(_t("edit")) + '</button>'
           );
         }
         if (admin) {
@@ -760,13 +823,13 @@
             actions.push(
               '<button type="button" class="small-button" data-doc-action="restore" data-id="' +
                 escapeHTML(document.id) +
-                '">استعادة</button>'
+                '">' + escapeHTML(_t("restore")) + '</button>'
             );
           } else {
             actions.push(
               '<button type="button" class="small-button delete-button" data-doc-action="delete" data-id="' +
                 escapeHTML(document.id) +
-                '">حذف</button>'
+                '">' + escapeHTML(_t("delete")) + '</button>'
             );
           }
         }
@@ -779,13 +842,13 @@
           escapeHTML(document.sequenceNumber || "—") +
           "</td><td>" +
           escapeHTML(document.title) +
-          (deleted ? ' <span class="badge badge-deleted">محذوفة</span>' : "") +
+          (deleted ? ' <span class="badge badge-deleted">' + escapeHTML(_t("deleted_badge")) + '</span>' : "") +
           "</td><td>" +
-          escapeHTML(TYPE_LABELS[document.type] || document.type) +
+          escapeHTML(getTypeLabel(document.type)) +
           "</td><td>" +
           escapeHTML(formatDate(document.date)) +
           "</td><td>" +
-          escapeHTML(document.department ? document.department.name : "غير محددة") +
+          escapeHTML(document.department ? document.department.name : _t("unspecified")) +
           '</td><td><div class="action-buttons">' +
           actions.join("") +
           "</div></td></tr>"
@@ -794,7 +857,7 @@
       .join("");
     container.innerHTML =
       '<div class="table-wrap"><table><thead><tr>' +
-      DOC_COLUMNS.map(function (column) {
+      getDocColumns().map(function (column) {
         return "<th>" + column + "</th>";
       }).join("") +
       "</tr></thead><tbody>" +
@@ -890,7 +953,7 @@
       renderReportList(
         "reportByType",
         (summary.byType || []).map(function (row) {
-          return { label: TYPE_LABELS[row.type] || row.type, count: row.count };
+          return { label: getTypeLabel(row.type), count: row.count };
         })
       );
       renderReportList(
@@ -913,7 +976,7 @@
   function renderReportList(containerId, rows) {
     var container = el(containerId);
     if (!rows.length) {
-      container.innerHTML = '<div class="empty">لا توجد بيانات.</div>';
+      container.innerHTML = '<div class="empty">' + escapeHTML(_t("no_report_data")) + '</div>';
       return;
     }
     container.innerHTML = rows
@@ -942,13 +1005,13 @@
       actions.push(
         '<button type="button" class="small-button" data-file-action="view" data-id="' +
           escapeHTML(file.id) +
-          '">عرض</button>'
+          '">' + escapeHTML(_t("view")) + '</button>'
       );
     }
     actions.push(
       '<button type="button" class="small-button" data-file-action="download" data-id="' +
         escapeHTML(file.id) +
-        '">تنزيل</button>'
+        '">' + escapeHTML(_t("download")) + '</button>'
     );
     if (canDeleteAttachments()) {
       actions.push(
@@ -956,7 +1019,7 @@
           escapeHTML(file.id) +
           '"' +
           (state.uploadingAttachments ? " disabled" : "") +
-          '>حذف</button>'
+          '>' + escapeHTML(_t("delete")) + '</button>'
       );
     }
     return actions.join("");
@@ -992,15 +1055,21 @@
     showFormError("documentFormError", "");
     await loadDepartmentsForSelects();
 
-    el("formTitle").textContent = doc
-      ? "تعديل بيانات المراسلة"
-      : defaultType === "outgoing"
-        ? "تسجيل مراسلة صادرة"
-        : "تسجيل مراسلة واردة";
     var isOutgoing = state.documentType === "outgoing";
-    el("reference").placeholder = isOutgoing ? "مثال: 2026/ص/001" : "مثال: 2026/و/001";
-    el("sender").placeholder = isOutgoing ? "مثال: شركة هاتف ليبيا" : "مثال: إدارة الشؤون الإدارية";
-    el("recipient").placeholder = isOutgoing ? "مثال: وزارة الاتصالات" : "مثال: شركة هاتف ليبيا";
+    el("formTitle").textContent = doc
+      ? _t("edit_doc_title")
+      : isOutgoing
+        ? _t("create_outgoing_title")
+        : _t("create_incoming_title");
+    el("reference").placeholder = isOutgoing
+      ? (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. 2026/OUT/001" : "مثال: 2026/ص/001")
+      : (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. 2026/IN/001" : "مثال: 2026/و/001");
+    el("sender").placeholder = isOutgoing
+      ? (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. Libya Telecom Company" : "مثال: شركة هاتف ليبيا")
+      : (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. Administrative Affairs" : "مثال: إدارة الشؤون الإدارية");
+    el("recipient").placeholder = isOutgoing
+      ? (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. Ministry of Communications" : "مثال: وزارة الاتصالات")
+      : (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. Libya Telecom Company" : "مثال: شركة هاتف ليبيا");
     el("reference").value = doc ? doc.reference : "";
     el("sequenceNumber").value = doc && doc.sequenceNumber ? doc.sequenceNumber : "";
     el("title").value = doc ? doc.title : "";
@@ -1023,11 +1092,11 @@
     attachmentInput.disabled = false;
     attachmentsSection.hidden = false;
     if (doc) {
-      attachmentHint.textContent = "اختر ملفاً أو أكثر.";
+      attachmentHint.textContent = _t("doc_attachments_hint");
       await refreshAttachmentList(doc.id);
     } else {
       // وضع الإنشاء: يختار المستخدم الملفات الآن وتُرفع تلقائياً بعد حفظ المراسلة.
-      attachmentHint.textContent = "اختر ملفاً أو أكثر.";
+      attachmentHint.textContent = _t("doc_attachments_hint");
       renderEmpty(el("attachmentList"), "لا توجد مرفقات محفوظة بعد.");
     }
     renderPendingAttachments();
@@ -1428,32 +1497,33 @@
   async function openDocumentDetail(documentId) {
     var container = el("detailContent");
     state.detailDocumentId = documentId;
-    renderLoading(container, "جارٍ تحميل التفاصيل…");
+    renderLoading(container, _t("loading"));
     el("detailActions").innerHTML = "";
     showModal("detailModal");
     try {
       var data = await api.get("/documents/" + documentId);
       var doc = data.document;
       var deleted = Boolean(doc.deletedAt);
-      el("detailTitle").textContent = "تفاصيل المراسلة " + doc.reference;
+      var detailTitlePrefix = window.I18N && window.I18N.getLanguage() === "en" ? "Document Details " : "تفاصيل المراسلة ";
+      el("detailTitle").textContent = detailTitlePrefix + doc.reference;
       var fields = [
-        ["الرقم الاشاري", doc.reference],
-        ["رقم التسلسل", doc.sequenceNumber || "—"],
-        ["موضوع الرسالة", doc.title],
-        ["النوع", TYPE_LABELS[doc.type] || doc.type],
-        ["تاريخ الرسالة", formatDate(doc.date)],
-        ["الإدارة", doc.department ? doc.department.name : "غير محددة"],
-        ["من", doc.sender || "—"],
-        ["إلى", doc.recipient || "—"],
-        ["الملاحظات", doc.notes || "—"],
-        ["سُجلت بواسطة", doc.createdByName || "—"],
-        ["تاريخ التسجيل", formatDateTime(doc.createdAt)],
-        ["آخر تعديل بواسطة", doc.updatedByName || "—"],
-        ["تاريخ آخر تعديل", formatDateTime(doc.updatedAt)]
+        [_t("field_ref"), doc.reference],
+        [_t("field_seq"), doc.sequenceNumber || "—"],
+        [_t("field_subject"), doc.title],
+        [_t("field_type"), getTypeLabel(doc.type)],
+        [_t("field_date"), formatDate(doc.date)],
+        [_t("field_dept"), doc.department ? doc.department.name : _t("unspecified")],
+        [_t("field_sender"), doc.sender || "—"],
+        [_t("field_recipient"), doc.recipient || "—"],
+        [_t("field_notes"), doc.notes || "—"],
+        [_t("field_created_by"), doc.createdByName || "—"],
+        [_t("field_created_at"), formatDateTime(doc.createdAt)],
+        [_t("field_updated_by"), doc.updatedByName || "—"],
+        [_t("field_updated_at"), formatDateTime(doc.updatedAt)]
       ];
       if (deleted) {
-        fields.push(["حُذفت بواسطة", doc.deletedByName || "—"]);
-        fields.push(["تاريخ الحذف", formatDateTime(doc.deletedAt)]);
+        fields.push([_t("field_deleted_by"), doc.deletedByName || "—"]);
+        fields.push([_t("field_deleted_at"), formatDateTime(doc.deletedAt)]);
       }
       var details = fields
         .map(function (field) {
@@ -1483,33 +1553,33 @@
               );
             })
             .join("")
-        : '<div class="empty">لا توجد مرفقات.</div>';
+        : '<div class="empty">' + escapeHTML(_t("no_attachments")) + '</div>';
       container.innerHTML =
         '<div class="detail-grid">' +
         details +
-        '</div><h3 class="detail-subtitle">المرفقات</h3><div class="attachment-list">' +
+        '</div><h3 class="detail-subtitle">' + escapeHTML(_t("attachments_section")) + '</h3><div class="attachment-list">' +
         attachments +
         "</div>";
 
       var actions = [];
       if (!deleted) {
         actions.push(
-          '<button type="button" class="button" id="detailEditButton">تعديل</button>'
+          '<button type="button" class="button" id="detailEditButton">' + escapeHTML(_t("edit")) + '</button>'
         );
       }
       if (isAdmin()) {
         if (deleted) {
           actions.push(
-            '<button type="button" class="button" id="detailRestoreButton">استعادة</button>'
+            '<button type="button" class="button" id="detailRestoreButton">' + escapeHTML(_t("restore")) + '</button>'
           );
         } else {
           actions.push(
-            '<button type="button" class="button danger-button" id="detailDeleteButton">حذف</button>'
+            '<button type="button" class="button danger-button" id="detailDeleteButton">' + escapeHTML(_t("delete")) + '</button>'
           );
         }
       }
       actions.push(
-        '<button type="button" class="button secondary-button" id="detailCloseButton">إغلاق</button>'
+        '<button type="button" class="button secondary-button" id="detailCloseButton">' + escapeHTML(_t("close")) + '</button>'
       );
       el("detailActions").innerHTML = actions.join("");
 
@@ -1601,19 +1671,23 @@
 
   function renderUsersTable(container, items) {
     if (!items.length) {
-      renderEmpty(container, "لا يوجد مستخدمون مطابقون.");
+      renderEmpty(container, _t("no_users"));
       return;
     }
     var rows = items
       .map(function (user) {
         var isSelf = state.user && user.id === state.user.id;
+        var toggleText = user.isActive
+          ? (window.I18N && window.I18N.getLanguage() === "en" ? "Disable" : "تعطيل")
+          : (window.I18N && window.I18N.getLanguage() === "en" ? "Enable" : "تفعيل");
+        var resetPwText = window.I18N && window.I18N.getLanguage() === "en" ? "Reset Password" : "إعادة تعيين كلمة المرور";
         var actions = [
           '<button type="button" class="small-button" data-user-action="edit" data-id="' +
             escapeHTML(user.id) +
-            '">تعديل</button>',
+            '">' + escapeHTML(_t("edit")) + '</button>',
           '<button type="button" class="small-button" data-user-action="password" data-id="' +
             escapeHTML(user.id) +
-            '">إعادة تعيين كلمة المرور</button>',
+            '">' + escapeHTML(resetPwText) + '</button>',
           '<button type="button" class="small-button' +
             (user.isActive ? " delete-button" : "") +
             '" data-user-action="toggle" data-id="' +
@@ -1621,18 +1695,18 @@
             '"' +
             (isSelf ? " disabled" : "") +
             ">" +
-            (user.isActive ? "تعطيل" : "تفعيل") +
+            escapeHTML(toggleText) +
             "</button>"
         ];
         var employeeNumber = user.employeeNumber
           ? escapeHTML(user.employeeNumber)
-          : '<span class="muted">غير محدد</span>';
+          : '<span class="muted">' + escapeHTML(_t("unspecified")) + '</span>';
         var department = user.departmentId
-          ? escapeHTML(user.departmentName || "إدارة محذوفة") +
+          ? escapeHTML(user.departmentName || (window.I18N && window.I18N.getLanguage() === "en" ? "Deleted Department" : "إدارة محذوفة")) +
             (user.departmentActive === false
-              ? ' <span class="badge badge-inactive">معطّلة</span>'
+              ? ' <span class="badge badge-inactive">' + escapeHTML(_t("disabled")) + '</span>'
               : "")
-          : '<span class="muted">غير معيّنة</span>';
+          : '<span class="muted">' + escapeHTML(_t("unspecified")) + '</span>';
         return (
           "<tr><td>" +
           escapeHTML(user.username) +
@@ -1645,12 +1719,12 @@
           '</td><td><span class="badge badge-' +
           (user.role === "admin" ? "admin" : "employee") +
           '">' +
-          escapeHTML(ROLE_LABELS[user.role] || user.role) +
+          escapeHTML(getRoleLabel(user.role)) +
           "</span></td><td>" +
           '<span class="badge badge-' +
           (user.isActive ? "active" : "inactive") +
           '">' +
-          (user.isActive ? "نشِط" : "معطَّل") +
+          escapeHTML(user.isActive ? _t("active") : _t("disabled")) +
           "</span></td><td>" +
           escapeHTML(formatDateTime(user.createdAt)) +
           "</td><td>" +
@@ -1661,9 +1735,20 @@
         );
       })
       .join("");
+    var userColumns = [
+      _t("login_username_label"),
+      _t("col_user_emp_num"),
+      _t("user_fullname_label"),
+      _t("doc_dept_label"),
+      _t("col_user_role"),
+      _t("status"),
+      _t("col_dept_created"),
+      _t("col_user_last_login"),
+      _t("actions")
+    ];
     container.innerHTML =
       '<div class="table-wrap"><table><thead><tr>' +
-      "<th>اسم المستخدم</th><th>الرقم الوظيفي</th><th>الاسم الكامل</th><th>الإدارة</th><th>الدور</th><th>الحالة</th><th>تاريخ الإنشاء</th><th>آخر دخول</th><th>الإجراءات</th>" +
+      userColumns.map(function (c) { return "<th>" + escapeHTML(c) + "</th>"; }).join("") +
       "</tr></thead><tbody>" +
       rows +
       "</tbody></table></div>";
@@ -1671,13 +1756,13 @@
 
   function fillUserDepartmentOptions(user) {
     var select = el("userDepartment");
-    select.innerHTML = '<option value="">بدون إدارة (المدير فقط)</option>';
+    select.innerHTML = '<option value="">' + escapeHTML(_t("unspecified")) + '</option>';
     var departments = state.userFormDepartments || [];
     departments.forEach(function (department) {
       var option = document.createElement("option");
       option.value = department.id;
       option.textContent =
-        department.name + (department.isActive ? "" : " (معطّلة)");
+        department.name + (department.isActive ? "" : " (" + _t("disabled") + ")");
       select.appendChild(option);
     });
     if (user && user.departmentId && !departments.some(function (department) {
@@ -1685,7 +1770,7 @@
     })) {
       var stale = document.createElement("option");
       stale.value = user.departmentId;
-      stale.textContent = user.departmentName || "إدارة غير متاحة";
+      stale.textContent = user.departmentName || (window.I18N && window.I18N.getLanguage() === "en" ? "Unavailable Department" : "إدارة غير متاحة");
       select.appendChild(stale);
     }
     select.value = user && user.departmentId ? user.departmentId : "";
@@ -1859,7 +1944,7 @@
 
   function renderAuditTable(container, items) {
     if (!items.length) {
-      renderEmpty(container, "لا توجد سجلات مطابقة.");
+      renderEmpty(container, _t("no_audit"));
       return;
     }
     var rows = items
@@ -1871,7 +1956,7 @@
           "</td><td>" +
           escapeHTML(entry.actorUsername || "—") +
           "</td><td>" +
-          escapeHTML(ACTION_LABELS[entry.action] || entry.action) +
+          escapeHTML(getActionLabel(entry.action)) +
           '</td><td dir="ltr">' +
           escapeHTML(
             (entry.entityType || "—") +
@@ -1887,9 +1972,17 @@
         );
       })
       .join("");
+    var auditColumns = [
+      _t("col_audit_time"),
+      _t("col_audit_user"),
+      _t("col_audit_action"),
+      _t("col_audit_entity"),
+      _t("col_audit_details"),
+      _t("col_audit_ip")
+    ];
     container.innerHTML =
       '<div class="table-wrap"><table><thead><tr>' +
-      "<th>الوقت</th><th>المستخدم</th><th>العملية</th><th>الكيان</th><th>التفاصيل</th><th>عنوان IP</th>" +
+      auditColumns.map(function (c) { return "<th>" + escapeHTML(c) + "</th>"; }).join("") +
       "</tr></thead><tbody>" +
       rows +
       "</tbody></table></div>";
@@ -2142,12 +2235,12 @@
     var departmentInfo = el("settingsDepartmentInfo");
     if (state.user && state.user.role === "employee") {
       departmentInfo.textContent = state.user.departmentId
-        ? "الإدارة المعيّنة: " +
+        ? _t("settings_dept_info") +
           currentDepartmentName() +
-          (state.user.departmentActive === false ? " (معطّلة)" : " (نشطة)")
-        : "الإدارة المعيّنة: غير معيّنة — راجع مدير النظام.";
+          (state.user.departmentActive === false ? " (" + _t("disabled") + ")" : " (" + _t("active") + ")")
+        : _t("settings_dept_info") + _t("unspecified");
     } else {
-      departmentInfo.textContent = "الإدارة المعيّنة: صلاحية عامة (مدير النظام)";
+      departmentInfo.textContent = _t("settings_dept_info") + _t("role_admin");
     }
     updateLegacyStatus();
   }
@@ -2170,7 +2263,7 @@
     document.querySelectorAll(".menu").forEach(function (button) {
       button.classList.toggle("active", button.dataset.page === pageId);
     });
-    el("pageTitle").textContent = PAGE_TITLES[pageId];
+    el("pageTitle").textContent = getPageTitle(pageId);
     var backBtn = el("backToDashboardButton");
     if (backBtn) {
       backBtn.hidden = (pageId === "dashboard");
@@ -2324,14 +2417,52 @@
     el("loginForm").addEventListener("submit", doLogin);
     el("logoutButton").addEventListener("click", doLogout);
 
+    var langToggleBtn = el("langToggle");
+    if (langToggleBtn && window.I18N) {
+      langToggleBtn.addEventListener("click", function () {
+        window.I18N.toggleLanguage();
+      });
+    }
+    var loginLangToggleBtn = el("loginLangToggle");
+    if (loginLangToggleBtn && window.I18N) {
+      loginLangToggleBtn.addEventListener("click", function () {
+        window.I18N.toggleLanguage();
+      });
+    }
+
+    window.addEventListener("archive:languagechange", function () {
+      el("today").textContent = _t("today_prefix") + formatDate(todayString());
+      el("pageTitle").textContent = getPageTitle(state.currentPage);
+      fillDepartmentSelects();
+      if (state.user) {
+        applyRoleUI();
+        if (state.currentPage === "dashboard") {
+          loadDashboardStats();
+          loadDocumentsView("dashboard");
+        } else if (state.currentPage === "incoming" || state.currentPage === "outgoing" || state.currentPage === "archive") {
+          loadDocumentsView(state.currentPage);
+        } else if (state.currentPage === "departments") {
+          loadDepartmentListPage();
+        } else if (state.currentPage === "reports") {
+          loadReports();
+        } else if (state.currentPage === "users") {
+          loadUsers();
+        } else if (state.currentPage === "audit") {
+          loadAudit();
+        } else if (state.currentPage === "settings") {
+          loadSettingsPage();
+        }
+      }
+    });
+
     var sidebarToggleBtn = el("sidebarToggle");
     var appContainer = el("app");
     if (sidebarToggleBtn && appContainer) {
       function setSidebarCollapsed(collapsed) {
         appContainer.classList.toggle("sidebar-collapsed", collapsed);
         sidebarToggleBtn.setAttribute("aria-expanded", String(!collapsed));
-        sidebarToggleBtn.title = collapsed ? "إظهار القائمة الجانبية" : "إخفاء القائمة الجانبية";
-        sidebarToggleBtn.setAttribute("aria-label", collapsed ? "إظهار القائمة الجانبية" : "إخفاء القائمة الجانبية");
+        sidebarToggleBtn.title = collapsed ? _t("sidebar_toggle_show") : _t("sidebar_toggle_hide");
+        sidebarToggleBtn.setAttribute("aria-label", collapsed ? _t("sidebar_toggle_show") : _t("sidebar_toggle_hide"));
         try {
           localStorage.setItem("archive_sidebar_collapsed", String(collapsed));
         } catch (_) {}
@@ -2357,8 +2488,8 @@
           appContainer.classList.add("sidebar-collapsed");
           if (sidebarToggleBtn) {
             sidebarToggleBtn.setAttribute("aria-expanded", "false");
-            sidebarToggleBtn.title = "إظهار القائمة الجانبية";
-            sidebarToggleBtn.setAttribute("aria-label", "إظهار القائمة الجانبية");
+            sidebarToggleBtn.title = _t("sidebar_toggle_show");
+            sidebarToggleBtn.setAttribute("aria-label", _t("sidebar_toggle_show"));
           }
         }
       });
@@ -2682,10 +2813,10 @@
      الإقلاع
      ======================================================================== */
   async function boot() {
-    el("today").textContent = "تاريخ اليوم: " + formatDate(todayString());
+    el("today").textContent = _t("today_prefix") + formatDate(todayString());
     api.setUnauthorizedHandler(function () {
       if (state.user) {
-        toast("انتهت صلاحية الجلسة. الرجاء تسجيل الدخول من جديد.", "error");
+        toast(_t("session_expired"), "error");
       }
       state.user = null;
       api.setCsrfToken(null);

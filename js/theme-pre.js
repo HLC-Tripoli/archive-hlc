@@ -22,6 +22,17 @@
   var root = document.documentElement;
   root.setAttribute("data-theme", theme);
   root.setAttribute("data-theme-mode", mode);
+
+  var lang = "ar";
+  try {
+    var storedLang = localStorage.getItem("archive_language");
+    if (storedLang === "en" || storedLang === "ar") {
+      lang = storedLang;
+    }
+  } catch (_) {}
+  root.setAttribute("lang", lang);
+  root.setAttribute("dir", lang === "en" ? "ltr" : "rtl");
+
   var meta = document.querySelector('meta[name="theme-color"]');
   if (meta) {
     meta.setAttribute("content", dark ? "#10151c" : "#f4f6f9");

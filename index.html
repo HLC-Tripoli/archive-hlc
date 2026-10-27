@@ -6,7 +6,7 @@
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
     <script src="./js/theme-pre.js"></script>
-    <link rel="stylesheet" href="./css/style.css?v=1.0.11" />
+    <link rel="stylesheet" href="./css/style.css?v=1.0.12" />
     <link rel="icon" href="./img/logo.svg" />
     <meta name="referrer" content="same-origin" />
   </head>
@@ -25,44 +25,44 @@
         <div class="brand">
           <div class="logo"><img src="./img/logo.svg" alt="" /></div>
           <div>
-            <h2>هاتف ليبيا</h2>
-            <p>الأرشيف الإلكتروني</p>
+            <h2 data-i18n="brand_name">هاتف ليبيا</h2>
+            <p data-i18n="brand_sub">الأرشيف الإلكتروني</p>
           </div>
         </div>
-        <div class="menu-title">القائمة الرئيسية</div>
+        <div class="menu-title" data-i18n="menu_main">القائمة الرئيسية</div>
         <button class="menu active" data-page="dashboard" type="button">
-          🏠 لوحة التحكم
+          🏠 <span data-i18n="nav_dashboard">الرئيسية</span>
         </button>
         <button class="menu" data-page="incoming" type="button">
-          📥 المراسلات الواردة
+          📥 <span data-i18n="nav_incoming">المراسلات الواردة</span>
         </button>
         <button class="menu" data-page="outgoing" type="button">
-          📤 المراسلات الصادرة
+          📤 <span data-i18n="nav_outgoing">المراسلات الصادرة</span>
         </button>
         <button class="menu" data-page="archive" type="button">
-          🗄️ الأرشيف الإلكتروني
+          🗄️ <span data-i18n="nav_archive">الأرشيف الإلكتروني</span>
         </button>
         <button class="menu admin-only is-hidden" data-page="departments" type="button">
-          🏢 الإدارات والأقسام
+          🏢 <span data-i18n="nav_departments">الإدارات والأقسام</span>
         </button>
         <button class="menu" data-page="reports" type="button">
-          📊 التقارير
+          📊 <span data-i18n="nav_reports">التقارير</span>
         </button>
         <button class="menu admin-only is-hidden" data-page="users" type="button">
-          👥 إدارة المستخدمين
+          👥 <span data-i18n="nav_users">إدارة المستخدمين</span>
         </button>
         <button class="menu admin-only is-hidden" data-page="audit" type="button">
-          📜 سجل التدقيق
+          📜 <span data-i18n="nav_audit">سجل التدقيق</span>
         </button>
         <button class="menu" data-page="settings" type="button">
-          ⚙️ الإعدادات
+          ⚙️ <span data-i18n="nav_settings">الإعدادات</span>
         </button>
         <button class="menu" data-page="about" type="button">
-          ℹ️ حول المنظومة
+          ℹ️ <span data-i18n="nav_about">حول المنظومة</span>
         </button>
         <div class="sidebar-footer">
-          منظومة إدارة الوثائق<br />
-          الإصدار 1.0
+          <span data-i18n="brand_sub">الأرشيف الإلكتروني</span><br />
+          v1.0
         </div>
       </aside>
 
@@ -102,6 +102,15 @@
             </div>
           </div>
           <div class="topbar-actions">
+            <button
+              type="button"
+              id="langToggle"
+              class="lang-toggle-button"
+              title="Switch to English"
+              aria-label="Switch to English"
+            >
+              EN
+            </button>
             <div class="theme-toggle-slot" data-theme-toggle></div>
             <div class="user-badge">
               <span class="avatar" id="userAvatar">؟</span>
@@ -109,7 +118,7 @@
                 <strong id="userName">—</strong>
                 <small id="userRoleLabel">—</small>
               </div>
-              <button type="button" class="logout-button" id="logoutButton">
+              <button type="button" class="logout-button" id="logoutButton" data-i18n="logout">
                 تسجيل الخروج
               </button>
             </div>
@@ -126,42 +135,45 @@
         <section id="dashboard" class="page active">
           <div class="welcome">
             <div>
-              <h2 id="dashboardGreeting">مرحباً بك في الأرشيف الإلكتروني</h2>
-              <p>إدارة المراسلات والوثائق من مكان واحد.</p>
+              <h2 id="dashboardGreeting" data-i18n="dashboard_greeting">مرحباً بك في الأرشيف الإلكتروني</h2>
+              <p data-i18n="dashboard_sub">إدارة المراسلات والوثائق من مكان واحد.</p>
             </div>
           </div>
           <div class="stats">
-            <div class="stat-card clickable" id="incomingStatCard" data-page="incoming" role="button" tabindex="0" title="الانتقال إلى المراسلات الواردة">
-              <div class="stat-top"><span>الوارد</span><span>📥</span></div>
+            <div class="stat-card clickable" id="incomingStatCard" data-page="incoming" role="button" tabindex="0">
+              <div class="stat-top"><span data-i18n="stat_incoming">الوارد</span><span>📥</span></div>
               <h2 id="incomingCount">0</h2>
-              <small>إجمالي المراسلات الواردة</small>
+              <small data-i18n="stat_incoming_sub">معاملات واردة مسجلة</small>
             </div>
-            <div class="stat-card clickable" id="outgoingStatCard" data-page="outgoing" role="button" tabindex="0" title="الانتقال إلى المراسلات الصادرة">
-              <div class="stat-top"><span>الصادر</span><span>📤</span></div>
+            <div class="stat-card clickable" id="outgoingStatCard" data-page="outgoing" role="button" tabindex="0">
+              <div class="stat-top"><span data-i18n="stat_outgoing">الصادر</span><span>📤</span></div>
               <h2 id="outgoingCount">0</h2>
-              <small>إجمالي المراسلات الصادرة</small>
+              <small data-i18n="stat_outgoing_sub">معاملات صادرة مسجلة</small>
             </div>
-            <div class="stat-card clickable" id="archiveStatCard" data-page="archive" role="button" tabindex="0" title="الانتقال إلى الأرشيف الإلكتروني">
-              <div class="stat-top"><span>الأرشيف</span><span>🗄️</span></div>
+            <div class="stat-card clickable" id="archiveStatCard" data-page="archive" role="button" tabindex="0">
+              <div class="stat-top"><span data-i18n="stat_total">الأرشيف</span><span>🗄️</span></div>
               <h2 id="totalCount">0</h2>
-              <small>إجمالي الوثائق المسجلة</small>
+              <small data-i18n="stat_total_sub">معاملات نشطة في المنظومة</small>
             </div>
             <div class="stat-card">
               <div class="stat-top">
-                <span>هذا الشهر</span><span>🗓️</span>
+                <span data-i18n="stat_month">هذا الشهر</span><span>🗓️</span>
               </div>
               <h2 id="monthCount">0</h2>
-              <small>معاملات مسجلة هذا الشهر</small>
+              <small data-i18n="stat_month_sub">معاملات مسجلة هذا الشهر</small>
             </div>
           </div>
           <div class="panel">
             <div class="panel-heading">
-              <h2>أحدث المعاملات</h2>
+              <h2 data-i18n="latest_transactions">أحدث المعاملات</h2>
               <input
                 id="dashboardSearch"
                 class="search"
-                placeholder="ابحث بالرقم الإشاري أو الموضوع أو الجهة..."
+                data-i18n-placeholder="dashboard_search_placeholder"
+                placeholder="ابحث بالرقم الإشاري أو الموضوع أو رقم التسلسل أو الجهة..."
                 type="search"
+                data-i18n-aria="dashboard_search_aria"
+                aria-label="بحث في أحدث المعاملات"
               />
             </div>
             <div id="dashboardTable"></div>
@@ -174,10 +186,10 @@
           <div class="panel">
             <div class="panel-heading">
               <div>
-                <h2>المراسلات الواردة</h2>
-                <p>تسجيل ومتابعة المراسلات المستلمة.</p>
+                <h2 data-i18n="incoming_title">المراسلات الواردة</h2>
+                <p data-i18n="incoming_desc">تسجيل ومتابعة المراسلات المستلمة.</p>
               </div>
-              <button class="button" id="addIncomingButton" data-requires-department type="button">
+              <button class="button" id="addIncomingButton" data-requires-department type="button" data-i18n="add_incoming">
                 + إضافة وارد
               </button>
             </div>
@@ -185,6 +197,7 @@
               <input
                 id="incomingSearch"
                 class="search"
+                data-i18n-placeholder="search_transactions_placeholder"
                 placeholder="ابحث بالرقم الإشاري أو الموضوع أو رقم التسلسل أو الجهة..."
                 type="search"
               />
@@ -199,10 +212,10 @@
           <div class="panel">
             <div class="panel-heading">
               <div>
-                <h2>المراسلات الصادرة</h2>
-                <p>تسجيل ومتابعة المراسلات المرسلة.</p>
+                <h2 data-i18n="outgoing_title">المراسلات الصادرة</h2>
+                <p data-i18n="outgoing_desc">تسجيل ومتابعة المراسلات المرسلة.</p>
               </div>
-              <button class="button" id="addOutgoingButton" data-requires-department type="button">
+              <button class="button" id="addOutgoingButton" data-requires-department type="button" data-i18n="add_outgoing">
                 + إضافة صادر
               </button>
             </div>
@@ -210,6 +223,7 @@
               <input
                 id="outgoingSearch"
                 class="search"
+                data-i18n-placeholder="search_transactions_placeholder"
                 placeholder="ابحث بالرقم الإشاري أو الموضوع أو رقم التسلسل أو الجهة..."
                 type="search"
               />
@@ -224,10 +238,10 @@
           <div class="panel">
             <div class="panel-heading">
               <div>
-                <h2>الأرشيف الإلكتروني</h2>
-                <p>جميع الوثائق المسجلة في المنظومة مع البحث والتصفية.</p>
+                <h2 data-i18n="archive_title">الأرشيف الإلكتروني</h2>
+                <p data-i18n="archive_desc">جميع الوثائق المسجلة في المنظومة مع البحث والتصفية.</p>
               </div>
-              <button class="button secondary-button" id="exportArchiveCsvButton" data-requires-department type="button">
+              <button class="button secondary-button" id="exportArchiveCsvButton" data-requires-department type="button" data-i18n="export_csv">
                 تصدير CSV
               </button>
             </div>
@@ -235,28 +249,31 @@
               <input
                 id="archiveSearch"
                 class="search"
+                data-i18n-placeholder="search_transactions_placeholder"
                 placeholder="ابحث بالرقم الإشاري أو الموضوع أو رقم التسلسل أو الجهة..."
                 type="search"
               />
               <select id="typeFilter">
-                <option value="">جميع الأنواع</option>
-                <option value="incoming">وارد</option>
-                <option value="outgoing">صادر</option>
+                <option value="" data-i18n="all_types">جميع الأنواع</option>
+                <option value="incoming" data-i18n="type_incoming">وارد</option>
+                <option value="outgoing" data-i18n="type_outgoing">صادر</option>
               </select>
               <select id="departmentFilter">
-                <option value="">جميع الإدارات</option>
+                <option value="" data-i18n="all_departments">جميع الإدارات</option>
               </select>
               <div class="date-field">
                 <input
                   id="dateFromFilter"
                   type="text"
                   class="date-input"
+                  data-i18n-placeholder="date_from_placeholder"
                   placeholder="من تاريخ (DD/MM/YYYY)"
+                  data-i18n-aria="date_from"
                   aria-label="من تاريخ"
                   inputmode="numeric"
                   autocomplete="off"
                 />
-                <button type="button" class="date-picker-btn" tabindex="-1" aria-label="اختر التاريخ من التقويم" title="فتح التقويم">📅</button>
+                <button type="button" class="date-picker-btn" tabindex="-1" data-i18n-title="choose_calendar_title" aria-label="اختر التاريخ من التقويم" title="فتح التقويم">📅</button>
                 <input type="date" class="date-native-picker" tabindex="-1" aria-hidden="true" />
               </div>
               <div class="date-field">
@@ -264,28 +281,30 @@
                   id="dateToFilter"
                   type="text"
                   class="date-input"
+                  data-i18n-placeholder="date_to_placeholder"
                   placeholder="إلى تاريخ (DD/MM/YYYY)"
+                  data-i18n-aria="date_to"
                   aria-label="إلى تاريخ"
                   inputmode="numeric"
                   autocomplete="off"
                 />
-                <button type="button" class="date-picker-btn" tabindex="-1" aria-label="اختر التاريخ من التقويم" title="فتح التقويم">📅</button>
+                <button type="button" class="date-picker-btn" tabindex="-1" data-i18n-title="choose_calendar_title" aria-label="اختر التاريخ من التقويم" title="فتح التقويم">📅</button>
                 <input type="date" class="date-native-picker" tabindex="-1" aria-hidden="true" />
               </div>
               <select id="sortFilter" aria-label="ترتيب النتائج">
-                <option value="date:desc">التاريخ (الأحدث أولاً)</option>
-                <option value="date:asc">التاريخ (الأقدم أولاً)</option>
-                <option value="createdAt:desc">تاريخ التسجيل (الأحدث)</option>
-                <option value="updatedAt:desc">آخر تعديل</option>
-                <option value="reference:asc">الرقم الاشاري</option>
-                <option value="sequenceNumber:asc">رقم التسلسل</option>
-                <option value="title:asc">موضوع الرسالة</option>
+                <option value="date:desc" data-i18n="sort_date_desc">التاريخ (الأحدث أولاً)</option>
+                <option value="date:asc" data-i18n="sort_date_asc">التاريخ (الأقدم أولاً)</option>
+                <option value="createdAt:desc" data-i18n="sort_created_desc">تاريخ التسجيل (الأحدث)</option>
+                <option value="updatedAt:desc" data-i18n="sort_updated_desc">آخر تعديل</option>
+                <option value="reference:asc" data-i18n="sort_ref_asc">الرقم الاشاري</option>
+                <option value="sequenceNumber:asc" data-i18n="sort_seq_asc">رقم التسلسل</option>
+                <option value="title:asc" data-i18n="sort_title_asc">موضوع الرسالة</option>
               </select>
               <label class="checkbox-field admin-only is-hidden" id="includeDeletedField">
                 <input type="checkbox" id="includeDeletedFilter" />
-                <span>إظهار المحذوفة</span>
+                <span data-i18n="show_deleted">إظهار المحذوفة</span>
               </label>
-              <button class="button secondary-button" id="clearArchiveFilters" type="button">
+              <button class="button secondary-button" id="clearArchiveFilters" type="button" data-i18n="clear_filters">
                 مسح الفلاتر
               </button>
             </div>
@@ -299,22 +318,23 @@
           <div class="panel">
             <div class="panel-heading">
               <div>
-                <h2>الإدارات والأقسام</h2>
-                <p>إدارة الإدارات المستخدمة في تصنيف المعاملات.</p>
+                <h2 data-i18n="departments_title">الإدارات والأقسام</h2>
+                <p data-i18n="departments_desc">إدارة الإدارات المستخدمة في تصنيف المعاملات.</p>
               </div>
               <label class="checkbox-field admin-only is-hidden" id="includeInactiveDepartmentsField">
                 <input type="checkbox" id="includeInactiveDepartments" />
-                <span>إظهار المعطّلة</span>
+                <span data-i18n="show_inactive_depts">إظهار المعطّلة</span>
               </label>
             </div>
             <form id="departmentForm" class="department-form">
               <input
                 id="departmentName"
+                data-i18n-placeholder="dept_name_placeholder"
                 placeholder="اسم الإدارة أو القسم (مثال: إدارة تقنية المعلومات)"
                 required
                 maxlength="100"
               />
-              <button class="button" type="submit">إضافة الإدارة</button>
+              <button class="button" type="submit" data-i18n="add_department">إضافة الإدارة</button>
             </form>
             <div id="departmentList"></div>
           </div>
@@ -325,43 +345,43 @@
           <div class="panel">
             <div class="panel-heading">
               <div>
-                <h2>التقارير والإحصائيات</h2>
-                <p>ملخص المعاملات المسجلة في المنظومة.</p>
+                <h2 data-i18n="reports_title">التقارير والإحصائيات</h2>
+                <p data-i18n="reports_desc">ملخص المعاملات المسجلة في المنظومة.</p>
               </div>
               <div class="panel-actions">
-                <button class="button secondary-button" id="printReportButton" type="button">
+                <button class="button secondary-button" id="printReportButton" type="button" data-i18n="print_report">
                   🖨️ طباعة
                 </button>
-                <button class="button" id="exportReportsCsvButton" data-requires-department type="button">
+                <button class="button" id="exportReportsCsvButton" data-requires-department type="button" data-i18n="export_csv">
                   تصدير CSV
                 </button>
               </div>
             </div>
             <div class="report-grid">
               <div class="report-box">
-                <span>إجمالي الوثائق</span>
+                <span data-i18n="report_total">إجمالي الوثائق</span>
                 <strong id="reportTotal">0</strong>
               </div>
               <div class="report-box">
-                <span>المراسلات الواردة</span>
+                <span data-i18n="report_incoming">المراسلات الواردة</span>
                 <strong id="reportIncoming">0</strong>
               </div>
               <div class="report-box">
-                <span>المراسلات الصادرة</span>
+                <span data-i18n="report_outgoing">المراسلات الصادرة</span>
                 <strong id="reportOutgoing">0</strong>
               </div>
             </div>
             <div class="report-details">
               <div class="report-list">
-                <h3>حسب النوع</h3>
+                <h3 data-i18n="report_by_type">حسب النوع</h3>
                 <div id="reportByType"></div>
               </div>
               <div class="report-list">
-                <h3>حسب الإدارة</h3>
+                <h3 data-i18n="report_by_dept">حسب الإدارة</h3>
                 <div id="reportByDepartment"></div>
               </div>
               <div class="report-list">
-                <h3>حسب الشهر (آخر 12 شهراً)</h3>
+                <h3 data-i18n="report_by_month">حسب الشهر (آخر 12 شهراً)</h3>
                 <div id="reportByMonth"></div>
               </div>
             </div>
@@ -373,24 +393,24 @@
           <div class="panel">
             <div class="panel-heading">
               <div>
-                <h2>إدارة المستخدمين</h2>
-                <p>إنشاء الحسابات وتعديل الأدوار والتعطيل وإعادة تعيين كلمات المرور.</p>
+                <h2 data-i18n="users_title">إدارة المستخدمين</h2>
+                <p data-i18n="users_desc">إنشاء الحسابات وتعديل الأدوار والتعطيل وإعادة تعيين كلمات المرور.</p>
               </div>
-              <button class="button" id="addUserButton" type="button">
+              <button class="button" id="addUserButton" type="button" data-i18n="add_user">
                 + إضافة مستخدم
               </button>
             </div>
             <div class="filters">
-              <input id="usersSearch" class="search" placeholder="اسم المستخدم أو الاسم الكامل أو الرقم الوظيفي..." type="search" />
+              <input id="usersSearch" class="search" data-i18n-placeholder="users_search_placeholder" placeholder="اسم المستخدم أو الاسم الكامل أو الرقم الوظيفي..." type="search" />
               <select id="usersRoleFilter">
-                <option value="">جميع الأدوار</option>
-                <option value="admin">مدير النظام</option>
-                <option value="employee">موظف الأرشيف</option>
+                <option value="" data-i18n="all_roles">جميع الأدوار</option>
+                <option value="admin" data-i18n="role_admin">مدير النظام</option>
+                <option value="employee" data-i18n="role_employee">موظف الأرشيف</option>
               </select>
               <select id="usersStatusFilter">
-                <option value="">الجميع</option>
-                <option value="true">نشِط</option>
-                <option value="false">معطَّل</option>
+                <option value="" data-i18n="all_statuses">الجميع</option>
+                <option value="true" data-i18n="active">نشِط</option>
+                <option value="false" data-i18n="disabled">معطَّل</option>
               </select>
             </div>
             <div id="usersTable"></div>
@@ -403,24 +423,26 @@
           <div class="panel">
             <div class="panel-heading">
               <div>
-                <h2>سجل التدقيق</h2>
-                <p>تتبّع عمليات الدخول وإدارة المعاملات والمستخدمين والإدارات.</p>
+                <h2 data-i18n="audit_title">سجل التدقيق</h2>
+                <p data-i18n="audit_desc">تتبّع عمليات الدخول وإدارة المعاملات والمستخدمين والإدارات.</p>
               </div>
             </div>
             <div class="filters">
-              <input id="auditActionFilter" class="search" placeholder="نوع العملية (مثال: document.created)" />
-              <input id="auditEntityFilter" placeholder="نوع الكيان (مثال: document)" />
+              <input id="auditActionFilter" class="search" data-i18n-placeholder="audit_action_placeholder" placeholder="نوع العملية (مثال: document.created)" />
+              <input id="auditEntityFilter" data-i18n-placeholder="audit_entity_placeholder" placeholder="نوع الكيان (مثال: document)" />
               <div class="date-field">
                 <input
                   id="auditDateFrom"
                   type="text"
                   class="date-input"
+                  data-i18n-placeholder="date_from_placeholder"
                   placeholder="من تاريخ (DD/MM/YYYY)"
+                  data-i18n-aria="date_from"
                   aria-label="من تاريخ"
                   inputmode="numeric"
                   autocomplete="off"
                 />
-                <button type="button" class="date-picker-btn" tabindex="-1" aria-label="اختر التاريخ من التقويم" title="فتح التقويم">📅</button>
+                <button type="button" class="date-picker-btn" tabindex="-1" data-i18n-title="choose_calendar_title" aria-label="اختر التاريخ من التقويم" title="فتح التقويم">📅</button>
                 <input type="date" class="date-native-picker" tabindex="-1" aria-hidden="true" />
               </div>
               <div class="date-field">
@@ -428,15 +450,17 @@
                   id="auditDateTo"
                   type="text"
                   class="date-input"
+                  data-i18n-placeholder="date_to_placeholder"
                   placeholder="إلى تاريخ (DD/MM/YYYY)"
+                  data-i18n-aria="date_to"
                   aria-label="إلى تاريخ"
                   inputmode="numeric"
                   autocomplete="off"
                 />
-                <button type="button" class="date-picker-btn" tabindex="-1" aria-label="اختر التاريخ من التقويم" title="فتح التقويم">📅</button>
+                <button type="button" class="date-picker-btn" tabindex="-1" data-i18n-title="choose_calendar_title" aria-label="اختر التاريخ من التقويم" title="فتح التقويم">📅</button>
                 <input type="date" class="date-native-picker" tabindex="-1" aria-hidden="true" />
               </div>
-              <button class="button secondary-button" id="auditRefreshButton" type="button">
+              <button class="button secondary-button" id="auditRefreshButton" type="button" data-i18n="refresh">
                 تحديث
               </button>
             </div>
@@ -448,55 +472,55 @@
         <!-- الإعدادات -->
         <section id="settings" class="page">
           <div class="panel">
-            <h2>حسابي</h2>
-            <p id="settingsDepartmentInfo">الإدارة المعيّنة: —</p>
-            <p>تغيير كلمة المرور الخاصة بحسابك. سيؤدي ذلك إلى إنهاء الجلسات الأخرى.</p>
+            <h2 data-i18n="settings_my_account">حسابي</h2>
+            <p id="settingsDepartmentInfo" data-i18n="settings_dept_info">الإدارة المعيّنة: —</p>
+            <p data-i18n="settings_password_desc">تغيير كلمة المرور الخاصة بحسابك. سيؤدي ذلك إلى إنهاء الجلسات الأخرى.</p>
             <form id="changePasswordForm" class="stacked-form">
-              <label for="currentPassword">كلمة المرور الحالية</label>
-              <input id="currentPassword" type="password" autocomplete="current-password" required placeholder="أدخل كلمة المرور الحالية" />
-              <label for="newPassword">كلمة المرور الجديدة</label>
-              <input id="newPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="8 أحرف على الأقل" />
+              <label for="currentPassword" data-i18n="current_password_label">كلمة المرور الحالية</label>
+              <input id="currentPassword" type="password" autocomplete="current-password" required data-i18n-placeholder="current_password_placeholder" placeholder="أدخل كلمة المرور الحالية" />
+              <label for="newPassword" data-i18n="new_password_label">كلمة المرور الجديدة</label>
+              <input id="newPassword" type="password" autocomplete="new-password" minlength="8" required data-i18n-placeholder="new_password_placeholder" placeholder="8 أحرف على الأقل" />
               <div id="changePasswordError" class="alert alert-error" hidden></div>
               <div class="form-actions">
-                <button class="button" type="submit">تغيير كلمة المرور</button>
+                <button class="button" type="submit" data-i18n="update_password_btn">تغيير كلمة المرور</button>
               </div>
             </form>
             <hr />
-            <h3>المظهر</h3>
-            <p>اختر مظهر الواجهة: النظام أو الداكن أو الفاتح.</p>
+            <h3 data-i18n="theme_title">المظهر</h3>
+            <p data-i18n="theme_desc">اختر مظهر الواجهة: النظام أو الداكن أو الفاتح.</p>
             <div class="theme-toggle-slot" data-theme-toggle></div>
           </div>
 
           <div class="panel admin-only is-hidden">
-            <h2>النسخ الاحتياطي والاستيراد</h2>
-            <p>تنزيل نسخة JSON من بيانات المنظومة، أو استيراد نسخة سابقة.</p>
+            <h2 data-i18n="backup_title">النسخ الاحتياطي والاستيراد</h2>
+            <p data-i18n="backup_desc">تنزيل نسخة JSON من بيانات المنظومة، أو استيراد نسخة سابقة.</p>
             <div class="form-actions">
-              <button class="button" id="exportBackupButton" type="button">
+              <button class="button" id="exportBackupButton" type="button" data-i18n="export_backup_btn">
                 تنزيل نسخة احتياطية JSON
               </button>
             </div>
             <hr />
-            <h3>استيراد نسخة احتياطية</h3>
+            <h3 data-i18n="import_backup_title">استيراد نسخة احتياطية</h3>
             <input type="file" id="backupFileInput" accept=".json,application/json" />
             <div class="form-actions">
-              <button class="button secondary-button" id="importBackupButton" type="button">
+              <button class="button secondary-button" id="importBackupButton" type="button" data-i18n="import_backup_btn">
                 استيراد النسخة الاحتياطية
               </button>
             </div>
             <div id="backupImportResult" class="import-result" hidden></div>
             <hr />
-            <h3>استيراد بيانات النسخة التجريبية من المتصفح</h3>
-            <p>
+            <h3 data-i18n="legacy_import_title">استيراد بيانات النسخة التجريبية من المتصفح</h3>
+            <p data-i18n="legacy_import_desc">
               إن كانت بيانات الإصدار التجريبي السابق ما زالت محفوظة في هذا المتصفح،
               فيمكن ترحيلها إلى الخادم. تُنقل المعاملات والإدارات، ويُتجاهل تكرار
               السجلات، ولا تُنقل محتويات المرفقات.
             </p>
             <div id="legacyStatus" class="hint"></div>
             <div class="form-actions">
-              <button class="button" id="importLegacyButton" type="button">
+              <button class="button" id="importLegacyButton" type="button" data-i18n="legacy_import_btn">
                 ترحيل بيانات المتصفح إلى الخادم
               </button>
-              <button class="button danger-button" id="clearLegacyButton" type="button" hidden>
+              <button class="button danger-button" id="clearLegacyButton" type="button" hidden data-i18n="legacy_clear_btn">
                 حذف نسخة المتصفح بعد النجاح
               </button>
             </div>
@@ -504,11 +528,11 @@
           </div>
 
           <div class="panel">
-            <h2>حول المنظومة</h2>
-            <p>منظومة إدارة الوثائق والأرشيف الإلكتروني — هاتف ليبيا (الإصدار 1.0).</p>
-            <p class="hint">يمكنك استعراض دليل الميزات والقدرات وصلاحيات الوصول والنبذة التقنية الكاملة.</p>
+            <h2 data-i18n="about_system_title">حول المنظومة</h2>
+            <p data-i18n="about_system_desc">منظومة إدارة الوثائق والأرشيف الإلكتروني — هاتف ليبيا (الإصدار 1.0).</p>
+            <p class="hint" data-i18n="about_system_hint">يمكنك استعراض دليل الميزات والقدرات وصلاحيات الوصول والنبذة التقنية الكاملة.</p>
             <div class="form-actions">
-              <button class="button secondary-button" id="openAboutPageBtn" type="button">
+              <button class="button secondary-button" id="openAboutPageBtn" type="button" data-i18n="open_about_btn">
                 فتح صفحة حول المنظومة
               </button>
             </div>
@@ -519,86 +543,86 @@
         <section id="about" class="page">
           <div class="welcome about-hero">
             <div>
-              <h2>منظومة الأرشيف الإلكتروني — هاتف ليبيا</h2>
-              <p>منصة رقمية موحدة لتسجيل وتنظيم وأرشفة المراسلات الإدارية والوثائق الرسمية ومتابعتها بدقة وأمان.</p>
+              <h2 data-i18n="about_page_title">منظومة الأرشيف الإلكتروني — هاتف ليبيا</h2>
+              <p data-i18n="about_page_subtitle">منصة رقمية موحدة لتسجيل وتنظيم وأرشفة المراسلات الإدارية والوثائق الرسمية ومتابعتها بدقة وأمان.</p>
             </div>
           </div>
 
           <div class="about-grid">
             <div class="about-card">
               <div class="about-card-icon">📥📤</div>
-              <h3>إدارة المراسلات والوثائق</h3>
-              <p>تسجيل المراسلات الواردة والصادرة بدقة عالية، وتعيين الأرقام الإشارية والتسلسل والتواريخ والجهات، ومتابعة حالات المعاملة (جديدة، قيد المعالجة، مكتملة، مؤرشفة).</p>
+              <h3 data-i18n="about_feature_archive">إدارة المراسلات والوثائق</h3>
+              <p data-i18n="about_feature_archive_desc">تسجيل المراسلات الواردة والصادرة بدقة عالية، وتعيين الأرقام الإشارية والتسلسل والتواريخ والجهات، ومتابعة حالات المعاملة (جديدة، قيد المعالجة، مكتملة، مؤرشفة).</p>
             </div>
 
             <div class="about-card">
               <div class="about-card-icon">🗄️🔍</div>
-              <h3>الأرشيف الإلكتروني والبحث</h3>
-              <p>أرشفة مركزية منظمة توفر بحثاً ذكياً بالرقم الإشاري أو التسلسل أو الموضوع، وتصفية شاملة حسب الإدارة المختصة والنطاق الزمني وحالة المراسلة.</p>
+              <h3 data-i18n="about_feature_search">الأرشيف الإلكتروني والبحث</h3>
+              <p data-i18n="about_feature_search_desc">أرشفة مركزية منظمة توفر بحثاً ذكياً بالرقم الإشاري أو التسلسل أو الموضوع، وتصفية شاملة حسب الإدارة المختصة والنطاق الزمني وحالة المراسلة.</p>
             </div>
 
             <div class="about-card">
               <div class="about-card-icon">📎👁️</div>
-              <h3>المرفقات والمعاينة الفورية</h3>
-              <p>إرفاق المستندات الرسمية بصيغة PDF والصور عالية الدقة، مع ميزة المعاينة المباشرة للمرفقات داخل المنظومة قبل الحفظ وبعده وتنزيلها بسهولة.</p>
+              <h3 data-i18n="about_feature_attachments">المرفقات والمعاينة الفورية</h3>
+              <p data-i18n="about_feature_attachments_desc">إرفاق المستندات الرسمية بصيغة PDF والصور عالية الدقة، مع ميزة المعاينة المباشرة للمرفقات داخل المنظومة قبل الحفظ وبعده وتنزيلها بسهولة.</p>
             </div>
 
             <div class="about-card">
               <div class="about-card-icon">📊📈</div>
-              <h3>التقارير والإحصائيات</h3>
-              <p>متابعة حركة المراسلات عبر لوحات بيانية تفاعلية ورسوم إحصائية توضح نسب الإنجاز وتوزيع المعاملات على الإدارات، مع إمكانية تصدير التقارير إلى صيغة CSV.</p>
+              <h3 data-i18n="about_feature_reports">التقارير والإحصائيات</h3>
+              <p data-i18n="about_feature_reports_desc">متابعة حركة المراسلات عبر لوحات بيانية تفاعلية ورسوم إحصائية توضح نسب الإنجاز وتوزيع المعاملات على الإدارات، مع إمكانية تصدير التقارير إلى صيغة CSV.</p>
             </div>
 
             <div class="about-card">
               <div class="about-card-icon">💾🔒</div>
-              <h3>النسخ الاحتياطي وحماية البيانات</h3>
-              <p>دعم كامل لتصدير النسخ الاحتياطية واستيرادها بصيغة JSON الموحدة، مع تخزين آمن للمرفقات في مسار محمي وتشفير كلمات المرور وحماية الجلسات.</p>
+              <h3 data-i18n="about_feature_backup">النسخ الاحتياطي وحماية البيانات</h3>
+              <p data-i18n="about_feature_backup_desc">دعم كامل لتصدير النسخ الاحتياطية واستيرادها بصيغة JSON الموحدة، مع تخزين آمن للمرفقات في مسار محمي وتشفير كلمات المرور وحماية الجلسات.</p>
             </div>
 
             <div class="about-card">
               <div class="about-card-icon">👥📜</div>
-              <h3>الصلاحيات وسجل التدقيق</h3>
-              <p>فصل دقيق للمهام بين مديري النظام وموظفي الأرشيف، مع توثيق زمني غير قابل للتعديل لجميع العمليات الإدارية وسجلات الدخول في سجل التدقيق.</p>
+              <h3 data-i18n="about_feature_audit">الصلاحيات وسجل التدقيق</h3>
+              <p data-i18n="about_feature_audit_desc">فصل دقيق للمهام بين مديري النظام وموظفي الأرشيف، مع توثيق زمني غير قابل للتعديل لجميع العمليات الإدارية وسجلات الدخول في سجل التدقيق.</p>
             </div>
           </div>
 
           <div class="panel about-roles-panel">
-            <h2>الأدوار وصلاحيات الوصول</h2>
+            <h2 data-i18n="about_roles_title">الأدوار وصلاحيات الوصول</h2>
             <div class="about-roles-grid">
               <div class="about-role-box">
                 <div class="about-role-header">
-                  <span class="role-badge admin">مدير النظام (Administrator)</span>
+                  <span class="role-badge admin" data-i18n="about_role_admin_badge">مدير النظام (Administrator)</span>
                 </div>
                 <ul>
-                  <li>إدارة وتعديل بيانات الإدارات والأقسام في الشركة.</li>
-                  <li>إنشاء حسابات المستخدمين وتحديد أدوارهم وتعيينهم للإدارات.</li>
-                  <li>الاطلاع الكامل على سجل التدقيق الأمني ومراقبة كافة الحركات.</li>
-                  <li>تصدير واستيراد النسخ الاحتياطية وإدارة الإعدادات العامة.</li>
-                  <li>تسجيل وتعديل واستعراض المراسلات والأرشيف والتقارير.</li>
+                  <li data-i18n="about_role_admin_1">إدارة وتعديل بيانات الإدارات والأقسام في الشركة.</li>
+                  <li data-i18n="about_role_admin_2">إنشاء حسابات المستخدمين وتحديد أدوارهم وتعيينهم للإدارات.</li>
+                  <li data-i18n="about_role_admin_3">الاطلاع الكامل على سجل التدقيق الأمني ومراقبة كافة الحركات.</li>
+                  <li data-i18n="about_role_admin_4">تصدير واستيراد النسخ الاحتياطية وإدارة الإعدادات العامة.</li>
+                  <li data-i18n="about_role_admin_5">تسجيل وتعديل واستعراض المراسلات والأرشيف والتقارير.</li>
                 </ul>
               </div>
 
               <div class="about-role-box">
                 <div class="about-role-header">
-                  <span class="role-badge employee">موظف الأرشيف (Employee)</span>
+                  <span class="role-badge employee" data-i18n="about_role_emp_badge">موظف الأرشيف (Employee)</span>
                 </div>
                 <ul>
-                  <li>تسجيل المراسلات الواردة والصادرة للإدارات المصرح له بالوصول إليها.</li>
-                  <li>إرفاق الملفات والمستندات واستعراض المرفقات وتحميلها.</li>
-                  <li>البحث في الأرشيف ومتابعة حالة المعاملات وتحديثها.</li>
-                  <li>توليد وتصدير التقارير الإحصائية المعتمدة.</li>
-                  <li>تغيير كلمة المرور وتخصيص المظهر (الوضع الفاتح / الداكن).</li>
+                  <li data-i18n="about_role_emp_1">تسجيل المراسلات الواردة والصادرة للإدارات المصرح له بالوصول إليها.</li>
+                  <li data-i18n="about_role_emp_2">إرفاق الملفات والمستندات واستعراض المرفقات وتحميلها.</li>
+                  <li data-i18n="about_role_emp_3">البحث في الأرشيف ومتابعة حالة المعاملات وتحديثها.</li>
+                  <li data-i18n="about_role_emp_4">توليد وتصدير التقارير الإحصائية المعتمدة.</li>
+                  <li data-i18n="about_role_emp_5">تغيير كلمة المرور وتخصيص المظهر (الوضع الفاتح / الداكن).</li>
                 </ul>
               </div>
             </div>
           </div>
 
           <div class="panel about-architecture-panel">
-            <h2>البنية التقنية ومعايير الأمان</h2>
-            <p>
+            <h2 data-i18n="about_tech_title">البنية التقنية ومعايير الأمان</h2>
+            <p data-i18n="about_tech_desc1">
               تعمل المنظومة بواجهة استخدام عربية متكاملة تتوافق مع معايير القراءة من اليمين إلى اليسار (RTL) وتتواصل بأمان مع واجهة برمجة التطبيقات (REST API) الخلفية وقاعدة بيانات PostgreSQL الموثوقة.
             </p>
-            <p>
+            <p data-i18n="about_tech_desc2">
               يتم تخزين المرفقات بشكل منفصل وآمن على الخادم دون إتاحة الوصول المباشر إليها إلا بعد التحقق من صحة جلسة المستخدم وصلاحياته، مع الالتزام بسياسات أمان صارمة تشمل الحماية من هجمات CSRF و XSS وحظر النوافذ غير المصرح بها (Content Security Policy).
             </p>
           </div>
@@ -610,48 +634,49 @@
     <div class="modal" id="documentModal" role="dialog" aria-modal="true">
       <div class="modal-box">
         <div class="modal-header">
-          <h2 id="formTitle">تسجيل مراسلة واردة</h2>
+          <h2 id="formTitle" data-i18n="create_incoming_title">تسجيل مراسلة واردة</h2>
           <button type="button" class="close-button" id="closeDocumentModal">✕</button>
         </div>
         <form id="documentForm">
           <div id="documentFormError" class="alert alert-error" hidden></div>
-          <label for="date">تاريخ المراسلة *</label>
+          <label for="date" data-i18n="doc_date_label">تاريخ المراسلة *</label>
           <div class="date-field">
             <input
               id="date"
               type="text"
               class="date-input"
+              data-i18n-placeholder="doc_date_placeholder"
               placeholder="يوم/شهر/سنة (DD/MM/YYYY)"
               inputmode="numeric"
               autocomplete="off"
               required
             />
-            <button type="button" class="date-picker-btn" tabindex="-1" aria-label="اختر التاريخ من التقويم" title="فتح التقويم">📅</button>
+            <button type="button" class="date-picker-btn" tabindex="-1" data-i18n-title="choose_calendar_title" aria-label="اختر التاريخ من التقويم" title="فتح التقويم">📅</button>
             <input type="date" class="date-native-picker" tabindex="-1" aria-hidden="true" />
           </div>
-          <label for="reference">الرقم الإشاري *</label>
-          <input id="reference" required maxlength="200" placeholder="مثال: 2026/و/001" />
-          <label for="sequenceNumber">رقم التسلسل</label>
-          <input id="sequenceNumber" maxlength="100" placeholder="مثال: 142" />
-          <label for="sender">من</label>
-          <input id="sender" maxlength="200" placeholder="مثال: إدارة الشؤون الإدارية" />
-          <label for="recipient">إلى</label>
-          <input id="recipient" maxlength="200" placeholder="مثال: شركة هاتف ليبيا" />
-          <label for="title">موضوع المراسلة *</label>
-          <input id="title" required maxlength="500" placeholder="مثال: طلب تزويد بمعدات حاسوبية" />
+          <label for="reference" data-i18n="doc_ref_label">الرقم الإشاري *</label>
+          <input id="reference" required maxlength="200" data-i18n-placeholder="doc_ref_placeholder" placeholder="مثال: 2026/و/001" />
+          <label for="sequenceNumber" data-i18n="doc_seq_label">رقم التسلسل</label>
+          <input id="sequenceNumber" maxlength="100" data-i18n-placeholder="doc_seq_placeholder" placeholder="مثال: 142" />
+          <label for="sender" data-i18n="doc_from_label">من</label>
+          <input id="sender" maxlength="200" data-i18n-placeholder="doc_from_placeholder" placeholder="مثال: إدارة الشؤون الإدارية" />
+          <label for="recipient" data-i18n="doc_to_label">إلى</label>
+          <input id="recipient" maxlength="200" data-i18n-placeholder="doc_to_placeholder" placeholder="مثال: شركة هاتف ليبيا" />
+          <label for="title" data-i18n="doc_title_label">موضوع المراسلة *</label>
+          <input id="title" required maxlength="500" data-i18n-placeholder="doc_title_placeholder" placeholder="مثال: طلب تزويد بمعدات حاسوبية" />
           <div id="departmentField" class="admin-only is-hidden">
-            <label for="department">الإدارة المختصة</label>
+            <label for="department" data-i18n="doc_dept_label">الإدارة المختصة</label>
             <select id="department">
-              <option value="">غير محددة</option>
+              <option value="" data-i18n="unspecified">غير محددة</option>
             </select>
           </div>
 
           <div id="attachmentsSection" hidden>
             <hr />
-            <h3>المرفقات</h3>
+            <h3 data-i18n="doc_attachments_label">المرفقات</h3>
             <div id="attachmentList" class="attachment-list"></div>
             <div id="pendingAttachmentsSection" hidden>
-              <h4 class="attachment-subtitle">ملفات بانتظار الرفع</h4>
+              <h4 class="attachment-subtitle" data-i18n="pending_files_label">ملفات بانتظار الرفع</h4>
               <div id="pendingAttachmentList" class="attachment-list"></div>
             </div>
             <div class="attachment-upload">
@@ -662,17 +687,17 @@
                 accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.odt,.ods,.rtf,.txt,.csv"
               />
             </div>
-            <small class="hint" id="attachmentHint">اختر ملفاً أو أكثر.</small>
+            <small class="hint" id="attachmentHint" data-i18n="doc_attachments_hint">اختر ملفاً أو أكثر.</small>
           </div>
 
-          <label for="notes">ملاحظات</label>
-          <textarea id="notes" rows="3" maxlength="2000" placeholder="اكتب أي ملاحظات أو تفاصيل إضافية هنا..."></textarea>
+          <label for="notes" data-i18n="doc_notes_label">ملاحظات</label>
+          <textarea id="notes" rows="3" maxlength="2000" data-i18n-placeholder="doc_notes_placeholder" placeholder="اكتب أي ملاحظات أو تفاصيل إضافية هنا..."></textarea>
 
           <div class="form-actions">
-            <button type="submit" class="button" id="saveDocumentButton">
+            <button type="submit" class="button" id="saveDocumentButton" data-i18n="save">
               حفظ المعاملة
             </button>
-            <button type="button" class="button secondary-button" id="cancelDocumentButton">
+            <button type="button" class="button secondary-button" id="cancelDocumentButton" data-i18n="cancel">
               إلغاء
             </button>
           </div>
@@ -684,7 +709,7 @@
     <div class="modal" id="detailModal" role="dialog" aria-modal="true">
       <div class="modal-box">
         <div class="modal-header">
-          <h2 id="detailTitle">تفاصيل المعاملة</h2>
+          <h2 id="detailTitle" data-i18n="detail_doc_title">تفاصيل المعاملة</h2>
           <button type="button" class="close-button" id="closeDetailModal">✕</button>
         </div>
         <div id="detailContent"></div>
@@ -696,40 +721,40 @@
     <div class="modal" id="userModal" role="dialog" aria-modal="true">
       <div class="modal-box">
         <div class="modal-header">
-          <h2 id="userModalTitle">إضافة مستخدم</h2>
+          <h2 id="userModalTitle" data-i18n="user_modal_add">إضافة مستخدم</h2>
           <button type="button" class="close-button" id="closeUserModal">✕</button>
         </div>
         <form id="userForm">
           <div id="userFormError" class="alert alert-error" hidden></div>
           <div id="userUsernameField">
-            <label for="userUsername">اسم المستخدم *</label>
-            <input id="userUsername" minlength="3" maxlength="32" autocomplete="off" placeholder="مثال: m.benyousef" />
+            <label for="userUsername" data-i18n="user_username_label">اسم المستخدم *</label>
+            <input id="userUsername" minlength="3" maxlength="32" autocomplete="off" data-i18n-placeholder="user_username_placeholder" placeholder="مثال: m.benyousef" />
           </div>
-          <label for="userEmployeeNumber">الرقم الوظيفي (اختياري)</label>
-          <input id="userEmployeeNumber" maxlength="64" autocomplete="off" placeholder="مثال: 1042" />
-          <label for="userDisplayName">الاسم الكامل *</label>
-          <input id="userDisplayName" maxlength="200" placeholder="مثال: مهند عبدالفتاح بن يوسف" />
-          <label for="userRole">الدور *</label>
+          <label for="userEmployeeNumber" data-i18n="user_emp_num_label">الرقم الوظيفي (اختياري)</label>
+          <input id="userEmployeeNumber" maxlength="64" autocomplete="off" data-i18n-placeholder="user_emp_num_placeholder" placeholder="مثال: 1042" />
+          <label for="userDisplayName" data-i18n="user_fullname_label">الاسم الكامل *</label>
+          <input id="userDisplayName" maxlength="200" data-i18n-placeholder="user_fullname_placeholder" placeholder="مثال: مهند عبدالفتاح بن يوسف" />
+          <label for="userRole" data-i18n="user_role_label">الدور *</label>
           <select id="userRole">
-            <option value="employee">موظف الأرشيف</option>
-            <option value="admin">مدير النظام</option>
+            <option value="employee" data-i18n="role_employee">موظف الأرشيف</option>
+            <option value="admin" data-i18n="role_admin">مدير النظام</option>
           </select>
           <div id="userDepartmentField">
-            <label for="userDepartment">الإدارة المعيّنة <span id="userDepartmentRequired">*</span></label>
+            <label for="userDepartment" data-i18n="user_dept_label">الإدارة المعيّنة <span id="userDepartmentRequired">*</span></label>
             <select id="userDepartment">
-              <option value="">بدون إدارة (المدير فقط)</option>
+              <option value="" data-i18n="unspecified">بدون إدارة (المدير فقط)</option>
             </select>
-            <small class="hint" id="userDepartmentHint">
+            <small class="hint" id="userDepartmentHint" data-i18n="user_dept_hint">
               الموظف يحتاج إدارة نشطة للوصول إلى معاملاتها. المدير يرى جميع الإدارات.
             </small>
           </div>
           <div id="userPasswordField">
-            <label for="userPassword">كلمة المرور *</label>
-            <input id="userPassword" type="password" minlength="8" maxlength="200" autocomplete="new-password" placeholder="8 أحرف على الأقل" />
+            <label for="userPassword" data-i18n="user_password_label">كلمة المرور *</label>
+            <input id="userPassword" type="password" minlength="8" maxlength="200" autocomplete="new-password" data-i18n-placeholder="user_password_placeholder" placeholder="8 أحرف على الأقل" />
           </div>
           <div class="form-actions">
-            <button type="submit" class="button" id="saveUserButton">حفظ المستخدم</button>
-            <button type="button" class="button secondary-button" id="cancelUserButton">إلغاء</button>
+            <button type="submit" class="button" id="saveUserButton" data-i18n="save">حفظ المستخدم</button>
+            <button type="button" class="button secondary-button" id="cancelUserButton" data-i18n="cancel">إلغاء</button>
           </div>
         </form>
       </div>
@@ -739,16 +764,16 @@
     <div class="modal" id="promptModal" role="dialog" aria-modal="true">
       <div class="modal-box modal-box-small">
         <div class="modal-header">
-          <h2 id="promptTitle">إدخال</h2>
+          <h2 id="promptTitle" data-i18n="prompt_input_title">إدخال</h2>
           <button type="button" class="close-button" id="promptCancelX">✕</button>
         </div>
         <form id="promptForm">
           <div id="promptError" class="alert alert-error" hidden></div>
-          <label for="promptInput" id="promptLabel">القيمة</label>
+          <label for="promptInput" id="promptLabel" data-i18n="field_notes">القيمة</label>
           <input id="promptInput" placeholder="أدخل القيمة هنا..." />
           <div class="form-actions">
-            <button type="submit" class="button" id="promptOk">تأكيد</button>
-            <button type="button" class="button secondary-button" id="promptCancel">
+            <button type="submit" class="button" id="promptOk" data-i18n="confirm">تأكيد</button>
+            <button type="button" class="button secondary-button" id="promptCancel" data-i18n="cancel">
               إلغاء
             </button>
           </div>
@@ -760,13 +785,13 @@
     <div class="modal" id="confirmModal" role="dialog" aria-modal="true">
       <div class="modal-box modal-box-small">
         <div class="modal-header">
-          <h2>تأكيد العملية</h2>
+          <h2 data-i18n="confirm_action_title">تأكيد العملية</h2>
           <button type="button" class="close-button" id="confirmCancelX">✕</button>
         </div>
         <p id="confirmMessage"></p>
         <div class="form-actions">
-          <button type="button" class="button danger-button" id="confirmOk">تأكيد</button>
-          <button type="button" class="button secondary-button" id="confirmCancel">إلغاء</button>
+          <button type="button" class="button danger-button" id="confirmOk" data-i18n="confirm">تأكيد</button>
+          <button type="button" class="button secondary-button" id="confirmCancel" data-i18n="cancel">إلغاء</button>
         </div>
       </div>
     </div>
@@ -775,12 +800,12 @@
     <div class="modal" id="previewModal" role="dialog" aria-modal="true" aria-labelledby="previewModalTitle">
       <div class="modal-box preview-modal-box">
         <div class="modal-header">
-          <h2 id="previewModalTitle">معاينة المرفق</h2>
-          <button type="button" class="close-button" id="closePreviewModal" aria-label="إغلاق">✕</button>
+          <h2 id="previewModalTitle" data-i18n="preview_title">معاينة المرفق</h2>
+          <button type="button" class="close-button" id="closePreviewModal" aria-label="إغلاق" data-i18n-aria="close">✕</button>
         </div>
         <div class="preview-modal-body" id="previewModalBody"></div>
         <div class="form-actions preview-modal-actions">
-          <button type="button" class="button secondary-button" id="closePreviewModalBtn">إغلاق</button>
+          <button type="button" class="button secondary-button" id="closePreviewModalBtn" data-i18n="close">إغلاق</button>
         </div>
       </div>
     </div>
@@ -789,31 +814,42 @@
 
     <!-- شاشة تسجيل الدخول -->
     <div id="loginScreen" class="login-screen">
+      <button
+        type="button"
+        id="loginLangToggle"
+        class="lang-toggle-button login-lang-toggle"
+        title="Switch to English"
+        aria-label="Switch to English"
+      >
+        EN
+      </button>
       <div class="login-theme-toggle" data-theme-toggle></div>
       <div class="login-box">
         <div class="login-logo"><img src="./img/logo.svg" alt="" /></div>
-        <h1>هاتف ليبيا</h1>
-        <p>منظومة الأرشيف الإلكتروني</p>
+        <h1 data-i18n="brand_name">هاتف ليبيا</h1>
+        <p data-i18n="login_subtitle">منظومة الأرشيف الإلكتروني</p>
         <form id="loginForm">
-          <label for="loginUsername">الرقم الوظيفي أو اسم المستخدم</label>
+          <label for="loginUsername" data-i18n="login_username_label">الرقم الوظيفي أو اسم المستخدم</label>
           <input
             id="loginUsername"
             type="text"
+            data-i18n-placeholder="login_username_placeholder"
             placeholder="مثال: admin أو 1042"
             autocomplete="username"
             autocapitalize="none"
             spellcheck="false"
             required
           />
-          <label for="loginPassword">كلمة المرور</label>
+          <label for="loginPassword" data-i18n="login_password_label">كلمة المرور</label>
           <input
             id="loginPassword"
             type="password"
+            data-i18n-placeholder="login_password_placeholder"
             placeholder="أدخل كلمة المرور"
             autocomplete="current-password"
             required
           />
-          <button type="submit" class="button login-button" id="loginSubmit">
+          <button type="submit" class="button login-button" id="loginSubmit" data-i18n="login_submit">
             تسجيل الدخول
           </button>
           <p id="loginMessage" class="login-message"></p>
@@ -823,6 +859,7 @@
 
     <script src="./js/theme.js"></script>
     <script src="./js/api.js"></script>
-    <script src="./js/script.js?v=1.0.11"></script>
+    <script src="./js/i18n.js?v=1.0.12"></script>
+    <script src="./js/script.js?v=1.0.12"></script>
   </body>
 </html>
