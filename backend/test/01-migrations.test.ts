@@ -54,6 +54,7 @@ test('schema is created from scratch, applied once, and migrations are idempoten
     '0002_employee_number.sql',
     '0003_user_department.sql',
     '0004_document_sequence_number.sql',
+    '0005_additional_document_types.sql',
   ]);
 
   const { rows } = await pool.query<{ table_name: string }>(
@@ -132,6 +133,7 @@ test('schema is created from scratch, applied once, and migrations are idempoten
     '0002_employee_number.sql',
     '0003_user_department.sql',
     '0004_document_sequence_number.sql',
+    '0005_additional_document_types.sql',
   ]);
 });
 
@@ -159,6 +161,7 @@ test('employee-number migration preserves existing users and leaves their number
       '0002_employee_number.sql',
       '0003_user_department.sql',
       '0004_document_sequence_number.sql',
+      '0005_additional_document_types.sql',
     ]);
 
     const preserved = await pool.query<{
@@ -248,6 +251,7 @@ test('department migration preserves existing departments, users, documents, and
     assert.deepEqual(after.applied, [
       '0003_user_department.sql',
       '0004_document_sequence_number.sql',
+      '0005_additional_document_types.sql',
     ]);
 
     const preserved = await pool.query<{
@@ -334,7 +338,10 @@ test('sequence-number migration preserves existing documents and files and leave
     );
 
     const after = await runMigrations(pool);
-    assert.deepEqual(after.applied, ['0004_document_sequence_number.sql']);
+    assert.deepEqual(after.applied, [
+      '0004_document_sequence_number.sql',
+      '0005_additional_document_types.sql',
+    ]);
 
     const preserved = await pool.query<{
       reference: string;

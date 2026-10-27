@@ -23,6 +23,7 @@
     dashboard: "لوحة التحكم",
     incoming: "المراسلات الواردة",
     outgoing: "المراسلات الصادرة",
+    other: "مراسلات أخرى",
     archive: "الأرشيف الإلكتروني",
     departments: "الإدارات والأقسام",
     reports: "التقارير والإحصائيات",
@@ -41,6 +42,10 @@
   function getTypeLabel(type) {
     if (type === "incoming") return _t("type_incoming");
     if (type === "outgoing") return _t("type_outgoing");
+    if (type === "other") return _t("type_other");
+    if (type === "minutes") return _t("type_minutes");
+    if (type === "proposal") return _t("type_proposal");
+    if (type === "report") return _t("type_report");
     return type || _t("none");
   }
 
@@ -128,6 +133,7 @@
       dashboard: { page: 1, pageSize: 8, q: "", total: 0 },
       incoming: { page: 1, pageSize: 10, q: "", total: 0 },
       outgoing: { page: 1, pageSize: 10, q: "", total: 0 },
+      other: { page: 1, pageSize: 10, q: "", total: 0 },
       archive: {
         page: 1,
         pageSize: 10,
@@ -867,7 +873,7 @@
 
   function documentQuery(viewName) {
     var view = state.views[viewName];
-    if (viewName === "incoming" || viewName === "outgoing") {
+    if (viewName === "incoming" || viewName === "outgoing" || viewName === "other") {
       return {
         q: view.q,
         type: viewName,
@@ -1025,6 +1031,69 @@
     return actions.join("");
   }
 
+  function updateDocumentFormLabels(type, isEdit) {
+    var isOutgoing = type === "outgoing";
+    var isIncoming = type === "incoming";
+    var isOther = type === "other";
+    var isMinutes = type === "minutes";
+    var isProposal = type === "proposal";
+    var isReport = type === "report";
+
+    if (isEdit) {
+      el("formTitle").textContent = _t("edit_doc_title");
+    } else if (isOutgoing) {
+      el("formTitle").textContent = _t("create_outgoing_title");
+    } else if (isIncoming) {
+      el("formTitle").textContent = _t("create_incoming_title");
+    } else if (isMinutes) {
+      el("formTitle").textContent = _t("create_minutes_title");
+    } else if (isProposal) {
+      el("formTitle").textContent = _t("create_proposal_title");
+    } else if (isReport) {
+      el("formTitle").textContent = _t("create_report_title");
+    } else {
+      el("formTitle").textContent = _t("create_other_title");
+    }
+
+    var dateLabel = document.querySelector('label[for="date"]');
+    var refLabel = document.querySelector('label[for="reference"]');
+    var titleLabel = document.querySelector('label[for="title"]');
+
+    if (isOther) {
+      // نزع النجمات وجعل الحقول اختيارية في مراسلات أخرى
+      if (dateLabel) dateLabel.textContent = _t("doc_date_label_optional");
+      el("date").removeAttribute("required");
+
+      if (refLabel) refLabel.textContent = _t("doc_ref_label_optional");
+      el("reference").removeAttribute("required");
+      el("reference").placeholder = _t("doc_ref_placeholder_optional");
+
+      if (titleLabel) titleLabel.textContent = _t("doc_title_label_optional");
+      el("title").removeAttribute("required");
+      el("title").placeholder = _t("doc_title_placeholder_optional");
+    } else {
+      if (dateLabel) dateLabel.textContent = _t("doc_date_label");
+      el("date").setAttribute("required", "required");
+
+      if (refLabel) refLabel.textContent = _t("doc_ref_label");
+      el("reference").setAttribute("required", "required");
+      el("reference").placeholder = isOutgoing
+        ? (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. 2026/OUT/001" : "مثال: 2026/ص/001")
+        : (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. 2026/IN/001" : "مثال: 2026/و/001");
+
+      if (titleLabel) titleLabel.textContent = _t("doc_title_label");
+      el("title").setAttribute("required", "required");
+      el("title").placeholder = _t("doc_title_placeholder");
+    }
+
+    el("sender").placeholder = isOutgoing
+      ? (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. Libya Telecom Company" : "مثال: شركة هاتف ليبيا")
+      : (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. Administrative Affairs" : "مثال: إدارة الشؤون الإدارية");
+    el("recipient").placeholder = isOutgoing
+      ? (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. Ministry of Communications" : "مثال: وزارة الاتصالات")
+      : (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. Libya Telecom Company" : "مثال: شركة هاتف ليبيا");
+  }
+
   async function openDocumentForm(mode, documentId, defaultType) {
     if (state.uploadingAttachments) {
       toast("انتظر انتهاء رفع المرفقات قبل فتح نافذة أخرى.", "error");
@@ -1045,35 +1114,21 @@
       }
     }
     state.editingDocumentId = doc ? doc.id : null;
-    // نية الإنشاء من الزر المفتوح فقط؛ لا يوجد حقل نوع في النموذج.
-    state.documentType = doc ? doc.type : defaultType === "outgoing" ? "outgoing" : "incoming";
+    state.documentType = doc ? doc.type : (defaultType || "incoming");
     state.pendingFiles = [];
     state.pendingCounter = 0;
     state.uploadingAttachments = false;
     var form = el("documentForm");
     form.reset();
+    if (el("documentType")) el("documentType").value = state.documentType;
     showFormError("documentFormError", "");
     await loadDepartmentsForSelects();
 
-    var isOutgoing = state.documentType === "outgoing";
-    el("formTitle").textContent = doc
-      ? _t("edit_doc_title")
-      : isOutgoing
-        ? _t("create_outgoing_title")
-        : _t("create_incoming_title");
-    el("reference").placeholder = isOutgoing
-      ? (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. 2026/OUT/001" : "مثال: 2026/ص/001")
-      : (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. 2026/IN/001" : "مثال: 2026/و/001");
-    el("sender").placeholder = isOutgoing
-      ? (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. Libya Telecom Company" : "مثال: شركة هاتف ليبيا")
-      : (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. Administrative Affairs" : "مثال: إدارة الشؤون الإدارية");
-    el("recipient").placeholder = isOutgoing
-      ? (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. Ministry of Communications" : "مثال: وزارة الاتصالات")
-      : (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. Libya Telecom Company" : "مثال: شركة هاتف ليبيا");
-    el("reference").value = doc ? doc.reference : "";
+    updateDocumentFormLabels(state.documentType, Boolean(doc));
+    el("reference").value = doc ? (doc.reference || "") : "";
     el("sequenceNumber").value = doc && doc.sequenceNumber ? doc.sequenceNumber : "";
-    el("title").value = doc ? doc.title : "";
-    el("date").value = doc ? doc.date : todayString();
+    el("title").value = doc ? (doc.title || "") : "";
+    el("date").value = doc ? (doc.date || "") : todayString();
     el("sender").value = doc ? doc.sender : "";
     el("recipient").value = doc ? doc.recipient : "";
     el("department").value = doc && doc.department
@@ -1393,20 +1448,36 @@
     event.preventDefault();
     var button = el("saveDocumentButton");
     showFormError("documentFormError", "");
-    var dateVal = el("date").value;
+    var docType = el("documentType") ? el("documentType").value : state.documentType;
+    var dateVal = el("date").value.trim();
     if (!dateVal) {
+      if (docType === "other") {
+        dateVal = formatDate(todayString());
+      } else {
+        showFormError(
+          "documentFormError",
+          "تاريخ الرسالة غير صالح. يرجى إدخال التاريخ بالصيغة: يوم/شهر/سنة (مثال: 20/10/2026)."
+        );
+        el("date").focus();
+        return;
+      }
+    }
+    var refVal = el("reference").value.trim();
+    var titleVal = el("title").value.trim();
+    if (docType !== "other" && (!refVal || !titleVal)) {
       showFormError(
         "documentFormError",
-        "تاريخ المراسلة غير صالح. يرجى إدخال التاريخ بالصيغة: يوم/شهر/سنة (مثال: 20/10/2026)."
+        "الرقم الإشاري وموضوع الرسالة حقول مطلوبة."
       );
-      el("date").focus();
+      if (!refVal) el("reference").focus();
+      else el("title").focus();
       return;
     }
     var createMode = !state.editingDocumentId;
     var payload = {
-      reference: el("reference").value.trim(),
-      sequenceNumber: el("sequenceNumber").value.trim(),
-      title: el("title").value.trim(),
+      reference: refVal || null,
+      sequenceNumber: el("sequenceNumber").value.trim() || null,
+      title: titleVal || null,
       date: dateVal,
       sender: el("sender").value.trim(),
       recipient: el("recipient").value.trim(),
@@ -1414,7 +1485,7 @@
     };
     // نوع المراسلة نية إنشاء صريحة من القسم الذي فتح النافذة. في التعديل
     // لا نرسله إطلاقاً كي يبقى النوع المخزَّن دون تغيير.
-    if (createMode) payload.type = state.documentType;
+    if (createMode) payload.type = docType;
     // المدير وحده يختار الإدارة؛ أما الموظف فيفرض الخادم إدارته الحالية
     // من قاعدة البيانات، ولا نرسل قيمة محلية قد تكون قديمة.
     if (isAdmin()) payload.departmentId = el("department").value || null;
@@ -2271,7 +2342,7 @@
     if (pageId === "dashboard") {
       loadDashboardStats();
       loadDocumentsView("dashboard");
-    } else if (pageId === "incoming" || pageId === "outgoing") {
+    } else if (pageId === "incoming" || pageId === "outgoing" || pageId === "other") {
       loadDocumentsView(pageId);
     } else if (pageId === "archive") {
       loadDepartmentsForSelects();
@@ -2529,6 +2600,23 @@
     el("addOutgoingButton").addEventListener("click", function () {
       openDocumentForm("create", null, "outgoing");
     });
+    if (el("addOtherButton")) {
+      el("addOtherButton").addEventListener("click", function () {
+        openDocumentForm("create", null, "other");
+      });
+    }
+    if (el("addArchiveDocumentButton")) {
+      el("addArchiveDocumentButton").addEventListener("click", function () {
+        var defaultType = el("typeFilter") && el("typeFilter").value ? el("typeFilter").value : "other";
+        openDocumentForm("create", null, defaultType);
+      });
+    }
+    if (el("documentType")) {
+      el("documentType").addEventListener("change", function () {
+        state.documentType = el("documentType").value;
+        updateDocumentFormLabels(state.documentType, Boolean(state.editingDocumentId));
+      });
+    }
 
     el("documentForm").addEventListener("submit", submitDocumentForm);
     el("closeDocumentModal").addEventListener("click", closeDocumentModal);
@@ -2667,6 +2755,7 @@
       ["dashboardSearch", "dashboard"],
       ["incomingSearch", "incoming"],
       ["outgoingSearch", "outgoing"],
+      ["otherSearch", "other"],
       ["archiveSearch", "archive"],
       ["usersSearch", "users"]
     ];

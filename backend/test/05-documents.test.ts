@@ -92,9 +92,8 @@ test('employee creates a document in the assigned department; invalid payloads a
     payload: { reference: 'REF-002', type: 'incoming', date: '2026-05-20' },
   });
   assert.equal(missingTitle.statusCode, 400);
-  const missingTitleError = missingTitle.json() as { error: { code: string; details?: { issues: unknown[] } } };
-  assert.equal(missingTitleError.error.code, 'validation_error');
-  assert.ok(Array.isArray(missingTitleError.error.details?.issues));
+  const missingTitleError = missingTitle.json() as { error: { code: string } };
+  assert.equal(missingTitleError.error.code, 'missing_fields');
 
   const badDate = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
     payload: { reference: 'REF-003', title: 'تاريخ خاطئ', type: 'incoming', date: '2026-13-45' },
@@ -509,4 +508,34 @@ test('restoring a deleted document conflicts while an active document uses the s
 
   const restored = await apiRequest(context.app, adminClient, 'POST', `/documents/${original.id}/restore`);
   assert.equal(restored.statusCode, 200);
+});
+
+test('additional document types (other, minutes, proposal, report) allow optional fields and partial saves', async () => {
+  // إنشاء مراسلة أخرى بحقول جزئية فقط
+  const otherRes = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
+    payload: {
+      type: 'other',
+      notes: 'مراسلة أخرى بدون رقم إشاري وبدون موضوع',
+    },
+  });
+  assert.equal(otherRes.statusCode, 201);
+  const otherDoc = (otherRes.json() as { document: { id: string; type: string; reference: string | null; title: string | null } }).document;
+  assert.equal(otherDoc.type, 'other');
+  assert.equal(otherDoc.reference, null);
+  assert.equal(otherDoc.title, null);
+
+  // إنشاء محضر اجتماع ومقترح وتقرير
+  for (const t of ['minutes', 'proposal', 'report'] as const) {
+    const res = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
+      payload: {
+        reference: `REF-${t.toUpperCase()}-1`,
+        title: `عنوان ${t}`,
+        type: t,
+        date: '2026-08-01',
+      },
+    });
+    assert.equal(res.statusCode, 201);
+    const data = (res.json() as { document: { type: string } }).document;
+    assert.equal(data.type, t);
+  }
 });

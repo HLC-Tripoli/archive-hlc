@@ -4,7 +4,7 @@ import type { DocumentAccessScope } from '../lib/access.js';
 import { containsPattern } from '../lib/sql.js';
 import { listFilesForDocument, type FileRecordPublic } from './files.js';
 
-export type DocumentTypeDb = 'incoming' | 'outgoing';
+export type DocumentTypeDb = 'incoming' | 'outgoing' | 'other' | 'minutes' | 'proposal' | 'report';
 
 /**
  * حالة المستند قيمة تاريخية داخلية فقط بعد إيقاف الحقل من واجهة المستخدم.
@@ -13,7 +13,14 @@ export type DocumentTypeDb = 'incoming' | 'outgoing';
  */
 export type DocumentStatus = 'new' | 'in_progress' | 'completed' | 'archived';
 
-export const DOCUMENT_TYPES: readonly DocumentTypeDb[] = ['incoming', 'outgoing'];
+export const DOCUMENT_TYPES: readonly DocumentTypeDb[] = [
+  'incoming',
+  'outgoing',
+  'other',
+  'minutes',
+  'proposal',
+  'report',
+];
 export const DOCUMENT_STATUSES: readonly DocumentStatus[] = ['new', 'in_progress', 'completed', 'archived'];
 export const DEFAULT_DOCUMENT_STATUS: DocumentStatus = 'new';
 
@@ -32,9 +39,9 @@ export interface DocumentDepartmentRef {
 
 export interface DocumentListItem {
   id: string;
-  reference: string;
+  reference: string | null;
   sequenceNumber: string | null;
-  title: string;
+  title: string | null;
   type: DocumentTypeDb;
   date: string;
   sender: string;
@@ -79,9 +86,9 @@ const SORT_EXPRESSIONS: Record<DocumentListFilters['sort'], string> = {
 
 interface DocumentListRow {
   id: string;
-  reference: string;
+  reference: string | null;
   sequence_number: string | null;
-  title: string;
+  title: string | null;
   doc_type: DocumentTypeDb;
   transaction_date: string;
   sender: string;
@@ -246,15 +253,15 @@ export async function getDocumentById(
 }
 
 export interface DocumentInput {
-  reference: string;
-  title: string;
+  reference?: string | null;
+  title?: string | null;
   type: DocumentTypeDb;
-  date: string;
-  sender: string;
-  recipient: string;
-  sequenceNumber: string | null;
-  departmentId: string | null;
-  notes: string;
+  date?: string | null;
+  sender?: string;
+  recipient?: string;
+  sequenceNumber?: string | null;
+  departmentId?: string | null;
+  notes?: string;
 }
 
 export type DocumentPatch = Partial<DocumentInput>;
@@ -283,6 +290,12 @@ export async function insertDocument(
   if (!access.isAdmin && !departmentId) {
     throw new Error('employee document requires an assigned department');
   }
+  const dateVal = (input.date ?? '').trim() || new Date().toISOString().slice(0, 10);
+  const refVal = (input.reference ?? '').trim() || null;
+  const titleVal = (input.title ?? '').trim() || null;
+  const senderVal = (input.sender ?? '').trim();
+  const recipientVal = (input.recipient ?? '').trim();
+  const notesVal = (input.notes ?? '').trim();
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO documents
        (reference, title, doc_type, transaction_date, sender, recipient, sequence_number,
@@ -290,16 +303,16 @@ export async function insertDocument(
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
      RETURNING id`,
     [
-      input.reference,
-      input.title,
+      refVal,
+      titleVal,
       input.type,
-      input.date,
-      input.sender,
-      input.recipient,
+      dateVal,
+      senderVal,
+      recipientVal,
       input.sequenceNumber,
       departmentId,
       DEFAULT_DOCUMENT_STATUS,
-      input.notes,
+      notesVal,
       userId,
     ],
   );
