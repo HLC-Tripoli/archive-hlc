@@ -92,9 +92,17 @@ test('employee creates a document in the assigned department; invalid payloads a
     payload: { reference: 'REF-002', type: 'incoming', date: '2026-05-20' },
   });
   assert.equal(missingTitle.statusCode, 400);
-  const missingTitleError = missingTitle.json() as { error: { code: string; details?: { issues: unknown[] } } };
-  assert.equal(missingTitleError.error.code, 'validation_error');
-  assert.ok(Array.isArray(missingTitleError.error.details?.issues));
+  const missingTitleError = missingTitle.json() as { error: { code: string } };
+  assert.equal(missingTitleError.error.code, 'missing_fields');
+
+  // الوثائق من نوع مراسلات أخرى تسمح بحفظ الحقول اختيارياً دون رقم إشاري أو موضوع
+  const otherDoc = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
+    payload: { type: 'other', notes: 'مستند بدون رقم إشاري أو موضوع' },
+  });
+  assert.equal(otherDoc.statusCode, 201);
+  const otherData = (otherDoc.json() as { document: { id: string; type: string; reference: string | null } }).document;
+  assert.equal(otherData.type, 'other');
+  assert.equal(otherData.reference, null);
 
   const badDate = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
     payload: { reference: 'REF-003', title: 'تاريخ خاطئ', type: 'incoming', date: '2026-13-45' },

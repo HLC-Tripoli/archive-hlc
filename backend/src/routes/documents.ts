@@ -30,10 +30,10 @@ export interface DocumentRoutesDeps {
 }
 
 const BODY_PROPERTIES = {
-  reference: { type: 'string', minLength: 1, maxLength: 200 },
-  title: { type: 'string', minLength: 1, maxLength: 500 },
+  reference: { type: ['string', 'null'], maxLength: 200 },
+  title: { type: ['string', 'null'], maxLength: 500 },
   type: { type: 'string', enum: DOCUMENT_TYPES as unknown as string[] },
-  date: { type: 'string', maxLength: 10 },
+  date: { type: ['string', 'null'], maxLength: 10 },
   sender: { type: 'string', maxLength: 200 },
   recipient: { type: 'string', maxLength: 200 },
   // نسمح بفراغات زائدة في المخطط ثم نطبّق الحد بعد التشذيب في الخدمة.
@@ -163,26 +163,26 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
         body: {
           type: 'object',
           additionalProperties: false,
-          required: ['reference', 'title', 'type', 'date'],
+          required: ['type'],
           properties: BODY_PROPERTIES,
         },
       },
     },
     async (request, reply) => {
       const body = request.body as Partial<DocumentInput> & {
-        reference: string;
-        title: string;
         type: DocumentTypeDb;
-        date: string;
       };
       const access = resolveDocumentAccessScope(request.authUser!);
-      if (!isValidIsoDate(body.date)) {
+      let date = (body.date ?? '').trim();
+      if (!date) {
+        date = new Date().toISOString().slice(0, 10);
+      } else if (!isValidIsoDate(date)) {
         throw ApiError.badRequest('invalid_date', 'تاريخ الرسالة غير صالح. استخدم الصيغة YYYY-MM-DD.');
       }
-      const reference = body.reference.trim();
-      const title = body.title.trim();
+      const reference = body.reference?.trim() || null;
+      const title = body.title?.trim() || null;
       const sequenceNumber = normalizeSequenceNumber(body.sequenceNumber);
-      if (!reference || !title) {
+      if (body.type !== 'other' && (!reference || !title)) {
         throw ApiError.badRequest('missing_fields', 'الرقم الاشاري وموضوع الرسالة مطلوبان.');
       }
       if (sequenceNumber && sequenceNumber.length > SEQUENCE_NUMBER_MAX_LENGTH) {
@@ -214,7 +214,7 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
             reference,
             title,
             type: body.type,
-            date: body.date,
+            date,
             sender: (body.sender ?? '').trim(),
             recipient: (body.recipient ?? '').trim(),
             sequenceNumber,
@@ -290,10 +290,10 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
       }
 
       const patch: DocumentPatch = {};
-      if (body.reference !== undefined) patch.reference = body.reference.trim();
-      if (body.title !== undefined) patch.title = body.title.trim();
+      if (body.reference !== undefined) patch.reference = body.reference?.trim() || null;
+      if (body.title !== undefined) patch.title = body.title?.trim() || null;
       if (body.type !== undefined) patch.type = body.type;
-      if (body.date !== undefined) patch.date = body.date;
+      if (body.date !== undefined) patch.date = body.date?.trim() || null;
       if (body.sender !== undefined) patch.sender = body.sender.trim();
       if (body.recipient !== undefined) patch.recipient = body.recipient.trim();
       if (body.sequenceNumber !== undefined) {
@@ -308,11 +308,14 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
       }
       if (body.departmentId !== undefined) patch.departmentId = body.departmentId;
       if (body.notes !== undefined) patch.notes = body.notes.trim();
-      if (patch.reference !== undefined && !patch.reference) {
-        throw ApiError.badRequest('invalid_reference', 'الرقم الاشاري مطلوب.');
-      }
-      if (patch.title !== undefined && !patch.title) {
-        throw ApiError.badRequest('invalid_title', 'موضوع الرسالة مطلوب.');
+      const targetType = patch.type ?? existing.type;
+      if (targetType !== 'other') {
+        if (patch.reference !== undefined && !patch.reference) {
+          throw ApiError.badRequest('invalid_reference', 'الرقم الاشاري مطلوب.');
+        }
+        if (patch.title !== undefined && !patch.title) {
+          throw ApiError.badRequest('invalid_title', 'موضوع الرسالة مطلوب.');
+        }
       }
 
       const userId = request.authUser!.id;
