@@ -1097,7 +1097,7 @@
     } else {
       // وضع الإنشاء: يختار المستخدم الملفات الآن وتُرفع تلقائياً بعد حفظ المراسلة.
       attachmentHint.textContent = _t("doc_attachments_hint");
-      renderEmpty(el("attachmentList"), "لا توجد مرفقات محفوظة بعد.");
+      renderEmpty(el("attachmentList"), _t("no_saved_attachments"));
     }
     renderPendingAttachments();
     showModal("documentModal");
@@ -1118,7 +1118,7 @@
   function renderAttachmentList(files) {
     var container = el("attachmentList");
     if (!files.length) {
-      renderEmpty(container, "لا توجد مرفقات لهذه المراسلة.");
+      renderEmpty(container, _t("no_attachments"));
       return;
     }
     container.innerHTML = files
