@@ -157,11 +157,23 @@ html {
 }
 body {
   margin: 0;
-  direction: rtl;
-  font-family: Tahoma, Arial, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    Tahoma,
+    Arial,
+    sans-serif;
   background: var(--bg);
   color: var(--text);
   font-size: 14px;
+}
+[dir="rtl"] body {
+  direction: rtl;
+}
+[dir="ltr"] body {
+  direction: ltr;
 }
 button,
 input,
@@ -197,18 +209,28 @@ button {
 }
 .sidebar {
   position: fixed;
-  right: 0;
   top: 0;
   width: 260px;
   height: 100vh;
   background: var(--surface);
-  border-left: 1px solid var(--border);
   padding: 0 14px;
   z-index: 20;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
   transition: transform 0.25s ease;
+}
+[dir="rtl"] .sidebar {
+  right: 0;
+  left: auto;
+  border-left: 1px solid var(--border);
+  border-right: none;
+}
+[dir="ltr"] .sidebar {
+  left: 0;
+  right: auto;
+  border-right: 1px solid var(--border);
+  border-left: none;
 }
 .brand {
   display: flex;
@@ -255,7 +277,7 @@ button {
   width: 100%;
   border: none;
   background: transparent;
-  text-align: right;
+  text-align: start;
   padding: 14px 12px;
   border-radius: 9px;
   color: var(--text-secondary);
@@ -267,8 +289,14 @@ button {
   background: var(--accent-soft);
   color: var(--accent-text);
 }
-.menu.active {
+[dir="rtl"] .menu.active {
   border-right: 4px solid var(--accent);
+  border-left: none;
+  font-weight: bold;
+}
+[dir="ltr"] .menu.active {
+  border-left: 4px solid var(--accent);
+  border-right: none;
   font-weight: bold;
 }
 .sidebar-footer {
@@ -280,17 +308,34 @@ button {
   line-height: 2;
 }
 .main {
-  margin-right: 260px;
   padding: 28px;
   min-width: 0;
-  transition: margin-right 0.25s ease;
+  transition: margin-right 0.25s ease, margin-left 0.25s ease;
 }
-.app.sidebar-collapsed .sidebar {
+[dir="rtl"] .main {
+  margin-right: 260px;
+  margin-left: 0;
+}
+[dir="ltr"] .main {
+  margin-left: 260px;
+  margin-right: 0;
+}
+[dir="rtl"] .app.sidebar-collapsed .sidebar {
   transform: translateX(100%);
   pointer-events: none;
 }
-.app.sidebar-collapsed .main {
+[dir="ltr"] .app.sidebar-collapsed .sidebar {
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+[dir="rtl"] .app.sidebar-collapsed .main {
   margin-right: 0;
+}
+[dir="ltr"] .app.sidebar-collapsed .main {
+  margin-left: 0;
+}
+[dir="ltr"] #backToDashboardButton svg {
+  transform: scaleX(-1);
 }
 .topbar {
   display: flex;
@@ -355,6 +400,32 @@ button {
 }
 .back-button[hidden] {
   display: none !important;
+}
+.lang-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 38px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.lang-toggle-button:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.lang-toggle-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .topbar h1 {
   font-size: 26px;
@@ -644,7 +715,7 @@ table {
 }
 th,
 td {
-  text-align: right;
+  text-align: start;
   padding: 15px 12px;
   border-bottom: 1px solid var(--border);
   font-size: 12px;
@@ -1210,6 +1281,11 @@ hr,
   top: 18px;
   inset-inline-end: 18px;
 }
+.login-lang-toggle {
+  position: absolute;
+  top: 18px;
+  inset-inline-end: 72px;
+}
 .login-box {
   width: 100%;
   max-width: 420px;
@@ -1238,7 +1314,7 @@ hr,
 }
 .login-box label {
   display: block;
-  text-align: right;
+  text-align: start;
   margin: 15px 0 8px;
   font-size: 13px;
 }
@@ -1635,7 +1711,7 @@ hr,
   margin: 15px 0 7px;
   font-size: 12px;
   font-weight: bold;
-  text-align: right;
+  text-align: start;
 }
 #userForm input,
 #userForm select,
