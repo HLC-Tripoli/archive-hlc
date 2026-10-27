@@ -1276,15 +1276,19 @@ hr,
   justify-content: center;
   padding: 20px;
 }
-.login-theme-toggle {
+.login-top-controls {
   position: absolute;
   top: 18px;
-  inset-inline-end: 18px;
+  left: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  z-index: 10;
 }
-.login-lang-toggle {
-  position: absolute;
-  top: 18px;
-  inset-inline-start: 18px;
+.login-top-controls .login-lang-toggle,
+.login-top-controls .login-theme-toggle {
+  position: static;
 }
 .login-box {
   width: 100%;
