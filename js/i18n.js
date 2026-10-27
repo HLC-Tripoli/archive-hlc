@@ -121,10 +121,10 @@
       no_documents: "لا توجد معاملات لعرضها.",
 
       // Document modal
-      create_incoming_title: "تسجيل مراسلة واردة",
-      create_outgoing_title: "تسجيل مراسلة صادرة",
-      edit_doc_title: "تعديل مراسلة",
-      doc_date_label: "تاريخ المراسلة *",
+      create_incoming_title: "تسجيل رسالة واردة",
+      create_outgoing_title: "تسجيل رسالة صادرة",
+      edit_doc_title: "تعديل رسالة",
+      doc_date_label: "تاريخ الرسالة *",
       doc_date_placeholder: "يوم/شهر/سنة (DD/MM/YYYY)",
       doc_ref_label: "الرقم الإشاري *",
       doc_ref_placeholder: "مثال: 2026/و/001",
@@ -134,7 +134,7 @@
       doc_from_placeholder: "مثال: إدارة الشؤون الإدارية",
       doc_to_label: "إلى",
       doc_to_placeholder: "مثال: شركة هاتف ليبيا",
-      doc_title_label: "موضوع المراسلة *",
+      doc_title_label: "موضوع الرسالة *",
       doc_title_placeholder: "مثال: طلب تزويد بمعدات حاسوبية",
       doc_dept_label: "الإدارة المختصة",
       doc_notes_label: "ملاحظات",

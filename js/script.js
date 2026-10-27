@@ -1441,7 +1441,7 @@
         // ننتقل إلى وضع التعديل فوراً كي تظهر المرفقات المخزَّنة وأزرارها،
         // مع إبقاء الملفات الفاشلة قابلة لإعادة المحاولة دون تكرار الناجحة.
         state.editingDocumentId = newDocumentId;
-        el("formTitle").textContent = "تعديل بيانات المراسلة";
+        el("formTitle").textContent = "تعديل بيانات الرسالة";
         el("attachmentHint").textContent = "اختر ملفاً أو أكثر.";
         refreshDocumentsAndStats();
         if (state.pendingFiles.length) {
