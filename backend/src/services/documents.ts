@@ -79,9 +79,9 @@ const SORT_EXPRESSIONS: Record<DocumentListFilters['sort'], string> = {
   date: 'doc.transaction_date',
   createdAt: 'doc.created_at',
   updatedAt: 'doc.updated_at',
-  reference: "lower(COALESCE(doc.reference, ''))",
-  sequenceNumber: "lower(COALESCE(doc.sequence_number, ''))",
-  title: "lower(COALESCE(doc.title, ''))",
+  reference: 'lower(doc.reference)',
+  sequenceNumber: 'lower(doc.sequence_number)',
+  title: 'lower(doc.title)',
 };
 
 interface DocumentListRow {
