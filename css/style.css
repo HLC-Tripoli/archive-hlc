@@ -1284,7 +1284,7 @@ hr,
 .login-lang-toggle {
   position: absolute;
   top: 18px;
-  inset-inline-end: 72px;
+  inset-inline-start: 18px;
 }
 .login-box {
   width: 100%;
