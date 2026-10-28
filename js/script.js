@@ -1031,6 +1031,24 @@
     return actions.join("");
   }
 
+  function populateDocumentTypeOptions(type) {
+    var select = el("documentType");
+    if (!select) return;
+    select.innerHTML = "";
+    if (type === "incoming") {
+      select.innerHTML = '<option value="incoming">' + escapeHTML(_t("type_incoming")) + '</option>';
+    } else if (type === "outgoing") {
+      select.innerHTML = '<option value="outgoing">' + escapeHTML(_t("type_outgoing")) + '</option>';
+    } else {
+      select.innerHTML =
+        '<option value="other">' + escapeHTML(_t("type_other")) + '</option>' +
+        '<option value="minutes">' + escapeHTML(_t("type_minutes")) + '</option>' +
+        '<option value="proposal">' + escapeHTML(_t("type_proposal")) + '</option>' +
+        '<option value="report">' + escapeHTML(_t("type_report")) + '</option>';
+    }
+    select.value = type;
+  }
+
   function updateDocumentFormLabels(type, isEdit) {
     var isOutgoing = type === "outgoing";
     var isIncoming = type === "incoming";
@@ -1038,6 +1056,7 @@
     var isMinutes = type === "minutes";
     var isProposal = type === "proposal";
     var isReport = type === "report";
+    var isOtherGroup = isOther || isMinutes || isProposal || isReport;
 
     if (isEdit) {
       el("formTitle").textContent = _t("edit_doc_title");
@@ -1059,8 +1078,8 @@
     var refLabel = document.querySelector('label[for="reference"]');
     var titleLabel = document.querySelector('label[for="title"]');
 
-    if (isOther) {
-      // نزع النجمات وجعل الحقول اختيارية في مراسلات أخرى
+    if (isOtherGroup) {
+      // نزع النجمات وجعل الحقول اختيارية في معاملات مراسلات أخرى وما يتبعها
       if (dateLabel) dateLabel.textContent = _t("doc_date_label_optional");
       el("date").removeAttribute("required");
 
@@ -1120,7 +1139,7 @@
     state.uploadingAttachments = false;
     var form = el("documentForm");
     form.reset();
-    if (el("documentType")) el("documentType").value = state.documentType;
+    populateDocumentTypeOptions(state.documentType);
     showFormError("documentFormError", "");
     await loadDepartmentsForSelects();
 
@@ -1449,9 +1468,14 @@
     var button = el("saveDocumentButton");
     showFormError("documentFormError", "");
     var docType = el("documentType") ? el("documentType").value : state.documentType;
+    var isOtherGroup =
+      docType === "other" ||
+      docType === "minutes" ||
+      docType === "proposal" ||
+      docType === "report";
     var dateVal = el("date").value.trim();
     if (!dateVal) {
-      if (docType === "other") {
+      if (isOtherGroup) {
         dateVal = formatDate(todayString());
       } else {
         showFormError(
@@ -1464,7 +1488,7 @@
     }
     var refVal = el("reference").value.trim();
     var titleVal = el("title").value.trim();
-    if (docType !== "other" && (!refVal || !titleVal)) {
+    if (!isOtherGroup && (!refVal || !titleVal)) {
       showFormError(
         "documentFormError",
         "الرقم الإشاري وموضوع الرسالة حقول مطلوبة."

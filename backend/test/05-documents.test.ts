@@ -524,18 +524,17 @@ test('additional document types (other, minutes, proposal, report) allow optiona
   assert.equal(otherDoc.reference, null);
   assert.equal(otherDoc.title, null);
 
-  // إنشاء محضر اجتماع ومقترح وتقرير
+  // إنشاء محضر اجتماع ومقترح وتقرير بحقول جزئية أو كاملة
   for (const t of ['minutes', 'proposal', 'report'] as const) {
     const res = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
       payload: {
-        reference: `REF-${t.toUpperCase()}-1`,
-        title: `عنوان ${t}`,
         type: t,
-        date: '2026-08-01',
+        notes: `مستند ${t} بحقول جزئية`,
       },
     });
     assert.equal(res.statusCode, 201);
-    const data = (res.json() as { document: { type: string } }).document;
+    const data = (res.json() as { document: { type: string; reference: string | null } }).document;
     assert.equal(data.type, t);
+    assert.equal(data.reference, null);
   }
 });
