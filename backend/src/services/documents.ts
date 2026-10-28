@@ -65,6 +65,7 @@ export interface DocumentDetail extends DocumentListItem {
 export interface DocumentListFilters {
   q?: string;
   type?: DocumentTypeDb;
+  types?: DocumentTypeDb[];
   departmentId?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -168,10 +169,15 @@ export async function listDocuments(
       `(doc.reference ILIKE ${pattern} ESCAPE '\\' OR doc.sequence_number ILIKE ${pattern} ESCAPE '\\' ` +
         `OR doc.title ILIKE ${pattern} ESCAPE '\\' ` +
         `OR doc.sender ILIKE ${pattern} ESCAPE '\\' OR doc.recipient ILIKE ${pattern} ESCAPE '\\' ` +
+        `OR doc.notes ILIKE ${pattern} ESCAPE '\\' ` +
         `OR dep.name ILIKE ${pattern} ESCAPE '\\')`,
     );
   }
-  if (filters.type) conditions.push(`doc.doc_type = ${addParam(filters.type)}`);
+  if (filters.types && filters.types.length > 0) {
+    conditions.push(`doc.doc_type = ANY(${addParam(filters.types)})`);
+  } else if (filters.type) {
+    conditions.push(`doc.doc_type = ${addParam(filters.type)}`);
+  }
   if (filters.departmentId) conditions.push(`doc.department_id = ${addParam(filters.departmentId)}`);
   if (filters.dateFrom) conditions.push(`doc.transaction_date >= ${addParam(filters.dateFrom)}`);
   if (filters.dateTo) conditions.push(`doc.transaction_date <= ${addParam(filters.dateTo)}`);

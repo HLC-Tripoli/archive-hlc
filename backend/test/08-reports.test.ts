@@ -87,6 +87,7 @@ test('dashboard statistics are role-appropriate', async () => {
     deletedDocuments: number;
     incoming: number;
     outgoing: number;
+    other: number;
     byStatus?: unknown;
     departments: number;
     users: number | null;
@@ -96,6 +97,7 @@ test('dashboard statistics are role-appropriate', async () => {
   assert.equal(adminStats.deletedDocuments, 0);
   assert.equal(adminStats.incoming, 4);
   assert.equal(adminStats.outgoing, 4);
+  assert.equal(adminStats.other, 0);
   assert.equal(adminStats.byStatus, undefined);
   assert.equal(adminStats.departments, 2);
   assert.equal(adminStats.users, 2);
@@ -108,6 +110,7 @@ test('dashboard statistics are role-appropriate', async () => {
     deletedDocuments: number;
     incoming: number;
     outgoing: number;
+    other: number;
     departments: number;
     users: number | null;
     recent: Array<{ reference: string }>;
@@ -116,6 +119,7 @@ test('dashboard statistics are role-appropriate', async () => {
   assert.equal(employeeStats.deletedDocuments, 0);
   assert.equal(employeeStats.incoming, 2);
   assert.equal(employeeStats.outgoing, 2);
+  assert.equal(employeeStats.other, 0);
   assert.equal(employeeStats.departments, 1);
   assert.equal(employeeStats.users, null);
   assert.equal(employeeStats.recent.length, 4);

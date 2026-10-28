@@ -537,4 +537,30 @@ test('additional document types (other, minutes, proposal, report) allow optiona
     assert.equal(data.type, t);
     assert.equal(data.reference, null);
   }
+
+  // التحقق من الاستعلام بـ types المتعددة لصفحة مراسلات أخرى
+  const multiRes = await apiRequest(
+    context.app,
+    employeeClient,
+    'GET',
+    '/documents?types=other,minutes,proposal,report',
+  );
+  assert.equal(multiRes.statusCode, 200);
+  const multiItems = (multiRes.json() as { items: Array<{ type: string }> }).items;
+  const returnedTypes = new Set(multiItems.map((i) => i.type));
+  assert.ok(returnedTypes.has('other'));
+  assert.ok(returnedTypes.has('minutes'));
+  assert.ok(returnedTypes.has('proposal'));
+  assert.ok(returnedTypes.has('report'));
+
+  // التحقق من البحث في حقل الملاحظات (notes)
+  const searchRes = await apiRequest(
+    context.app,
+    employeeClient,
+    'GET',
+    '/documents?q=مراسلة+أخرى+بدون+رقم+إشاري',
+  );
+  assert.equal(searchRes.statusCode, 200);
+  const searchItems = (searchRes.json() as { items: Array<{ id: string }> }).items;
+  assert.ok(searchItems.some((i) => i.id === otherDoc.id));
 });
