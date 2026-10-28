@@ -9,6 +9,7 @@ export interface DashboardStats {
   deletedDocuments: number;
   incoming: number;
   outgoing: number;
+  other: number;
   thisMonth: number;
   departments: number;
   users: number | null;
@@ -24,6 +25,7 @@ export async function getDashboardStats(
     deleted_documents: number;
     incoming: number;
     outgoing: number;
+    other: number;
     this_month: number;
   }>(
     `SELECT
@@ -31,6 +33,7 @@ export async function getDashboardStats(
        count(*) FILTER (WHERE deleted_at IS NOT NULL)::int AS deleted_documents,
        count(*) FILTER (WHERE deleted_at IS NULL AND doc_type = 'incoming')::int AS incoming,
        count(*) FILTER (WHERE deleted_at IS NULL AND doc_type = 'outgoing')::int AS outgoing,
+       count(*) FILTER (WHERE deleted_at IS NULL AND doc_type IN ('other', 'minutes', 'proposal', 'report'))::int AS other,
        count(*) FILTER (WHERE deleted_at IS NULL AND created_at >= date_trunc('month', now()))::int AS this_month
      FROM documents
      WHERE ($1::uuid IS NULL OR department_id = $1)`,
@@ -64,6 +67,7 @@ export async function getDashboardStats(
     deletedDocuments: access.isAdmin ? (row?.deleted_documents ?? 0) : 0,
     incoming: row?.incoming ?? 0,
     outgoing: row?.outgoing ?? 0,
+    other: row?.other ?? 0,
     thisMonth: row?.this_month ?? 0,
     // الموظف يرى إدارته الحالية فقط (واحدة)، والمدير يرى العدد العالمي.
     departments: access.isAdmin ? (departments?.rows[0]?.count ?? 0) : 1,
@@ -108,6 +112,7 @@ function buildFilterClause(
       `(doc.reference ILIKE ${pattern} ESCAPE '\\' OR doc.sequence_number ILIKE ${pattern} ESCAPE '\\' ` +
         `OR doc.title ILIKE ${pattern} ESCAPE '\\' ` +
         `OR doc.sender ILIKE ${pattern} ESCAPE '\\' OR doc.recipient ILIKE ${pattern} ESCAPE '\\' ` +
+        `OR doc.notes ILIKE ${pattern} ESCAPE '\\' ` +
         `OR dep.name ILIKE ${pattern} ESCAPE '\\')`,
     );
   }

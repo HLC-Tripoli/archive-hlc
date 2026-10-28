@@ -53,6 +53,7 @@ const LIST_QUERY_SCHEMA = {
   properties: {
     q: { type: 'string', maxLength: 200 },
     type: { type: 'string', enum: DOCUMENT_TYPES as unknown as string[] },
+    types: { type: 'string', maxLength: 100 },
     // مرشِّح متقاعد: يُقبل للتوافق ولا يؤثر في النتائج.
     status: { type: 'string', enum: DOCUMENT_STATUSES as unknown as string[] },
     departmentId: { type: 'string', maxLength: 64 },
@@ -79,6 +80,7 @@ const ID_PARAMS_SCHEMA = {
 interface DocumentListQuery {
   q?: string;
   type?: DocumentTypeDb;
+  types?: string;
   departmentId?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -122,11 +124,23 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
       }
       const includeDeleted = access.isAdmin ? query.includeDeleted : false;
 
+      let parsedTypes: DocumentTypeDb[] | undefined;
+      if (query.types) {
+        const candidateTypes = query.types
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => (DOCUMENT_TYPES as readonly string[]).includes(s)) as DocumentTypeDb[];
+        if (candidateTypes.length > 0) {
+          parsedTypes = candidateTypes;
+        }
+      }
+
       const result = await listDocuments(
         pool,
         {
           q: query.q?.trim() || undefined,
           type: query.type,
+          types: parsedTypes,
           departmentId: query.departmentId,
           dateFrom: query.dateFrom,
           dateTo: query.dateTo,

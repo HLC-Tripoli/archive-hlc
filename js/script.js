@@ -133,7 +133,7 @@
       dashboard: { page: 1, pageSize: 8, q: "", total: 0 },
       incoming: { page: 1, pageSize: 10, q: "", total: 0 },
       outgoing: { page: 1, pageSize: 10, q: "", total: 0 },
-      other: { page: 1, pageSize: 10, q: "", total: 0 },
+      other: { page: 1, pageSize: 10, q: "", type: "", total: 0 },
       archive: {
         page: 1,
         pageSize: 10,
@@ -843,11 +843,11 @@
           "<tr" +
           (deleted ? ' class="row-deleted"' : "") +
           "><td>" +
-          escapeHTML(document.reference) +
+          escapeHTML(document.reference || "—") +
           "</td><td>" +
           escapeHTML(document.sequenceNumber || "—") +
           "</td><td>" +
-          escapeHTML(document.title) +
+          escapeHTML(document.title || "—") +
           (deleted ? ' <span class="badge badge-deleted">' + escapeHTML(_t("deleted_badge")) + '</span>' : "") +
           "</td><td>" +
           escapeHTML(getTypeLabel(document.type)) +
@@ -873,7 +873,7 @@
 
   function documentQuery(viewName) {
     var view = state.views[viewName];
-    if (viewName === "incoming" || viewName === "outgoing" || viewName === "other") {
+    if (viewName === "incoming" || viewName === "outgoing") {
       return {
         q: view.q,
         type: viewName,
@@ -882,6 +882,21 @@
         page: view.page,
         pageSize: view.pageSize
       };
+    }
+    if (viewName === "other") {
+      var otherQuery = {
+        q: view.q,
+        sort: "date",
+        order: "desc",
+        page: view.page,
+        pageSize: view.pageSize
+      };
+      if (view.type) {
+        otherQuery.type = view.type;
+      } else {
+        otherQuery.types = "other,minutes,proposal,report";
+      }
+      return otherQuery;
     }
     if (viewName === "dashboard") {
       return {
@@ -932,12 +947,14 @@
       var stats = await api.get("/stats/dashboard");
       el("incomingCount").textContent = stats.incoming;
       el("outgoingCount").textContent = stats.outgoing;
+      if (el("otherCount")) el("otherCount").textContent = stats.other || 0;
       el("totalCount").textContent = stats.activeDocuments;
       el("monthCount").textContent = stats.thisMonth || 0;
     } catch (error) {
       if (isDepartmentBlocked()) {
         el("incomingCount").textContent = "0";
         el("outgoingCount").textContent = "0";
+        if (el("otherCount")) el("otherCount").textContent = "0";
         el("totalCount").textContent = "0";
         el("monthCount").textContent = "0";
       }
@@ -956,6 +973,10 @@
       el("reportTotal").textContent = summary.total;
       el("reportIncoming").textContent = typeCount("incoming");
       el("reportOutgoing").textContent = typeCount("outgoing");
+      if (el("reportOther")) {
+        el("reportOther").textContent =
+          typeCount("other") + typeCount("minutes") + typeCount("proposal") + typeCount("report");
+      }
       renderReportList(
         "reportByType",
         (summary.byType || []).map(function (row) {
@@ -1031,11 +1052,19 @@
     return actions.join("");
   }
 
-  function populateDocumentTypeOptions(type) {
+  function populateDocumentTypeOptions(type, allowAll) {
     var select = el("documentType");
     if (!select) return;
     select.innerHTML = "";
-    if (type === "incoming") {
+    if (allowAll) {
+      select.innerHTML =
+        '<option value="incoming">' + escapeHTML(_t("type_incoming")) + '</option>' +
+        '<option value="outgoing">' + escapeHTML(_t("type_outgoing")) + '</option>' +
+        '<option value="other">' + escapeHTML(_t("type_other")) + '</option>' +
+        '<option value="minutes">' + escapeHTML(_t("type_minutes")) + '</option>' +
+        '<option value="proposal">' + escapeHTML(_t("type_proposal")) + '</option>' +
+        '<option value="report">' + escapeHTML(_t("type_report")) + '</option>';
+    } else if (type === "incoming") {
       select.innerHTML = '<option value="incoming">' + escapeHTML(_t("type_incoming")) + '</option>';
     } else if (type === "outgoing") {
       select.innerHTML = '<option value="outgoing">' + escapeHTML(_t("type_outgoing")) + '</option>';
@@ -1113,7 +1142,7 @@
       : (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. Libya Telecom Company" : "مثال: شركة هاتف ليبيا");
   }
 
-  async function openDocumentForm(mode, documentId, defaultType) {
+  async function openDocumentForm(mode, documentId, defaultType, allowAll) {
     if (state.uploadingAttachments) {
       toast("انتظر انتهاء رفع المرفقات قبل فتح نافذة أخرى.", "error");
       return;
@@ -1139,7 +1168,7 @@
     state.uploadingAttachments = false;
     var form = el("documentForm");
     form.reset();
-    populateDocumentTypeOptions(state.documentType);
+    populateDocumentTypeOptions(state.documentType, Boolean(allowAll));
     showFormError("documentFormError", "");
     await loadDepartmentsForSelects();
 
@@ -1600,13 +1629,14 @@
       var doc = data.document;
       var deleted = Boolean(doc.deletedAt);
       var detailTitlePrefix = window.I18N && window.I18N.getLanguage() === "en" ? "Document Details " : "تفاصيل المراسلة ";
-      el("detailTitle").textContent = detailTitlePrefix + doc.reference;
+      var docIdentifier = doc.reference || doc.sequenceNumber || doc.title || "—";
+      el("detailTitle").textContent = detailTitlePrefix + (doc.reference ? doc.reference : "(" + docIdentifier + ")");
       var fields = [
-        [_t("field_ref"), doc.reference],
+        [_t("field_ref"), doc.reference || "—"],
         [_t("field_seq"), doc.sequenceNumber || "—"],
-        [_t("field_subject"), doc.title],
+        [_t("field_subject"), doc.title || "—"],
         [_t("field_type"), getTypeLabel(doc.type)],
-        [_t("field_date"), formatDate(doc.date)],
+        [_t("field_date"), doc.date ? formatDate(doc.date) : "—"],
         [_t("field_dept"), doc.department ? doc.department.name : _t("unspecified")],
         [_t("field_sender"), doc.sender || "—"],
         [_t("field_recipient"), doc.recipient || "—"],
@@ -2631,8 +2661,8 @@
     }
     if (el("addArchiveDocumentButton")) {
       el("addArchiveDocumentButton").addEventListener("click", function () {
-        var defaultType = el("typeFilter") && el("typeFilter").value ? el("typeFilter").value : "other";
-        openDocumentForm("create", null, defaultType);
+        var defaultType = el("typeFilter") && el("typeFilter").value ? el("typeFilter").value : "incoming";
+        openDocumentForm("create", null, defaultType, true);
       });
     }
     if (el("documentType")) {
@@ -2818,6 +2848,13 @@
         loadDocumentsView("archive");
       });
     });
+    if (el("otherTypeFilter")) {
+      el("otherTypeFilter").addEventListener("change", function () {
+        state.views.other.type = el("otherTypeFilter").value;
+        state.views.other.page = 1;
+        loadDocumentsView("other");
+      });
+    }
     el("includeDeletedFilter").addEventListener("change", function () {
       state.views.archive.includeDeleted = el("includeDeletedFilter").checked;
       state.views.archive.page = 1;
