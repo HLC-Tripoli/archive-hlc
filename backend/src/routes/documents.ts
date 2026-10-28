@@ -182,7 +182,12 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
       const reference = body.reference?.trim() || null;
       const title = body.title?.trim() || null;
       const sequenceNumber = normalizeSequenceNumber(body.sequenceNumber);
-      if (body.type !== 'other' && (!reference || !title)) {
+      const isOtherGroup =
+        body.type === 'other' ||
+        body.type === 'minutes' ||
+        body.type === 'proposal' ||
+        body.type === 'report';
+      if (!isOtherGroup && (!reference || !title)) {
         throw ApiError.badRequest('missing_fields', 'الرقم الاشاري وموضوع الرسالة مطلوبان.');
       }
       if (sequenceNumber && sequenceNumber.length > SEQUENCE_NUMBER_MAX_LENGTH) {
@@ -309,7 +314,12 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
       if (body.departmentId !== undefined) patch.departmentId = body.departmentId;
       if (body.notes !== undefined) patch.notes = body.notes.trim();
       const targetType = patch.type ?? existing.type;
-      if (targetType !== 'other') {
+      const isOtherGroup =
+        targetType === 'other' ||
+        targetType === 'minutes' ||
+        targetType === 'proposal' ||
+        targetType === 'report';
+      if (!isOtherGroup) {
         if (patch.reference !== undefined && !patch.reference) {
           throw ApiError.badRequest('invalid_reference', 'الرقم الاشاري مطلوب.');
         }
