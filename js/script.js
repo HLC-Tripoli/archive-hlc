@@ -1032,6 +1032,10 @@
       actions.push(
         '<button type="button" class="small-button" data-file-action="view" data-id="' +
           escapeHTML(file.id) +
+          '" data-name="' +
+          escapeHTML(file.originalName || file.filename || '') +
+          '" data-mime="' +
+          escapeHTML(file.mimeType || '') +
           '">' + escapeHTML(_t("view")) + '</button>'
       );
     }
@@ -1261,12 +1265,37 @@
     );
   }
 
+  function isImageAttachment(mime, name) {
+    if (mime && mime.toLowerCase().startsWith("image/")) return true;
+    var n = (name || "").toLowerCase();
+    return (
+      n.endsWith(".png") ||
+      n.endsWith(".jpg") ||
+      n.endsWith(".jpeg") ||
+      n.endsWith(".webp") ||
+      n.endsWith(".gif") ||
+      n.endsWith(".bmp") ||
+      n.endsWith(".svg")
+    );
+  }
+
   var currentPreviewObjectUrl = null;
 
   function closePreviewModal() {
     hideModal("previewModal");
     var body = el("previewModalBody");
     if (body) body.innerHTML = "";
+    var modalBox = document.querySelector("#previewModal .preview-modal-box");
+    if (modalBox) modalBox.classList.remove("is-maximized");
+    var maxBtn = el("previewMaximizeBtn");
+    if (maxBtn) maxBtn.textContent = "⛶ تكبير النافذة";
+    var zoomBtn = el("previewZoomToggleBtn");
+    if (zoomBtn) {
+      zoomBtn.style.display = "none";
+      zoomBtn.textContent = "🔍 الحجم الأصلي";
+    }
+    var dlBtn = el("previewDownloadBtn");
+    if (dlBtn) dlBtn.style.display = "none";
     if (currentPreviewObjectUrl) {
       try {
         URL.revokeObjectURL(currentPreviewObjectUrl);
@@ -1279,13 +1308,45 @@
     el("previewModalTitle").textContent = title ? ("معاينة: " + title) : "معاينة المرفق";
     var body = el("previewModalBody");
     body.innerHTML = "";
+
+    var modalBox = document.querySelector("#previewModal .preview-modal-box");
+    if (modalBox) modalBox.classList.remove("is-maximized");
+    var maxBtn = el("previewMaximizeBtn");
+    if (maxBtn) maxBtn.textContent = "⛶ تكبير النافذة";
+
+    var zoomBtn = el("previewZoomToggleBtn");
+    var dlBtn = el("previewDownloadBtn");
+    if (dlBtn) {
+      dlBtn.href = url;
+      dlBtn.download = title || "attachment";
+      dlBtn.style.display = "inline-flex";
+    }
+
     if (isImage) {
+      if (zoomBtn) {
+        zoomBtn.style.display = "inline-flex";
+        zoomBtn.textContent = "🔍 الحجم الأصلي";
+      }
       var img = document.createElement("img");
       img.className = "preview-img";
       img.alt = title || "معاينة المرفق";
       img.src = url;
+      img.title = "انقر للتكبير أو استعادة الحجم";
+
+      var toggleZoom = function () {
+        var zoomed = img.classList.toggle("is-zoomed");
+        if (zoomBtn) {
+          zoomBtn.textContent = zoomed ? "🔍 ملاءمة الشاشة" : "🔍 الحجم الأصلي";
+        }
+      };
+
+      img.addEventListener("click", toggleZoom);
+      if (zoomBtn) {
+        zoomBtn.onclick = toggleZoom;
+      }
       body.appendChild(img);
     } else {
+      if (zoomBtn) zoomBtn.style.display = "none";
       var iframe = document.createElement("iframe");
       iframe.className = "preview-frame";
       iframe.title = title || "معاينة المستند";
@@ -1593,9 +1654,10 @@
     }
   }
 
-  function previewFile(fileId) {
+  function previewFile(fileId, name, mime) {
     var url = api.url("/files/" + encodeURIComponent(fileId) + "/view");
-    openPreviewModal("مستند مرفق", url, false);
+    var isImage = isImageAttachment(mime, name);
+    openPreviewModal(name || "مستند مرفق", url, isImage);
   }
 
   async function deleteFile(fileId) {
@@ -2691,6 +2753,16 @@
     if (closePrevX) closePrevX.addEventListener("click", closePreviewModal);
     var closePrevBtn = el("closePreviewModalBtn");
     if (closePrevBtn) closePrevBtn.addEventListener("click", closePreviewModal);
+    var maxBtn = el("previewMaximizeBtn");
+    if (maxBtn) {
+      maxBtn.addEventListener("click", function () {
+        var modalBox = document.querySelector("#previewModal .preview-modal-box");
+        if (modalBox) {
+          var isMax = modalBox.classList.toggle("is-maximized");
+          maxBtn.textContent = isMax ? "❐ استعادة الحجم" : "⛶ تكبير النافذة";
+        }
+      });
+    }
     var prevModal = el("previewModal");
     if (prevModal) {
       prevModal.addEventListener("click", function (event) {
@@ -2789,7 +2861,9 @@
       }
       var fileButton = event.target.closest("[data-file-action]");
       if (fileButton) {
-        if (fileButton.dataset.fileAction === "view") previewFile(fileButton.dataset.id);
+        if (fileButton.dataset.fileAction === "view") {
+          previewFile(fileButton.dataset.id, fileButton.dataset.name, fileButton.dataset.mime);
+        }
         if (fileButton.dataset.fileAction === "download") downloadFile(fileButton.dataset.id);
         if (fileButton.dataset.fileAction === "delete") deleteFile(fileButton.dataset.id);
         return;

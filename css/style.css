@@ -924,6 +924,29 @@ tbody tr:hover {
   max-height: 92vh;
   display: flex;
   flex-direction: column;
+  transition: max-width 0.2s ease, width 0.2s ease, max-height 0.2s ease;
+}
+.preview-modal-box.is-maximized {
+  max-width: 98vw;
+  width: 98vw;
+  max-height: 96vh;
+  height: 96vh;
+}
+.preview-header-info {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+}
+.preview-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.preview-header-actions .small-button {
+  padding: 6px 12px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 .preview-modal-body {
   display: flex;
@@ -937,12 +960,30 @@ tbody tr:hover {
   border-radius: 10px;
   padding: 12px;
 }
+.preview-modal-box.is-maximized .preview-modal-body {
+  max-height: calc(96vh - 145px);
+  height: calc(96vh - 145px);
+}
 .preview-img {
   max-width: 100%;
-  max-height: 70vh;
+  max-height: 68vh;
+  width: auto;
+  height: auto;
   object-fit: contain;
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: block;
+  margin: auto;
+  cursor: zoom-in;
+  transition: max-width 0.2s ease, max-height 0.2s ease;
+}
+.preview-img.is-zoomed {
+  max-width: none;
+  max-height: none;
+  cursor: zoom-out;
+}
+.preview-modal-box.is-maximized .preview-img:not(.is-zoomed) {
+  max-height: calc(96vh - 170px);
 }
 .preview-frame {
   width: 100%;
@@ -951,9 +992,15 @@ tbody tr:hover {
   border-radius: 6px;
   background: #fff;
 }
+.preview-modal-box.is-maximized .preview-frame {
+  height: calc(96vh - 145px);
+}
 .preview-modal-actions {
   margin-top: 15px;
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 10px;
 }
 .modal-header {
   display: flex;
