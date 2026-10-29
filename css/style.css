@@ -43,7 +43,10 @@
   --btn-neutral-hover-bg: #e0e4ea;
 
   /* حقول الإدخال */
-  --input-bg: #ffffff;
+  --input-bg: #f4f6f8;
+  --input-border: #d9e0e8;
+  --search-bg: #e3f0fc;
+  --search-border: #b6d6f5;
   --focus-ring: rgba(181, 18, 27, 0.08);
 
   /* شارات الحالة */
@@ -53,9 +56,10 @@
   --status-done-text: #13804a;
 
   /* الجداول */
-  --thead-bg: #fafbfc;
+  --thead-bg: #e3f0fc;
+  --thead-border: #b6d6f5;
   --thead-text: #000000;
-  --row-hover: #fffafa;
+  --row-hover: #f7fbfe;
 
   /* لافتة الترحيب */
   --welcome-from: #850b12;
@@ -119,7 +123,10 @@
   --btn-neutral-text: #cfd9e6;
   --btn-neutral-hover-bg: #2f3b4b;
 
-  --input-bg: #0d1219;
+  --input-bg: #141a24;
+  --input-border: #263140;
+  --search-bg: #15202e;
+  --search-border: #253448;
   --focus-ring: rgba(255, 146, 155, 0.2);
 
   --status-bg: #3a2c10;
@@ -127,9 +134,10 @@
   --status-done-bg: #143024;
   --status-done-text: #7ddca8;
 
-  --thead-bg: #1d2530;
+  --thead-bg: #15202e;
+  --thead-border: #253448;
   --thead-text: #ffffff;
-  --row-hover: #1f2836;
+  --row-hover: #192230;
 
   --welcome-from: #70090f;
   --welcome-to: #b31a22;
@@ -635,7 +643,7 @@ button {
 .filters select,
 .department-form input {
   padding: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--input-border, var(--border));
   border-radius: 8px;
   background: var(--input-bg);
   color: var(--text);
@@ -644,6 +652,8 @@ button {
 .search {
   width: 290px;
   max-width: 100%;
+  background: var(--search-bg);
+  border-color: var(--search-border);
 }
 input::placeholder,
 textarea::placeholder {
@@ -735,6 +745,7 @@ th {
   background: var(--thead-bg);
   color: var(--thead-text);
   font-weight: 700;
+  border-bottom: 2px solid var(--thead-border, var(--border));
 }
 td {
   color: var(--text);
@@ -880,6 +891,30 @@ tbody tr:hover {
   border-radius: 15px;
   padding: 25px;
 }
+#documentModal .modal-box,
+#detailModal .modal-box,
+#userModal .modal-box {
+  padding: 0;
+  overflow: hidden;
+}
+#documentModal .modal-header,
+#detailModal .modal-header,
+#userModal .modal-header {
+  background: var(--thead-bg);
+  border-bottom: 1px solid var(--thead-border, var(--border));
+  padding: 18px 24px;
+  margin: 0;
+}
+#documentModal #documentForm,
+#detailModal #detailContent,
+#userModal #userForm {
+  padding: 20px 24px 24px;
+  max-height: calc(90vh - 70px);
+  overflow-y: auto;
+}
+#detailModal #detailActions {
+  padding: 0 24px 24px;
+}
 #previewModal {
   z-index: 150;
 }
@@ -949,7 +984,7 @@ tbody tr:hover {
 #restoreFile {
   width: 100%;
   padding: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--input-border, var(--border));
   border-radius: 8px;
   background: var(--input-bg);
   color: var(--input-text);
@@ -1749,7 +1784,7 @@ hr,
 .stacked-form input {
   width: 100%;
   padding: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--input-border, var(--border));
   border-radius: 8px;
   background: var(--input-bg);
   color: var(--input-text);
