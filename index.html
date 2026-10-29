@@ -6,7 +6,7 @@
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
     <script src="./js/theme-pre.js"></script>
-    <link rel="stylesheet" href="./css/style.css?v=1.0.24" />
+    <link rel="stylesheet" href="./css/style.css?v=1.0.25" />
     <link rel="icon" href="./img/logo.svg" />
     <meta name="referrer" content="same-origin" />
   </head>
@@ -861,11 +861,18 @@
     <div class="modal" id="previewModal" role="dialog" aria-modal="true" aria-labelledby="previewModalTitle">
       <div class="modal-box preview-modal-box">
         <div class="modal-header">
-          <h2 id="previewModalTitle" data-i18n="preview_title">معاينة المرفق</h2>
-          <button type="button" class="close-button" id="closePreviewModal" aria-label="إغلاق" data-i18n-aria="close">✕</button>
+          <div class="preview-header-info">
+            <h2 id="previewModalTitle" data-i18n="preview_title">معاينة المرفق</h2>
+          </div>
+          <div class="preview-header-actions">
+            <button type="button" class="small-button preview-zoom-btn" id="previewZoomToggleBtn" style="display: none;" title="تكبير/تصغير الحجم">🔍 الحجم الأصلي</button>
+            <button type="button" class="small-button preview-max-btn" id="previewMaximizeBtn" title="ملء الشاشة">⛶ تكبير النافذة</button>
+            <button type="button" class="close-button" id="closePreviewModal" aria-label="إغلاق" data-i18n-aria="close">✕</button>
+          </div>
         </div>
         <div class="preview-modal-body" id="previewModalBody"></div>
         <div class="form-actions preview-modal-actions">
+          <a class="button secondary-button" id="previewDownloadBtn" href="#" download style="display: none;">تحميل الملف</a>
           <button type="button" class="button secondary-button" id="closePreviewModalBtn" data-i18n="close">إغلاق</button>
         </div>
       </div>
