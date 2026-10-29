@@ -1633,18 +1633,25 @@ hr,
 .attachment-upload input[type="file"]::file-selector-button,
 .attachment-upload input[type="file"]::-webkit-file-upload-button {
   font-size: 13px;
-  color: var(--text);
-  background: var(--surface-alt);
-  border: 1px solid var(--border);
+  font-weight: 700;
+  color: #ffffff;
+  background: var(--accent);
+  border: 1px solid var(--accent);
   border-radius: 8px;
-  padding: 8px 14px;
+  padding: 9px 18px;
   cursor: pointer;
   font-family: inherit;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  box-shadow: 0 2px 6px rgba(193, 23, 33, 0.25);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 .attachment-upload input[type="file"]::file-selector-button:hover,
 .attachment-upload input[type="file"]::-webkit-file-upload-button:hover {
-  background: var(--border);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.attachment-upload input[type="file"]::file-selector-button:active,
+.attachment-upload input[type="file"]::-webkit-file-upload-button:active {
+  transform: scale(0.98);
 }
 .attachment-subtitle {
   margin: 16px 0 8px;
