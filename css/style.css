@@ -10,9 +10,9 @@
   --surface-alt: #fafbfc;
 
   /* النصوص */
-  --text: #252b36;
-  --text-secondary: #515968;
-  --muted: #77808e;
+  --text: #000000;
+  --text-secondary: #000000;
+  --muted: #000000;
   --placeholder: #757575;
   --input-text: #000000;
   --close-text: #000000;
@@ -54,7 +54,7 @@
 
   /* الجداول */
   --thead-bg: #fafbfc;
-  --thead-text: #616a79;
+  --thead-text: #000000;
   --row-hover: #fffafa;
 
   /* لافتة الترحيب */
@@ -264,13 +264,15 @@ button {
 }
 .brand p {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--muted);
 }
 .menu-title {
   padding: 0 12px 12px;
   color: var(--muted);
   font-size: 12px;
+  font-weight: 700;
 }
 .menu {
   display: block;
@@ -281,6 +283,7 @@ button {
   padding: 14px 12px;
   border-radius: 9px;
   color: var(--text-secondary);
+  font-weight: 600;
   margin-bottom: 6px;
   transition: var(--theme-transition);
 }
@@ -305,6 +308,7 @@ button {
   padding: 20px 8px;
   color: var(--muted);
   font-size: 11px;
+  font-weight: 500;
   line-height: 2;
 }
 .main {
@@ -434,7 +438,8 @@ button {
 .topbar p {
   color: var(--muted);
   margin: 0;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
 }
 .topbar-actions {
   display: flex;
@@ -579,6 +584,10 @@ button {
   display: flex;
   justify-content: space-between;
   color: var(--muted);
+  font-weight: 700;
+}
+.stat-top span:first-child {
+  font-size: 14px;
 }
 .stat-top span:last-child {
   font-size: 23px;
@@ -590,7 +599,8 @@ button {
 }
 .stat-card small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 600;
 }
 .panel {
   padding: 24px;
@@ -617,7 +627,8 @@ button {
 .panel-heading p {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
 }
 .search,
 .date-input,
@@ -718,11 +729,16 @@ td {
   text-align: start;
   padding: 15px 12px;
   border-bottom: 1px solid var(--border);
-  font-size: 12px;
+  font-size: 13px;
 }
 th {
   background: var(--thead-bg);
   color: var(--thead-text);
+  font-weight: 700;
+}
+td {
+  color: var(--text);
+  font-weight: 500;
 }
 .muted {
   color: var(--muted);
@@ -832,6 +848,7 @@ tbody tr:hover {
 }
 .report-box span {
   color: var(--muted);
+  font-weight: 600;
   margin-bottom: 15px;
 }
 .report-box strong {
@@ -922,8 +939,9 @@ tbody tr:hover {
 #documentForm label {
   display: block;
   margin: 15px 0 7px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: bold;
+  color: var(--text);
 }
 #documentForm input,
 #documentForm select,
@@ -1424,7 +1442,8 @@ hr,
 }
 .pager-info {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
 }
 .button:disabled,
 .small-button:disabled {
@@ -1514,7 +1533,8 @@ hr,
 .detail-item span {
   display: block;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 600;
   margin-bottom: 7px;
 }
 .detail-item strong {
@@ -1558,7 +1578,8 @@ hr,
 .attachment-meta small {
   display: block;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 500;
   margin-top: 4px;
 }
 .attachment-upload {
@@ -1716,8 +1737,9 @@ hr,
 .stacked-form label {
   display: block;
   margin: 15px 0 7px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: bold;
+  color: var(--text);
   text-align: start;
 }
 #userForm input,
