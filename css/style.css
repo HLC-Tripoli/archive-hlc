@@ -94,12 +94,12 @@
   --surface: #171e27;
   --surface-alt: #1d2530;
 
-  --text: #e8edf4;
-  --text-secondary: #c6cfdb;
-  --muted: #9aa5b4;
+  --text: #ffffff;
+  --text-secondary: #ffffff;
+  --muted: #ffffff;
   --placeholder: #8b95a4;
   --input-text: #e8edf4;
-  --close-text: #cfd9e6;
+  --close-text: #ffffff;
   --danger-text: #ff929b;
 
   --border: #3a4557;
@@ -128,7 +128,7 @@
   --status-done-text: #7ddca8;
 
   --thead-bg: #1d2530;
-  --thead-text: #aab6c6;
+  --thead-text: #ffffff;
   --row-hover: #1f2836;
 
   --welcome-from: #70090f;
