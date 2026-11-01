@@ -33,7 +33,7 @@ export async function getDashboardStats(
        count(*) FILTER (WHERE deleted_at IS NOT NULL)::int AS deleted_documents,
        count(*) FILTER (WHERE deleted_at IS NULL AND doc_type = 'incoming')::int AS incoming,
        count(*) FILTER (WHERE deleted_at IS NULL AND doc_type = 'outgoing')::int AS outgoing,
-       count(*) FILTER (WHERE deleted_at IS NULL AND doc_type IN ('other', 'minutes', 'proposal', 'report'))::int AS other,
+       count(*) FILTER (WHERE deleted_at IS NULL AND doc_type IN ('other', 'minutes', 'proposal', 'report', 'other_attachments'))::int AS other,
        count(*) FILTER (WHERE deleted_at IS NULL AND created_at >= date_trunc('month', now()))::int AS this_month
      FROM documents
      WHERE ($1::uuid IS NULL OR department_id = $1)`,

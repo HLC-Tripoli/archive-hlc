@@ -24,6 +24,7 @@
     incoming: "المراسلات الواردة",
     outgoing: "المراسلات الصادرة",
     other: "مراسلات أخرى",
+    other_attachments: "تخزين مرفقات أخرى",
     archive: "الأرشيف الإلكتروني",
     departments: "الإدارات والأقسام",
     reports: "التقارير والإحصائيات",
@@ -47,6 +48,7 @@
     if (type === "incoming") return _t("type_incoming");
     if (type === "outgoing") return _t("type_outgoing");
     if (type === "other") return _t("type_other");
+    if (type === "other_attachments") return _t("type_other_attachments");
     if (type === "minutes") return _t("type_minutes");
     if (type === "proposal") return _t("type_proposal");
     if (type === "report") return _t("type_report");
@@ -138,6 +140,17 @@
       incoming: { page: 1, pageSize: 10, q: "", total: 0 },
       outgoing: { page: 1, pageSize: 10, q: "", total: 0 },
       other: { page: 1, pageSize: 10, q: "", type: "", total: 0 },
+      other_attachments: {
+        page: 1,
+        pageSize: 10,
+        q: "",
+        departmentId: "",
+        dateFrom: "",
+        dateTo: "",
+        sort: "createdAt",
+        order: "desc",
+        total: 0
+      },
       archive: {
         page: 1,
         pageSize: 10,
@@ -673,6 +686,18 @@
     });
     archiveSelect.value = currentArchive;
     formSelect.value = currentForm;
+    var otherAttSelect = el("otherAttachmentsDeptFilter");
+    if (otherAttSelect) {
+      var curVal = otherAttSelect.value;
+      otherAttSelect.innerHTML = '<option value="">' + escapeHTML(_t("all_departments")) + '</option>';
+      state.departments.forEach(function (department) {
+        var opt = document.createElement("option");
+        opt.value = department.id;
+        opt.textContent = department.name + (department.isActive ? "" : " (" + _t("disabled") + ")");
+        otherAttSelect.appendChild(opt);
+      });
+      otherAttSelect.value = curVal;
+    }
   }
 
   async function loadDepartmentListPage() {
@@ -795,7 +820,19 @@
   /* ========================================================================
      الجداول والتقارير
      ======================================================================== */
-  function getDocColumns() {
+  function getDocColumns(isOtherAttachments) {
+    if (isOtherAttachments) {
+      return [
+        _t("col_ref"),
+        _t("col_seq"),
+        _t("col_title"),
+        _t("col_date"),
+        _t("field_entry_date"),
+        _t("col_party"),
+        _t("doc_attachments_label"),
+        _t("actions")
+      ];
+    }
     return [
       _t("col_ref"),
       _t("col_seq"),
@@ -807,12 +844,13 @@
     ];
   }
 
-  function renderDocuments(container, items) {
+  function renderDocuments(container, items, viewName) {
     if (!items.length) {
       renderEmpty(container, _t("no_documents"));
       return;
     }
     var admin = isAdmin();
+    var isOtherAttachments = viewName === "other_attachments" || (container && container.id === "otherAttachmentsTable");
     var rows = items
       .map(function (document) {
         var deleted = Boolean(document.deletedAt);
@@ -821,6 +859,23 @@
             escapeHTML(document.id) +
             '">' + escapeHTML(_t("view")) + '</button>'
         ];
+        if (isOtherAttachments) {
+          actions.push(
+            '<button type="button" class="small-button action-preview-btn" data-doc-action="preview" data-id="' +
+              escapeHTML(document.id) +
+              '">' + escapeHTML(_t("preview")) + '</button>'
+          );
+          actions.push(
+            '<button type="button" class="small-button" data-doc-action="download" data-id="' +
+              escapeHTML(document.id) +
+              '">' + escapeHTML(_t("download")) + '</button>'
+          );
+          actions.push(
+            '<button type="button" class="small-button action-share-btn" data-doc-action="share" data-id="' +
+              escapeHTML(document.id) +
+              '">' + escapeHTML(_t("share")) + '</button>'
+          );
+        }
         if (!deleted) {
           actions.push(
             '<button type="button" class="small-button" data-doc-action="edit" data-id="' +
@@ -842,6 +897,30 @@
                 '">' + escapeHTML(_t("delete")) + '</button>'
             );
           }
+        }
+        if (isOtherAttachments) {
+          return (
+            "<tr" +
+            (deleted ? ' class="row-deleted"' : "") +
+            "><td>" +
+            escapeHTML(document.reference || "—") +
+            "</td><td>" +
+            escapeHTML(document.sequenceNumber || "—") +
+            "</td><td>" +
+            escapeHTML(document.title || "—") +
+            (deleted ? ' <span class="badge badge-deleted">' + escapeHTML(_t("deleted_badge")) + '</span>' : "") +
+            "</td><td>" +
+            escapeHTML(formatDate(document.date)) +
+            "</td><td>" +
+            escapeHTML(formatDateTime(document.createdAt)) +
+            "</td><td>" +
+            escapeHTML(document.department ? document.department.name : _t("unspecified")) +
+            "</td><td>" +
+            '<span class="badge">' + (document.filesCount || 0) + '</span>' +
+            '</td><td><div class="action-buttons">' +
+            actions.join("") +
+            "</div></td></tr>"
+          );
         }
         return (
           "<tr" +
@@ -867,7 +946,7 @@
       .join("");
     container.innerHTML =
       '<div class="table-wrap"><table><thead><tr>' +
-      getDocColumns().map(function (column) {
+      getDocColumns(isOtherAttachments).map(function (column) {
         return "<th>" + column + "</th>";
       }).join("") +
       "</tr></thead><tbody>" +
@@ -901,6 +980,19 @@
         otherQuery.types = "other,minutes,proposal,report";
       }
       return otherQuery;
+    }
+    if (viewName === "other_attachments") {
+      return {
+        q: view.q,
+        type: "other_attachments",
+        departmentId: isAdmin() ? view.departmentId : undefined,
+        dateFrom: view.dateFrom,
+        dateTo: view.dateTo,
+        sort: view.sort || "createdAt",
+        order: view.order || "desc",
+        page: view.page,
+        pageSize: view.pageSize
+      };
     }
     if (viewName === "dashboard") {
       return {
@@ -936,7 +1028,7 @@
       var data = await api.get("/documents", documentQuery(viewName));
       view.total = data.total;
       view.page = data.page;
-      renderDocuments(table, data.items);
+      renderDocuments(table, data.items, viewName);
       renderPager(el(viewName + "Pager"), view, function (delta) {
         view.page = Math.max(1, view.page + delta);
         loadDocumentsView(viewName);
@@ -1069,6 +1161,7 @@
         '<option value="incoming">' + escapeHTML(_t("type_incoming")) + '</option>' +
         '<option value="outgoing">' + escapeHTML(_t("type_outgoing")) + '</option>' +
         '<option value="other">' + escapeHTML(_t("type_other")) + '</option>' +
+        '<option value="other_attachments">' + escapeHTML(_t("type_other_attachments")) + '</option>' +
         '<option value="minutes">' + escapeHTML(_t("type_minutes")) + '</option>' +
         '<option value="proposal">' + escapeHTML(_t("type_proposal")) + '</option>' +
         '<option value="report">' + escapeHTML(_t("type_report")) + '</option>';
@@ -1076,6 +1169,8 @@
       select.innerHTML = '<option value="incoming">' + escapeHTML(_t("type_incoming")) + '</option>';
     } else if (type === "outgoing") {
       select.innerHTML = '<option value="outgoing">' + escapeHTML(_t("type_outgoing")) + '</option>';
+    } else if (type === "other_attachments") {
+      select.innerHTML = '<option value="other_attachments">' + escapeHTML(_t("type_other_attachments")) + '</option>';
     } else {
       select.innerHTML =
         '<option value="other">' + escapeHTML(_t("type_other")) + '</option>' +
@@ -1090,10 +1185,11 @@
     var isOutgoing = type === "outgoing";
     var isIncoming = type === "incoming";
     var isOther = type === "other";
+    var isOtherAttachments = type === "other_attachments";
     var isMinutes = type === "minutes";
     var isProposal = type === "proposal";
     var isReport = type === "report";
-    var isOtherGroup = isOther || isMinutes || isProposal || isReport;
+    var isOtherGroup = isOther || isOtherAttachments || isMinutes || isProposal || isReport;
 
     if (isEdit) {
       el("formTitle").textContent = _t("edit_doc_title");
@@ -1101,6 +1197,8 @@
       el("formTitle").textContent = _t("create_outgoing_title");
     } else if (isIncoming) {
       el("formTitle").textContent = _t("create_incoming_title");
+    } else if (isOtherAttachments) {
+      el("formTitle").textContent = _t("create_other_attachments_title");
     } else if (isMinutes) {
       el("formTitle").textContent = _t("create_minutes_title");
     } else if (isProposal) {
@@ -1564,6 +1662,7 @@
     var docType = el("documentType") ? el("documentType").value : state.documentType;
     var isOtherGroup =
       docType === "other" ||
+      docType === "other_attachments" ||
       docType === "minutes" ||
       docType === "proposal" ||
       docType === "report";
@@ -1682,6 +1781,212 @@
     } catch (error) {
       toast(errorMessage(error), "error");
     }
+  }
+
+  async function openDirectDocumentPreview(docId) {
+    try {
+      var data = await api.get("/documents/" + docId);
+      var doc = data.document;
+      if (!doc || !doc.files || !doc.files.length) {
+        toast("لا توجد مرفقات مخزنة في هذه المعاملة لمعاينتها.", "info");
+        return;
+      }
+      var first = doc.files[0];
+      previewFile(first.id, first.originalName, first.mimeType);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function directDownloadDocumentFiles(docId) {
+    try {
+      var data = await api.get("/documents/" + docId);
+      var doc = data.document;
+      if (!doc || !doc.files || !doc.files.length) {
+        toast("لا توجد مرفقات مخزنة في هذه المعاملة لتنزيلها.", "info");
+        return;
+      }
+      for (var i = 0; i < doc.files.length; i++) {
+        await downloadFile(doc.files[i].id);
+      }
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function openShareModal(docId) {
+    try {
+      var data = await api.get("/documents/" + docId);
+      var doc = data.document;
+      if (!doc) return;
+      var title = doc.title || doc.reference || ("معاملة #" + doc.id);
+      el("shareDocTitle").textContent = title;
+      var metaParts = [];
+      if (doc.reference) metaParts.push("الرقم الإشاري: " + doc.reference);
+      if (doc.createdAt) metaParts.push("تاريخ الإدخال: " + formatDateTime(doc.createdAt));
+      if (doc.files && doc.files.length) {
+        metaParts.push("المرفقات: " + doc.files.length);
+      }
+      el("shareDocMeta").textContent = metaParts.join(" | ");
+
+      var origin = window.location.origin;
+      var path = window.location.pathname;
+      var url = origin + path + "#doc-" + encodeURIComponent(doc.id);
+      el("shareLinkInput").value = url;
+
+      var nativeRow = el("shareNativeRow");
+      if (navigator.share) {
+        nativeRow.style.display = "block";
+        el("shareNativeBtn").onclick = function () {
+          navigator.share({
+            title: title,
+            text: "معاملة ومرفق: " + title,
+            url: url
+          }).catch(function () {});
+        };
+      } else {
+        nativeRow.style.display = "none";
+      }
+      showModal("shareModal");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  function closeShareModal() {
+    hideModal("shareModal");
+  }
+
+  var scannerStream = null;
+  var scannerCapturedBlob = null;
+
+  async function startScannerCamera() {
+    var video = el("scannerVideo");
+    var placeholder = el("scannerPlaceholder");
+    var statusMsg = el("scannerStatusMessage");
+    var captureBtn = el("scannerCaptureBtn");
+    var retakeBtn = el("scannerRetakeBtn");
+    var saveBtn = el("scannerSaveBtn");
+    var previewImg = el("scannerCapturedPreview");
+
+    previewImg.style.display = "none";
+    video.style.display = "block";
+    captureBtn.style.display = "inline-flex";
+    retakeBtn.style.display = "none";
+    saveBtn.style.display = "none";
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        statusMsg.textContent = "جارٍ تشغيل طابعة السكانر / الكاميرا…";
+        placeholder.style.display = "flex";
+        scannerStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          },
+          audio: false
+        });
+        video.srcObject = scannerStream;
+        await video.play();
+        placeholder.style.display = "none";
+      } catch (err) {
+        placeholder.style.display = "flex";
+        video.style.display = "none";
+        captureBtn.style.display = "none";
+        statusMsg.textContent = _t("scanner_camera_permission_denied");
+      }
+    } else {
+      placeholder.style.display = "flex";
+      video.style.display = "none";
+      captureBtn.style.display = "none";
+      statusMsg.textContent = _t("no_scanner_support");
+    }
+  }
+
+  function stopScannerCamera() {
+    if (scannerStream) {
+      try {
+        scannerStream.getTracks().forEach(function (track) { track.stop(); });
+      } catch (_) {}
+      scannerStream = null;
+    }
+    var video = el("scannerVideo");
+    if (video) video.srcObject = null;
+  }
+
+  function captureScanSnapshot() {
+    var video = el("scannerVideo");
+    var canvas = el("scannerCanvas");
+    var previewImg = el("scannerCapturedPreview");
+    var captureBtn = el("scannerCaptureBtn");
+    var retakeBtn = el("scannerRetakeBtn");
+    var saveBtn = el("scannerSaveBtn");
+
+    if (!video || !canvas) return;
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    var ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(function (blob) {
+      if (!blob) return;
+      scannerCapturedBlob = blob;
+      var url = URL.createObjectURL(blob);
+      previewImg.src = url;
+      previewImg.style.display = "block";
+      video.style.display = "none";
+      captureBtn.style.display = "none";
+      retakeBtn.style.display = "inline-flex";
+      saveBtn.style.display = "inline-flex";
+    }, "image/png", 0.95);
+  }
+
+  function retakeScan() {
+    scannerCapturedBlob = null;
+    var previewImg = el("scannerCapturedPreview");
+    var video = el("scannerVideo");
+    var captureBtn = el("scannerCaptureBtn");
+    var retakeBtn = el("scannerRetakeBtn");
+    var saveBtn = el("scannerSaveBtn");
+
+    previewImg.style.display = "none";
+    video.style.display = "block";
+    captureBtn.style.display = "inline-flex";
+    retakeBtn.style.display = "none";
+    saveBtn.style.display = "none";
+  }
+
+  function saveScannedAttachment() {
+    if (!scannerCapturedBlob) return;
+    var now = new Date();
+    var pad = function (n) { return String(n).padStart(2, "0"); };
+    var timestamp = now.getFullYear() +
+      pad(now.getMonth() + 1) +
+      pad(now.getDate()) + "_" +
+      pad(now.getHours()) +
+      pad(now.getMinutes()) +
+      pad(now.getSeconds());
+    var filename = "scan_" + timestamp + ".png";
+    var file = new File([scannerCapturedBlob], filename, { type: "image/png" });
+
+    hideModal("scannerModal");
+    stopScannerCamera();
+
+    openDocumentForm("create", null, "other_attachments");
+    el("title").value = (_t("scanner_doc_default_title") || "مستند ماسح ضوئي") + " " + formatDate(todayString());
+    addPendingFiles([file]);
+  }
+
+  function handleScannerFilePicker(event) {
+    var files = event.target.files;
+    if (!files || !files.length) return;
+    hideModal("scannerModal");
+    stopScannerCamera();
+    openDocumentForm("create", null, "other_attachments");
+    el("title").value = (_t("scanner_doc_default_title") || "مستند ماسح ضوئي") + " " + formatDate(todayString());
+    addPendingFiles(files);
+    event.target.value = "";
   }
 
   async function openDocumentDetail(documentId) {
@@ -1828,7 +2133,7 @@
   function refreshDocumentsAndStats() {
     loadDashboardStats();
     var page = state.currentPage;
-    if (page === "dashboard" || page === "incoming" || page === "outgoing" || page === "archive") {
+    if (page === "dashboard" || page === "incoming" || page === "outgoing" || page === "other" || page === "other_attachments" || page === "archive") {
       loadDocumentsView(page);
     }
   }
@@ -2462,7 +2767,7 @@
     if (pageId === "dashboard") {
       loadDashboardStats();
       loadDocumentsView("dashboard");
-    } else if (pageId === "incoming" || pageId === "outgoing" || pageId === "other") {
+    } else if (pageId === "incoming" || pageId === "outgoing" || pageId === "other" || pageId === "other_attachments") {
       loadDocumentsView(pageId);
     } else if (pageId === "archive") {
       loadDepartmentsForSelects();
@@ -2630,7 +2935,7 @@
         if (state.currentPage === "dashboard") {
           loadDashboardStats();
           loadDocumentsView("dashboard");
-        } else if (state.currentPage === "incoming" || state.currentPage === "outgoing" || state.currentPage === "archive") {
+        } else if (state.currentPage === "incoming" || state.currentPage === "outgoing" || state.currentPage === "other" || state.currentPage === "other_attachments" || state.currentPage === "archive") {
           loadDocumentsView(state.currentPage);
         } else if (state.currentPage === "departments") {
           loadDepartmentListPage();
@@ -2716,6 +3021,85 @@
     if (el("addOtherButton")) {
       el("addOtherButton").addEventListener("click", function () {
         openDocumentForm("create", null, "other");
+      });
+    }
+    if (el("addAttachmentFromFileBtn")) {
+      el("addAttachmentFromFileBtn").addEventListener("click", function () {
+        openDocumentForm("create", null, "other_attachments");
+        setTimeout(function () {
+          var input = el("attachmentInput");
+          if (input) input.click();
+        }, 150);
+      });
+    }
+    if (el("addAttachmentFromScanBtn")) {
+      el("addAttachmentFromScanBtn").addEventListener("click", function () {
+        showModal("scannerModal");
+        startScannerCamera();
+      });
+    }
+    if (el("closeScannerModal")) {
+      el("closeScannerModal").addEventListener("click", function () {
+        hideModal("scannerModal");
+        stopScannerCamera();
+      });
+    }
+    if (el("closeScannerModalBtn")) {
+      el("closeScannerModalBtn").addEventListener("click", function () {
+        hideModal("scannerModal");
+        stopScannerCamera();
+      });
+    }
+    if (el("scannerCaptureBtn")) {
+      el("scannerCaptureBtn").addEventListener("click", captureScanSnapshot);
+    }
+    if (el("scannerRetakeBtn")) {
+      el("scannerRetakeBtn").addEventListener("click", retakeScan);
+    }
+    if (el("scannerSaveBtn")) {
+      el("scannerSaveBtn").addEventListener("click", saveScannedAttachment);
+    }
+    if (el("scannerFileInput")) {
+      el("scannerFileInput").addEventListener("change", handleScannerFilePicker);
+    }
+    var scanModal = el("scannerModal");
+    if (scanModal) {
+      scanModal.addEventListener("click", function (event) {
+        if (event.target === scanModal) {
+          hideModal("scannerModal");
+          stopScannerCamera();
+        }
+      });
+    }
+
+    if (el("closeShareModal")) {
+      el("closeShareModal").addEventListener("click", closeShareModal);
+    }
+    if (el("closeShareModalBtn")) {
+      el("closeShareModalBtn").addEventListener("click", closeShareModal);
+    }
+    if (el("copyShareLinkBtn")) {
+      el("copyShareLinkBtn").addEventListener("click", function () {
+        var input = el("shareLinkInput");
+        input.select();
+        input.setSelectionRange(0, 99999);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(input.value).then(function () {
+            toast(_t("link_copied"));
+          }).catch(function () {
+            document.execCommand("copy");
+            toast(_t("link_copied"));
+          });
+        } else {
+          document.execCommand("copy");
+          toast(_t("link_copied"));
+        }
+      });
+    }
+    var shModal = el("shareModal");
+    if (shModal) {
+      shModal.addEventListener("click", function (event) {
+        if (event.target === shModal) closeShareModal();
       });
     }
     if (el("documentType")) {
@@ -2814,6 +3198,17 @@
         closePreviewModal();
         return;
       }
+      var scanM = el("scannerModal");
+      if (scanM && scanM.classList.contains("show")) {
+        hideModal("scannerModal");
+        stopScannerCamera();
+        return;
+      }
+      var shareM = el("shareModal");
+      if (shareM && shareM.classList.contains("show")) {
+        closeShareModal();
+        return;
+      }
       if (state.uploadingAttachments) {
         toast("انتظر انتهاء رفع المرفقات قبل إغلاق النافذة.", "error");
         return;
@@ -2831,6 +3226,9 @@
         var action = documentButton.dataset.docAction;
         var id = documentButton.dataset.id;
         if (action === "view") openDocumentDetail(id);
+        if (action === "preview") openDirectDocumentPreview(id);
+        if (action === "download") directDownloadDocumentFiles(id);
+        if (action === "share") openShareModal(id);
         if (action === "edit") openDocumentForm("edit", id);
         if (action === "delete") performDocumentAction("delete", id);
         if (action === "restore") performDocumentAction("restore", id);
@@ -2875,6 +3273,7 @@
       ["incomingSearch", "incoming"],
       ["outgoingSearch", "outgoing"],
       ["otherSearch", "other"],
+      ["otherAttachmentsSearch", "other_attachments"],
       ["archiveSearch", "archive"],
       ["usersSearch", "users"]
     ];
@@ -2925,6 +3324,14 @@
       state.views.archive.page = 1;
       loadDocumentsView("archive");
     });
+
+    if (el("otherAttachmentsDeptFilter")) {
+      el("otherAttachmentsDeptFilter").addEventListener("change", function () {
+        state.views.other_attachments.departmentId = el("otherAttachmentsDeptFilter").value;
+        state.views.other_attachments.page = 1;
+        loadDocumentsView("other_attachments");
+      });
+    }
     el("clearArchiveFilters").addEventListener("click", function () {
       el("archiveSearch").value = "";
       el("typeFilter").value = "";
@@ -3024,6 +3431,16 @@
     }
   }
 
+  function checkUrlHash() {
+    var hash = window.location.hash || "";
+    if (hash.indexOf("#doc-") === 0) {
+      var id = decodeURIComponent(hash.replace("#doc-", ""));
+      if (id && state.user) {
+        openDocumentDetail(id);
+      }
+    }
+  }
+
   /* ========================================================================
      الإقلاع
      ======================================================================== */
@@ -3038,8 +3455,10 @@
       showLogin();
     });
     bindEvents();
+    window.addEventListener("hashchange", checkUrlHash);
     try {
       await loadSession();
+      checkUrlHash();
     } catch (error) {
       showLogin();
     } finally {
