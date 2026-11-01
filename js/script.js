@@ -2707,13 +2707,6 @@
       });
     }
 
-    var openAboutBtn = el("openAboutPageBtn");
-    if (openAboutBtn) {
-      openAboutBtn.addEventListener("click", function () {
-        showPage("about");
-      });
-    }
-
     el("addIncomingButton").addEventListener("click", function () {
       openDocumentForm("create", null, "incoming");
     });
