@@ -1384,9 +1384,9 @@ hr,
   top: 18px;
   left: 18px;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
   z-index: 10;
 }
 .login-top-controls .login-lang-toggle,
