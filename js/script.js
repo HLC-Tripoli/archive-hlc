@@ -2411,23 +2411,32 @@
   }
 
   function updateUserDepartmentField() {
-    var employee = el("userRole").value === "employee";
-    el("userDepartment").required = employee;
-    el("userDepartmentRequired").hidden = !employee;
-    el("userDepartmentHint").textContent = employee
-      ? (window.I18N && window.I18N.getLanguage() === "en"
-          ? "An employee requires an active department to access records."
-          : "إدارة نشطة إلزامية للموظف. لا يمكن حفظ الحساب كموظف دون تعيين إدارة.")
-      : (window.I18N && window.I18N.getLanguage() === "en"
-          ? "Admins see all departments and can be left without an assigned department."
-          : "المدير يرى جميع الإدارات، ويمكن تركه بلا إدارة.");
-    var blank = el("userDepartment").querySelector('option[value=""]');
+    var roleEl = el("userRole");
+    var deptEl = el("userDepartment");
+    if (!roleEl || !deptEl) return;
+    var employee = roleEl.value === "employee";
+    deptEl.required = employee;
+    var reqSpan = el("userDepartmentRequired");
+    if (reqSpan) reqSpan.hidden = !employee;
+    var hint = el("userDepartmentHint");
+    if (hint) {
+      hint.textContent = employee
+        ? (window.I18N && window.I18N.getLanguage() === "en"
+            ? "An employee requires an active department to access records."
+            : "إدارة نشطة إلزامية للموظف. لا يمكن حفظ الحساب كموظف دون تعيين إدارة.")
+        : (window.I18N && window.I18N.getLanguage() === "en"
+            ? "Admins see all departments and can be left without an assigned department."
+            : "المدير يرى جميع الإدارات، ويمكن تركه بلا إدارة.");
+    }
+    var blank = deptEl.querySelector('option[value=""]');
     if (blank) blank.disabled = employee;
     updateUserPermissionsCheckboxes();
   }
 
   function updateUserPermissionsCheckboxes() {
-    var isAdminRole = el("userRole").value === "admin";
+    var roleEl = el("userRole");
+    if (!roleEl) return;
+    var isAdminRole = roleEl.value === "admin";
     var checkboxes = [el("permView"), el("permCreate"), el("permEdit"), el("permDelete")];
     checkboxes.forEach(function (cb) {
       if (cb) {
