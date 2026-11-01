@@ -20,7 +20,7 @@
   }
 
   var PAGE_TITLES = {
-    dashboard: "لوحة التحكم",
+    dashboard: "الصفحة الرئيسية",
     incoming: "المراسلات الواردة",
     outgoing: "المراسلات الصادرة",
     other: "مراسلات أخرى",
@@ -34,6 +34,10 @@
   };
 
   function getPageTitle(pageId) {
+    if (pageId === "dashboard") {
+      var dashTitle = _t("page_title_dashboard");
+      if (dashTitle && dashTitle !== "page_title_dashboard") return dashTitle;
+    }
     var key = "nav_" + pageId;
     var res = _t(key);
     return res !== key ? res : (PAGE_TITLES[pageId] || pageId);
