@@ -43,7 +43,7 @@
       // Navigation & Menu
       menu_main: "القائمة الرئيسية",
       menu_system: "الإدارة والنظام",
-      nav_dashboard: "الرئيسية",
+      nav_dashboard: "الصفحة الرئيسية",
       page_title_dashboard: "الصفحة الرئيسية",
       nav_incoming: "المراسلات الواردة",
       nav_outgoing: "المراسلات الصادرة",
