@@ -4,7 +4,7 @@
 -- المدراء يملكون كافة الصلاحيات حكماً، والموظفون يملكون الصلاحيات المحددة لهم.
 
 ALTER TABLE users
-  ADD COLUMN IF NOT EXISTS permissions text[] NOT NULL DEFAULT '{view,create,edit}';
+  ADD COLUMN IF NOT EXISTS permissions text[] NOT NULL DEFAULT '{view,create,edit,delete}';
 
 UPDATE users
    SET permissions = '{view,create,edit,delete}'

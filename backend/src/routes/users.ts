@@ -162,7 +162,7 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
       const passwordHash = await hashPassword(body.password);
       const permissions = body.role === 'admin'
         ? ['view', 'create', 'edit', 'delete']
-        : (Array.isArray(body.permissions) && body.permissions.length > 0 ? body.permissions : ['view', 'create', 'edit']);
+        : (Array.isArray(body.permissions) && body.permissions.length > 0 ? body.permissions : ['view', 'create', 'edit', 'delete']);
       const auditContext: AuditContext = {
         ip: request.ip,
         userAgent: (request.headers['user-agent'] ?? '') || null,

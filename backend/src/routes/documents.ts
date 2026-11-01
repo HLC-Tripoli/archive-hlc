@@ -385,16 +385,10 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
 
   app.delete(
     '/documents/:id',
-    { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
+    { preHandler: guards.requireAdmin, schema: { params: ID_PARAMS_SCHEMA } },
     async (request) => {
       const { id } = request.params as { id: string };
       if (!isUuid(id)) throw ApiError.notFound('المعاملة غير موجودة.');
-      const access = resolveDocumentAccessScope(request.authUser!);
-      if (!access.isAdmin) {
-        assertPermission(request.authUser!, 'delete');
-        const doc = await getDocumentById(pool, id, access);
-        if (!doc) throw ApiError.notFound('المعاملة غير موجودة.');
-      }
       const userId = request.authUser!.id;
       const outcome = await withTransaction(pool, async (client) => {
         const result = await softDeleteDocument(client, id, userId);

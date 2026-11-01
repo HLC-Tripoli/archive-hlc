@@ -224,7 +224,6 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
     '/files/:id',
     { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
     async (request) => {
-      assertPermission(request.authUser!, 'delete');
       const access = resolveDocumentAccessScope(request.authUser!);
       const { id } = request.params as { id: string };
       if (!isUuid(id)) throw ApiError.notFound('الملف غير موجود.');
@@ -237,6 +236,7 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
       if (found.document.deletedAt && !access.isAdmin) {
         throw ApiError.notFound('الملف غير موجود.');
       }
+      assertPermission(request.authUser!, 'delete');
       assertSupportedProvider(request, found.file, storage);
 
       // نحذف الكائن من التخزين أولاً؛ إذا فشل الحذف نُبقي السجل كي لا يبقى الكائن يتيماً.

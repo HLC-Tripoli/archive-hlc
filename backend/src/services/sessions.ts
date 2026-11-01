@@ -111,7 +111,7 @@ export async function findSessionWithUser(pool: Pool, token: string): Promise<Se
           ? ['view', 'create', 'edit', 'delete']
           : Array.isArray(row.permissions) && row.permissions.length > 0
             ? row.permissions
-            : ['view', 'create', 'edit'],
+            : ['view', 'create', 'edit', 'delete'],
     },
   };
 }

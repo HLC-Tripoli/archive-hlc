@@ -57,7 +57,7 @@ const USER_SELECT_WITH_HASH = `SELECT ${USER_COLUMNS}, u.password_hash ${USER_FR
 function toRecord(row: UserRow): UserRecord {
   const perms = Array.isArray(row.permissions)
     ? row.permissions
-    : (row.role === 'admin' ? ['view', 'create', 'edit', 'delete'] : ['view', 'create', 'edit']);
+    : ['view', 'create', 'edit', 'delete'];
   return {
     id: row.id,
     username: row.username,
@@ -217,7 +217,7 @@ export async function createUser(
 ): Promise<UserRecord> {
   const permissions = input.role === 'admin'
     ? ['view', 'create', 'edit', 'delete']
-    : (input.permissions && input.permissions.length > 0 ? input.permissions : ['view', 'create', 'edit']);
+    : (input.permissions && input.permissions.length > 0 ? input.permissions : ['view', 'create', 'edit', 'delete']);
 
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO users (username, display_name, employee_number, department_id, role, permissions, password_hash)
