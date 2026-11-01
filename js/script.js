@@ -823,14 +823,13 @@
   function getDocColumns(isOtherAttachments) {
     if (isOtherAttachments) {
       return [
-        _t("col_ref"),
-        _t("col_seq"),
-        _t("col_title"),
-        _t("col_date"),
-        _t("field_entry_date"),
-        _t("col_party"),
-        _t("doc_attachments_label"),
-        _t("actions")
+        _t("col_attachment_name") || "اسم المرفق / المستند",
+        _t("field_created_at") || "تاريخ الإضافة",
+        _t("col_added_by") || "أُضيف بواسطة",
+        _t("col_modified_date") || "تاريخ آخر تعديل",
+        _t("col_modified_by") || "آخر تعديل بواسطة",
+        _t("doc_attachments_label") || "الملف",
+        _t("actions") || "الإجراءات"
       ];
     }
     return [
@@ -854,12 +853,13 @@
     var rows = items
       .map(function (document) {
         var deleted = Boolean(document.deletedAt);
-        var actions = [
-          '<button type="button" class="small-button" data-doc-action="view" data-id="' +
-            escapeHTML(document.id) +
-            '">' + escapeHTML(_t("view")) + '</button>'
-        ];
+        var actions = [];
         if (isOtherAttachments) {
+          actions.push(
+            '<button type="button" class="small-button" data-doc-action="view" data-id="' +
+              escapeHTML(document.id) +
+              '">' + escapeHTML(_t("view")) + '</button>'
+          );
           actions.push(
             '<button type="button" class="small-button action-preview-btn" data-doc-action="preview" data-id="' +
               escapeHTML(document.id) +
@@ -875,7 +875,55 @@
               escapeHTML(document.id) +
               '">' + escapeHTML(_t("share")) + '</button>'
           );
+          if (!deleted) {
+            actions.push(
+              '<button type="button" class="small-button" data-doc-action="edit-attachment" data-id="' +
+                escapeHTML(document.id) +
+                '">' + escapeHTML(_t("edit")) + '</button>'
+            );
+          }
+          if (admin) {
+            if (deleted) {
+              actions.push(
+                '<button type="button" class="small-button" data-doc-action="restore" data-id="' +
+                  escapeHTML(document.id) +
+                  '">' + escapeHTML(_t("restore")) + '</button>'
+              );
+            } else {
+              actions.push(
+                '<button type="button" class="small-button delete-button" data-doc-action="delete" data-id="' +
+                  escapeHTML(document.id) +
+                  '">' + escapeHTML(_t("delete")) + '</button>'
+              );
+            }
+          }
+          return (
+            "<tr" +
+            (deleted ? ' class="row-deleted"' : "") +
+            "><td><strong>" +
+            escapeHTML(document.title || "—") +
+            "</strong>" +
+            (deleted ? ' <span class="badge badge-deleted">' + escapeHTML(_t("deleted_badge")) + '</span>' : "") +
+            "</td><td>" +
+            escapeHTML(formatDateTime(document.createdAt)) +
+            "</td><td>" +
+            escapeHTML(document.createdByName || "—") +
+            "</td><td>" +
+            escapeHTML(formatDateTime(document.updatedAt || document.createdAt)) +
+            "</td><td>" +
+            escapeHTML(document.updatedByName || document.createdByName || "—") +
+            "</td><td>" +
+            '<span class="badge">' + (document.filesCount || 0) + '</span>' +
+            '</td><td><div class="action-buttons">' +
+            actions.join("") +
+            "</div></td></tr>"
+          );
         }
+        actions.push(
+          '<button type="button" class="small-button" data-doc-action="view" data-id="' +
+            escapeHTML(document.id) +
+            '">' + escapeHTML(_t("view")) + '</button>'
+        );
         if (!deleted) {
           actions.push(
             '<button type="button" class="small-button" data-doc-action="edit" data-id="' +
@@ -897,30 +945,6 @@
                 '">' + escapeHTML(_t("delete")) + '</button>'
             );
           }
-        }
-        if (isOtherAttachments) {
-          return (
-            "<tr" +
-            (deleted ? ' class="row-deleted"' : "") +
-            "><td>" +
-            escapeHTML(document.reference || "—") +
-            "</td><td>" +
-            escapeHTML(document.sequenceNumber || "—") +
-            "</td><td>" +
-            escapeHTML(document.title || "—") +
-            (deleted ? ' <span class="badge badge-deleted">' + escapeHTML(_t("deleted_badge")) + '</span>' : "") +
-            "</td><td>" +
-            escapeHTML(formatDate(document.date)) +
-            "</td><td>" +
-            escapeHTML(formatDateTime(document.createdAt)) +
-            "</td><td>" +
-            escapeHTML(document.department ? document.department.name : _t("unspecified")) +
-            "</td><td>" +
-            '<span class="badge">' + (document.filesCount || 0) + '</span>' +
-            '</td><td><div class="action-buttons">' +
-            actions.join("") +
-            "</div></td></tr>"
-          );
         }
         return (
           "<tr" +
@@ -1961,7 +1985,72 @@
     saveBtn.style.display = "none";
   }
 
-  function saveScannedAttachment() {
+  async function handleDirectAttachmentUpload(files) {
+    if (!files || !files.length) return;
+    if (isDepartmentBlocked()) {
+      toast(departmentAccessMessage(), "error");
+      return;
+    }
+    toast("جاري حفظ ورفع المرفقات...", "info");
+    var uploadCount = 0;
+    try {
+      for (var i = 0; i < files.length; i++) {
+        var file = files[i];
+        var docPayload = {
+          type: "other_attachments",
+          title: file.name,
+          date: todayString()
+        };
+        var res = await api.post("/documents", docPayload);
+        var docId = res && (res.id || (res.document && res.document.id));
+        if (docId) {
+          var formData = new FormData();
+          formData.append("file", file);
+          await api.postForm("/documents/" + docId + "/files", formData);
+          uploadCount++;
+        }
+      }
+      toast(uploadCount === 1 ? "تم حفظ المرفق بنجاح." : "تم حفظ " + uploadCount + " مرفقات بنجاح.");
+      loadDocumentsView("other_attachments");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+      loadDocumentsView("other_attachments");
+    }
+  }
+
+  async function openEditAttachmentModal(documentId) {
+    try {
+      var data = await api.get("/documents/" + documentId);
+      var doc = data.document;
+      if (!doc) return;
+      el("editAttachmentId").value = doc.id;
+      el("editAttachmentName").value = doc.title || "";
+      var errorEl = el("editAttachmentFormError");
+      if (errorEl) {
+        errorEl.textContent = "";
+        errorEl.style.display = "none";
+      }
+      var auditInfo = el("editAttachmentAuditInfo");
+      if (auditInfo) {
+        var addedBy = doc.createdByName || "—";
+        var addedAt = formatDateTime(doc.createdAt);
+        var modifiedBy = doc.updatedByName || doc.createdByName || "—";
+        var modifiedAt = formatDateTime(doc.updatedAt || doc.createdAt);
+        auditInfo.innerHTML =
+          "<div><strong>" + escapeHTML(_t("col_added_by") || "أُضيف بواسطة") + ": </strong>" +
+          escapeHTML(addedBy) +
+          " <span style='opacity:0.75;'>(" + escapeHTML(addedAt) + ")</span></div>" +
+          "<div style='margin-top: 6px;'><strong>" + escapeHTML(_t("col_modified_by") || "آخر تعديل بواسطة") + ": </strong>" +
+          escapeHTML(modifiedBy) +
+          " <span style='opacity:0.75;'>(" + escapeHTML(modifiedAt) + ")</span></div>";
+      }
+      showModal("editAttachmentModal");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function saveScannedAttachment() {
     if (!scannerCapturedBlob) return;
     var now = new Date();
     var pad = function (n) { return String(n).padStart(2, "0"); };
@@ -1977,20 +2066,17 @@
     hideModal("scannerModal");
     stopScannerCamera();
 
-    openDocumentForm("create", null, "other_attachments");
-    el("title").value = (_t("scanner_doc_default_title") || "مستند ماسح ضوئي") + " " + formatDate(todayString());
-    addPendingFiles([file]);
+    await handleDirectAttachmentUpload([file]);
   }
 
-  function handleScannerFilePicker(event) {
+  async function handleScannerFilePicker(event) {
     var files = event.target.files;
     if (!files || !files.length) return;
     hideModal("scannerModal");
     stopScannerCamera();
-    openDocumentForm("create", null, "other_attachments");
-    el("title").value = (_t("scanner_doc_default_title") || "مستند ماسح ضوئي") + " " + formatDate(todayString());
-    addPendingFiles(files);
+    var fileList = Array.from(files);
     event.target.value = "";
+    await handleDirectAttachmentUpload(fileList);
   }
 
   async function openDocumentDetail(documentId) {
@@ -2003,24 +2089,40 @@
       var data = await api.get("/documents/" + documentId);
       var doc = data.document;
       var deleted = Boolean(doc.deletedAt);
-      var detailTitlePrefix = window.I18N && window.I18N.getLanguage() === "en" ? "Document Details " : "تفاصيل المراسلة ";
+      var isOtherAtt = doc.type === "other_attachments";
+      var detailTitlePrefix = window.I18N && window.I18N.getLanguage() === "en"
+        ? (isOtherAtt ? "Attachment Details: " : "Document Details ")
+        : (isOtherAtt ? "تفاصيل المرفق: " : "تفاصيل المراسلة ");
       var docIdentifier = doc.reference || doc.sequenceNumber || doc.title || "—";
-      el("detailTitle").textContent = detailTitlePrefix + (doc.reference ? doc.reference : "(" + docIdentifier + ")");
-      var fields = [
-        [_t("field_ref"), doc.reference || "—"],
-        [_t("field_seq"), doc.sequenceNumber || "—"],
-        [_t("field_subject"), doc.title || "—"],
-        [_t("field_type"), getTypeLabel(doc.type)],
-        [_t("field_date"), doc.date ? formatDate(doc.date) : "—"],
-        [_t("field_dept"), doc.department ? doc.department.name : _t("unspecified")],
-        [_t("field_sender"), doc.sender || "—"],
-        [_t("field_recipient"), doc.recipient || "—"],
-        [_t("field_notes"), doc.notes || "—"],
-        [_t("field_created_by"), doc.createdByName || "—"],
-        [_t("field_created_at"), formatDateTime(doc.createdAt)],
-        [_t("field_updated_by"), doc.updatedByName || "—"],
-        [_t("field_updated_at"), formatDateTime(doc.updatedAt)]
-      ];
+      el("detailTitle").textContent = detailTitlePrefix + (isOtherAtt ? (doc.title || "—") : (doc.reference ? doc.reference : "(" + docIdentifier + ")"));
+
+      var fields;
+      if (isOtherAtt) {
+        fields = [
+          [_t("col_attachment_name") || "اسم المرفق / المستند", doc.title || "—"],
+          [_t("field_dept"), doc.department ? doc.department.name : _t("unspecified")],
+          [_t("field_created_at"), formatDateTime(doc.createdAt)],
+          [_t("col_added_by") || "أُضيف بواسطة", doc.createdByName || "—"],
+          [_t("col_modified_date") || "تاريخ آخر تعديل", formatDateTime(doc.updatedAt || doc.createdAt)],
+          [_t("col_modified_by") || "آخر تعديل بواسطة", doc.updatedByName || doc.createdByName || "—"]
+        ];
+      } else {
+        fields = [
+          [_t("field_ref"), doc.reference || "—"],
+          [_t("field_seq"), doc.sequenceNumber || "—"],
+          [_t("field_subject"), doc.title || "—"],
+          [_t("field_type"), getTypeLabel(doc.type)],
+          [_t("field_date"), doc.date ? formatDate(doc.date) : "—"],
+          [_t("field_dept"), doc.department ? doc.department.name : _t("unspecified")],
+          [_t("field_sender"), doc.sender || "—"],
+          [_t("field_recipient"), doc.recipient || "—"],
+          [_t("field_notes"), doc.notes || "—"],
+          [_t("field_created_by"), doc.createdByName || "—"],
+          [_t("field_created_at"), formatDateTime(doc.createdAt)],
+          [_t("field_updated_by"), doc.updatedByName || "—"],
+          [_t("field_updated_at"), formatDateTime(doc.updatedAt)]
+        ];
+      }
       if (deleted) {
         fields.push([_t("field_deleted_by"), doc.deletedByName || "—"]);
         fields.push([_t("field_deleted_at"), formatDateTime(doc.deletedAt)]);
@@ -2087,7 +2189,11 @@
       if (editButton) {
         editButton.addEventListener("click", function () {
           hideModal("detailModal");
-          openDocumentForm("edit", documentId);
+          if (doc.type === "other_attachments") {
+            openEditAttachmentModal(documentId);
+          } else {
+            openDocumentForm("edit", documentId);
+          }
         });
       }
       var deleteButton = el("detailDeleteButton");
@@ -2115,12 +2221,14 @@
   async function performDocumentAction(action, documentId) {
     try {
       if (action === "delete") {
-        var confirmed = await confirmDialog(
-          "هل تريد حذف هذه المعاملة؟ تُنقل إلى المحذوفات ويمكن للمدير استعادتها لاحقاً."
-        );
+        var isAttachmentView = state.currentPage === "other_attachments";
+        var confirmMsg = isAttachmentView
+          ? "هل تريد بالتأكيد حذف هذا المرفق؟ تُنقل المعاملة إلى المحذوفات ويمكن للمدير استعادتها لاحقاً."
+          : "هل تريد حذف هذه المعاملة؟ تُنقل إلى المحذوفات ويمكن للمدير استعادتها لاحقاً.";
+        var confirmed = await confirmDialog(confirmMsg);
         if (!confirmed) return false;
         await api.del("/documents/" + documentId);
-        toast("تم نقل المعاملة إلى المحذوفات.");
+        toast(isAttachmentView ? "تم حذف المرفق بنجاح." : "تم نقل المعاملة إلى المحذوفات.");
       }
       if (action === "restore") {
         await api.post("/documents/" + documentId + "/restore");
@@ -3029,11 +3137,58 @@
     }
     if (el("addAttachmentFromFileBtn")) {
       el("addAttachmentFromFileBtn").addEventListener("click", function () {
-        openDocumentForm("create", null, "other_attachments");
-        setTimeout(function () {
-          var input = el("attachmentInput");
-          if (input) input.click();
-        }, 150);
+        var input = el("directAttachmentInput");
+        if (input) input.click();
+      });
+    }
+    if (el("directAttachmentInput")) {
+      el("directAttachmentInput").addEventListener("change", function (event) {
+        var files = event.target.files;
+        if (files && files.length) {
+          var fileList = Array.from(files);
+          event.target.value = "";
+          handleDirectAttachmentUpload(fileList);
+        }
+      });
+    }
+    if (el("editAttachmentForm")) {
+      el("editAttachmentForm").addEventListener("submit", async function (event) {
+        event.preventDefault();
+        var id = el("editAttachmentId").value;
+        var newTitle = el("editAttachmentName").value.trim();
+        var errorEl = el("editAttachmentFormError");
+        if (!newTitle) {
+          if (errorEl) {
+            errorEl.textContent = "يرجى إدخال اسم المرفق أو المستند.";
+            errorEl.style.display = "block";
+          }
+          return;
+        }
+        var saveBtn = el("saveEditAttachmentBtn");
+        if (saveBtn) saveBtn.disabled = true;
+        try {
+          await api.patch("/documents/" + id, { title: newTitle });
+          hideModal("editAttachmentModal");
+          toast("تم تعديل المرفق بنجاح.");
+          loadDocumentsView("other_attachments");
+        } catch (err) {
+          if (errorEl) {
+            errorEl.textContent = errorMessage(err);
+            errorEl.style.display = "block";
+          }
+        } finally {
+          if (saveBtn) saveBtn.disabled = false;
+        }
+      });
+    }
+    if (el("closeEditAttachmentModal")) {
+      el("closeEditAttachmentModal").addEventListener("click", function () {
+        hideModal("editAttachmentModal");
+      });
+    }
+    if (el("closeEditAttachmentModalBtn")) {
+      el("closeEditAttachmentModalBtn").addEventListener("click", function () {
+        hideModal("editAttachmentModal");
       });
     }
     if (el("addAttachmentFromScanBtn")) {
@@ -3219,6 +3374,7 @@
       }
       hideModal("documentModal");
       hideModal("detailModal");
+      hideModal("editAttachmentModal");
       hideModal("userModal");
       if (promptResolver) resolvePrompt(null);
       if (confirmResolver) resolveConfirm(false);
@@ -3234,6 +3390,7 @@
         if (action === "download") directDownloadDocumentFiles(id);
         if (action === "share") openShareModal(id);
         if (action === "edit") openDocumentForm("edit", id);
+        if (action === "edit-attachment") openEditAttachmentModal(id);
         if (action === "delete") performDocumentAction("delete", id);
         if (action === "restore") performDocumentAction("restore", id);
         return;

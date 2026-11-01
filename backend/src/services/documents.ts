@@ -57,6 +57,7 @@ export interface DocumentListItem {
   department: DocumentDepartmentRef | null;
   filesCount: number;
   createdByName: string | null;
+  updatedByName: string | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -64,7 +65,6 @@ export interface DocumentListItem {
 
 export interface DocumentDetail extends DocumentListItem {
   notes: string;
-  updatedByName: string | null;
   deletedByName: string | null;
   restoredAt: Date | null;
   files: FileRecordPublic[];
@@ -106,6 +106,7 @@ interface DocumentListRow {
   department_name: string | null;
   files_count: number;
   created_by_name: string | null;
+  updated_by_name: string | null;
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
@@ -113,7 +114,6 @@ interface DocumentListRow {
 
 interface DocumentDetailRow extends DocumentListRow {
   notes: string;
-  updated_by_name: string | null;
   deleted_by_name: string | null;
   restored_at: Date | null;
 }
@@ -134,6 +134,7 @@ function toListItem(row: DocumentListRow | DocumentDetailRow): DocumentListItem 
         : null,
     filesCount: row.files_count,
     createdByName: row.created_by_name,
+    updatedByName: row.updated_by_name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
@@ -146,10 +147,12 @@ const LIST_SELECT = `
          doc.sender, doc.recipient, doc.department_id, dep.name AS department_name,
          (SELECT count(*)::int FROM document_files f WHERE f.document_id = doc.id) AS files_count,
          creator.display_name AS created_by_name,
+         updater.display_name AS updated_by_name,
          doc.created_at, doc.updated_at, doc.deleted_at
     FROM documents doc
     LEFT JOIN departments dep ON dep.id = doc.department_id
-    LEFT JOIN users creator ON creator.id = doc.created_by`;
+    LEFT JOIN users creator ON creator.id = doc.created_by
+    LEFT JOIN users updater ON updater.id = doc.updated_by`;
 
 export async function listDocuments(
   pool: Pool,
