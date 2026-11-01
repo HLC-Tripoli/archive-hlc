@@ -200,7 +200,8 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
         body.type === 'other' ||
         body.type === 'minutes' ||
         body.type === 'proposal' ||
-        body.type === 'report';
+        body.type === 'report' ||
+        body.type === 'other_attachments';
       if (!isOtherGroup && (!reference || !title)) {
         throw ApiError.badRequest('missing_fields', 'الرقم الاشاري وموضوع الرسالة مطلوبان.');
       }
@@ -332,7 +333,8 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
         targetType === 'other' ||
         targetType === 'minutes' ||
         targetType === 'proposal' ||
-        targetType === 'report';
+        targetType === 'report' ||
+        targetType === 'other_attachments';
       if (!isOtherGroup) {
         if (patch.reference !== undefined && !patch.reference) {
           throw ApiError.badRequest('invalid_reference', 'الرقم الاشاري مطلوب.');

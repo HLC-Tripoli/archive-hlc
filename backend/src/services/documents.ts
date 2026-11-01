@@ -4,7 +4,14 @@ import type { DocumentAccessScope } from '../lib/access.js';
 import { containsPattern } from '../lib/sql.js';
 import { listFilesForDocument, type FileRecordPublic } from './files.js';
 
-export type DocumentTypeDb = 'incoming' | 'outgoing' | 'other' | 'minutes' | 'proposal' | 'report';
+export type DocumentTypeDb =
+  | 'incoming'
+  | 'outgoing'
+  | 'other'
+  | 'minutes'
+  | 'proposal'
+  | 'report'
+  | 'other_attachments';
 
 /**
  * حالة المستند قيمة تاريخية داخلية فقط بعد إيقاف الحقل من واجهة المستخدم.
@@ -20,6 +27,7 @@ export const DOCUMENT_TYPES: readonly DocumentTypeDb[] = [
   'minutes',
   'proposal',
   'report',
+  'other_attachments',
 ];
 export const DOCUMENT_STATUSES: readonly DocumentStatus[] = ['new', 'in_progress', 'completed', 'archived'];
 export const DEFAULT_DOCUMENT_STATUS: DocumentStatus = 'new';

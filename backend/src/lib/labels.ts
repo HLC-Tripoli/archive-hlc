@@ -5,6 +5,7 @@ export const TYPE_LABELS: Record<string, string> = {
   minutes: 'محاضر اجتماعات',
   proposal: 'مقترحات',
   report: 'تقارير',
+  other_attachments: 'تخزين مرفقات أخرى',
 };
 
 export const ROLE_LABELS: Record<string, string> = {

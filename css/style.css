@@ -1953,3 +1953,180 @@ hr,
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   قسم تخزين مرفقات أخرى والمسح الضوئي والمشاركة
+   ========================================================================== */
+.dual-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.action-scan-btn {
+  background: #0d9488 !important;
+  color: #fff !important;
+  border-color: #0d9488 !important;
+}
+.action-scan-btn:hover {
+  background: #0f766e !important;
+  border-color: #0f766e !important;
+}
+.action-preview-btn {
+  background: #0284c7 !important;
+  color: #fff !important;
+}
+.action-preview-btn:hover {
+  background: #0369a1 !important;
+}
+.action-share-btn {
+  background: #6366f1 !important;
+  color: #fff !important;
+}
+.action-share-btn:hover {
+  background: #4f46e5 !important;
+}
+
+/* نافذة السكانر */
+.scanner-modal-box {
+  max-width: 680px;
+  width: 95%;
+}
+.scanner-desc {
+  color: var(--text-muted);
+  font-size: 13.5px;
+  margin: 0 0 12px;
+}
+.scanner-viewport-wrapper {
+  position: relative;
+  width: 100%;
+  min-height: 280px;
+  max-height: 420px;
+  background: #090d16;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.scanner-video {
+  width: 100%;
+  height: 100%;
+  max-height: 400px;
+  object-fit: cover;
+  display: block;
+}
+.scanner-preview-img {
+  width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+  display: block;
+}
+.scanner-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #94a3b8;
+  padding: 30px;
+  text-align: center;
+}
+.scanner-placeholder-icon {
+  font-size: 48px;
+}
+.scanner-placeholder p {
+  margin: 0;
+  font-size: 14px;
+}
+.scanner-controls {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 15px;
+  flex-wrap: wrap;
+}
+.scanner-divider {
+  position: relative;
+  text-align: center;
+  margin: 20px 0 15px;
+}
+.scanner-divider::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border);
+}
+.scanner-divider span {
+  position: relative;
+  background: var(--surface);
+  padding: 0 12px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+.scanner-file-picker {
+  text-align: center;
+  margin-bottom: 5px;
+}
+.scanner-file-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text);
+  background: var(--surface-alt);
+  font-size: 13.5px;
+  transition: all 0.2s ease;
+}
+.scanner-file-label:hover {
+  border-color: var(--primary);
+  background: var(--surface);
+}
+#scannerFileInput {
+  display: none;
+}
+
+/* نافذة المشاركة */
+.share-doc-info {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.share-doc-info h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  color: var(--text);
+  line-height: 1.4;
+}
+.share-doc-info p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.share-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+.share-input {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  direction: ltr;
+  text-align: left;
+}
+
