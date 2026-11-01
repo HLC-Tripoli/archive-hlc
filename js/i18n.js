@@ -160,6 +160,10 @@
       col_party: "الإدارة / الجهة",
       no_documents: "لا توجد معاملات لعرضها.",
 
+      // Edit attachment modal
+      edit_attachment_modal_title: "✏️ تعديل المرفق",
+      edit_attachment_name_label: "اسم المرفق أو المستند *",
+
       // Document modal
       create_incoming_title: "تسجيل رسالة واردة",
       create_outgoing_title: "تسجيل رسالة صادرة",
@@ -556,6 +560,10 @@
       col_date: "Date",
       col_party: "Department / Party",
       no_documents: "No documents to display.",
+
+      // Edit attachment modal
+      edit_attachment_modal_title: "✏️ Edit Attachment",
+      edit_attachment_name_label: "Attachment / Document Name *",
 
       // Document modal
       create_incoming_title: "Register Incoming Document",

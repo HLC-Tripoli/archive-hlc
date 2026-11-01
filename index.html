@@ -286,7 +286,7 @@
                 <p data-i18n="other_attachments_desc">تخزين وإدارة المرفقات والصور والمستندات والمسح الضوئي المباشر من السكانر.</p>
               </div>
               <div class="panel-actions dual-actions">
-                <input type="file" id="directAttachmentInput" multiple style="display:none;" />
+                <input type="file" id="directAttachmentInput" multiple hidden style="display:none !important;" />
                 <button class="button" id="addAttachmentFromFileBtn" data-requires-department type="button">
                   📁 <span data-i18n="add_from_files">من الملفات</span>
                 </button>
@@ -987,11 +987,9 @@
         </div>
         <form id="editAttachmentForm">
           <input type="hidden" id="editAttachmentId" />
-          <div class="form-group">
-            <label for="editAttachmentName" data-i18n="edit_attachment_name_label">اسم المرفق أو المستند *</label>
-            <input type="text" id="editAttachmentName" required />
-          </div>
-          <div id="editAttachmentAuditInfo" class="edit-audit-info" style="margin: 12px 0; padding: 10px; background: rgba(127,127,127,0.08); border-radius: 6px; font-size: 0.88rem; line-height: 1.6;">
+          <label for="editAttachmentName" data-i18n="edit_attachment_name_label">اسم المرفق أو المستند *</label>
+          <input type="text" id="editAttachmentName" required />
+          <div id="editAttachmentAuditInfo" class="edit-audit-info" style="margin: 14px 0; padding: 12px; background: rgba(127,127,127,0.08); border-radius: 8px; font-size: 0.88rem; line-height: 1.6;">
             <!-- تفاصيل تدقيق التعديل والإضافة -->
           </div>
           <div id="editAttachmentFormError" class="form-error" role="alert" style="display:none;"></div>
