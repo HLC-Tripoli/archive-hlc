@@ -2725,12 +2725,6 @@
         openDocumentForm("create", null, "other");
       });
     }
-    if (el("addArchiveDocumentButton")) {
-      el("addArchiveDocumentButton").addEventListener("click", function () {
-        var defaultType = el("typeFilter") && el("typeFilter").value ? el("typeFilter").value : "incoming";
-        openDocumentForm("create", null, defaultType, true);
-      });
-    }
     if (el("documentType")) {
       el("documentType").addEventListener("change", function () {
         state.documentType = el("documentType").value;
