@@ -686,7 +686,7 @@
     });
     archiveSelect.value = currentArchive;
     formSelect.value = currentForm;
-    var otherAttSelect = el("otherAttachmentsDeptFilter");
+    var otherAttSelect = el("other_attachmentsDeptFilter") || el("otherAttachmentsDeptFilter");
     if (otherAttSelect) {
       var curVal = otherAttSelect.value;
       otherAttSelect.innerHTML = '<option value="">' + escapeHTML(_t("all_departments")) + '</option>';
@@ -1022,17 +1022,21 @@
 
   async function loadDocumentsView(viewName) {
     var view = state.views[viewName];
-    var table = el(viewName + "Table");
+    var table = el(viewName + "Table") || el("otherAttachmentsTable");
+    if (!table) return;
     renderLoading(table, "جارٍ تحميل المعاملات…");
     try {
       var data = await api.get("/documents", documentQuery(viewName));
       view.total = data.total;
       view.page = data.page;
       renderDocuments(table, data.items, viewName);
-      renderPager(el(viewName + "Pager"), view, function (delta) {
-        view.page = Math.max(1, view.page + delta);
-        loadDocumentsView(viewName);
-      });
+      var pager = el(viewName + "Pager") || el("otherAttachmentsPager");
+      if (pager) {
+        renderPager(pager, view, function (delta) {
+          view.page = Math.max(1, view.page + delta);
+          loadDocumentsView(viewName);
+        });
+      }
     } catch (error) {
       renderError(table, errorMessage(error));
     }
@@ -3273,16 +3277,19 @@
       ["incomingSearch", "incoming"],
       ["outgoingSearch", "outgoing"],
       ["otherSearch", "other"],
+      ["other_attachmentsSearch", "other_attachments"],
       ["otherAttachmentsSearch", "other_attachments"],
       ["archiveSearch", "archive"],
       ["usersSearch", "users"]
     ];
     searchBindings.forEach(function (binding) {
+      var elem = el(binding[0]);
+      if (!elem) return;
       var view = state.views[binding[1]];
-      el(binding[0]).addEventListener(
+      elem.addEventListener(
         "input",
         debounce(function () {
-          view.q = el(binding[0]).value.trim();
+          view.q = elem.value.trim();
           view.page = 1;
           if (binding[1] === "users") loadUsers();
           else loadDocumentsView(binding[1]);
@@ -3325,9 +3332,10 @@
       loadDocumentsView("archive");
     });
 
-    if (el("otherAttachmentsDeptFilter")) {
-      el("otherAttachmentsDeptFilter").addEventListener("change", function () {
-        state.views.other_attachments.departmentId = el("otherAttachmentsDeptFilter").value;
+    var otherAttDept = el("other_attachmentsDeptFilter") || el("otherAttachmentsDeptFilter");
+    if (otherAttDept) {
+      otherAttDept.addEventListener("change", function () {
+        state.views.other_attachments.departmentId = otherAttDept.value;
         state.views.other_attachments.page = 1;
         loadDocumentsView("other_attachments");
       });
