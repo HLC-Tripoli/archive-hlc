@@ -128,6 +128,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
           departmentId: user.departmentId,
           departmentName: user.departmentName,
           departmentActive: user.departmentActive,
+          permissions: user.permissions,
         },
         csrfToken: session.csrfToken,
       };

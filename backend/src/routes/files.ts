@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import type { AppConfig } from '../config.js';
 import { resolveDocumentAccessScope } from '../lib/access.js';
 import { ApiError } from '../lib/errors.js';
+import { assertPermission } from '../lib/permissions.js';
 import { isUuid } from '../lib/validation.js';
 import type { AuthGuards } from '../plugins/auth.js';
 import { writeAudit } from '../services/audit.js';
@@ -60,6 +61,7 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
     '/documents/:id/files',
     { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
     async (request, reply) => {
+      assertPermission(request.authUser!, 'create');
       const access = resolveDocumentAccessScope(request.authUser!);
       const { id: documentId } = request.params as { id: string };
       if (!isUuid(documentId)) throw ApiError.notFound('المعاملة غير موجودة.');
@@ -135,6 +137,7 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
     '/files/:id/download',
     { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
     async (request, reply) => {
+      assertPermission(request.authUser!, 'view');
       const access = resolveDocumentAccessScope(request.authUser!);
       const { id } = request.params as { id: string };
       if (!isUuid(id)) throw ApiError.notFound('الملف غير موجود.');
@@ -174,6 +177,7 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
     '/files/:id/view',
     { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
     async (request, reply) => {
+      assertPermission(request.authUser!, 'view');
       const access = resolveDocumentAccessScope(request.authUser!);
       const { id } = request.params as { id: string };
       if (!isUuid(id)) throw ApiError.notFound('الملف غير موجود.');
@@ -232,6 +236,7 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
       if (found.document.deletedAt && !access.isAdmin) {
         throw ApiError.notFound('الملف غير موجود.');
       }
+      assertPermission(request.authUser!, 'delete');
       assertSupportedProvider(request, found.file, storage);
 
       // نحذف الكائن من التخزين أولاً؛ إذا فشل الحذف نُبقي السجل كي لا يبقى الكائن يتيماً.

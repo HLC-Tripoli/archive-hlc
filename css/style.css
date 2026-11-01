@@ -895,25 +895,47 @@ tbody tr:hover {
 #detailModal .modal-box,
 #userModal .modal-box {
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
   overflow: hidden;
 }
 #documentModal .modal-header,
 #detailModal .modal-header,
 #userModal .modal-header {
+  flex: 0 0 auto;
   background: var(--thead-bg);
   border-bottom: 1px solid var(--thead-border, var(--border));
   padding: 18px 24px;
   margin: 0;
 }
 #documentModal #documentForm,
-#detailModal #detailContent,
 #userModal #userForm {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 20px 24px 24px;
-  max-height: calc(90vh - 70px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+#detailModal #detailContent {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 20px 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 #detailModal #detailActions {
-  padding: 0 24px 24px;
+  flex: 0 0 auto;
+  padding: 14px 24px;
+  margin: 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
 }
 #previewModal {
   z-index: 150;
@@ -2129,4 +2151,65 @@ hr,
   direction: ltr;
   text-align: left;
 }
+
+/* صلاحيات المستخدمين */
+.permissions-checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin: 8px 0 12px;
+  padding: 12px 14px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.permission-checkbox-item {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  margin: 0 !important;
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 500;
+  user-select: none;
+}
+.permission-checkbox-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+.permission-checkbox-item input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.permission-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  margin: 2px;
+  white-space: nowrap;
+}
+.permission-badge.badge-view {
+  color: #0284c7;
+  border-color: rgba(2, 132, 199, 0.3);
+}
+.permission-badge.badge-create {
+  color: #16a34a;
+  border-color: rgba(22, 163, 74, 0.3);
+}
+.permission-badge.badge-edit {
+  color: #d97706;
+  border-color: rgba(217, 119, 6, 0.3);
+}
+.permission-badge.badge-delete {
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.3);
+}
+
 

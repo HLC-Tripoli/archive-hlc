@@ -31,7 +31,11 @@ before(async () => {
 beforeEach(async () => {
   await resetDatabase(context.pool);
   await createTestUser(context.pool, { username: 'admin', role: 'admin' });
-  await createTestUser(context.pool, { username: 'employee', role: 'employee' });
+  await createTestUser(context.pool, {
+    username: 'employee',
+    role: 'employee',
+    permissions: ['view', 'create', 'edit', 'delete'],
+  });
   adminClient = await loginClient(context.app, 'admin');
   employeeClient = await loginClient(context.app, 'employee');
   context.storage.objects.clear();

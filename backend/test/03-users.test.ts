@@ -552,3 +552,42 @@ test('pagination total stays correct on pages beyond the result set and with fil
   assert.equal(emptyBody.items.length, 0);
   assert.equal(emptyBody.total, 0);
 });
+
+test('admin can manage granular user permissions, and admin always has full permissions', async () => {
+  const created = await apiRequest(context.app, adminClient, 'POST', '/users', {
+    payload: {
+      username: 'permuser',
+      displayName: 'موظف بصلاحيات',
+      role: 'employee',
+      departmentId,
+      permissions: ['view', 'delete'],
+      password: 'password-123',
+    },
+  });
+  assert.equal(created.statusCode, 201);
+  const user = (created.json() as { user: { id: string; permissions: string[] } }).user;
+  assert.deepEqual(user.permissions, ['view', 'delete']);
+
+  const updated = await apiRequest(context.app, adminClient, 'PATCH', `/users/${user.id}`, {
+    payload: { permissions: ['view', 'create', 'edit'] },
+  });
+  assert.equal(updated.statusCode, 200);
+  assert.deepEqual(
+    (updated.json() as { user: { permissions: string[] } }).user.permissions,
+    ['view', 'create', 'edit'],
+  );
+
+  const createdAdmin = await apiRequest(context.app, adminClient, 'POST', '/users', {
+    payload: {
+      username: 'permadmin',
+      displayName: 'مدير جديد',
+      role: 'admin',
+      password: 'password-123',
+    },
+  });
+  assert.equal(createdAdmin.statusCode, 201);
+  assert.deepEqual(
+    (createdAdmin.json() as { user: { permissions: string[] } }).user.permissions,
+    ['view', 'create', 'edit', 'delete'],
+  );
+});
