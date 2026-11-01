@@ -17,6 +17,7 @@ export interface SessionUserInfo {
   departmentName: string | null;
   /** حالة الإدارة الحالية من قاعدة البيانات، وليس من قيمة قديمة في الجلسة. */
   departmentActive: boolean | null;
+  permissions: string[];
 }
 
 export interface SessionRecord {
@@ -43,6 +44,7 @@ interface SessionRow {
   department_id: string | null;
   department_name: string | null;
   department_active: boolean | null;
+  permissions?: string[] | null;
 }
 
 export async function createSession(
@@ -64,7 +66,7 @@ export async function createSession(
 export async function findSessionWithUser(pool: Pool, token: string): Promise<SessionLookup | null> {
   const { rows } = await pool.query<SessionRow>(
     `SELECT s.id AS session_id, s.user_id, s.csrf_token, s.expires_at,
-            u.username, u.display_name, u.role, u.is_active,
+            u.username, u.display_name, u.role, u.is_active, u.permissions,
             u.department_id, dep.name AS department_name, dep.is_active AS department_active
        FROM sessions s
        JOIN users u ON u.id = s.user_id
@@ -104,6 +106,12 @@ export async function findSessionWithUser(pool: Pool, token: string): Promise<Se
       departmentId: row.department_id,
       departmentName: row.department_name,
       departmentActive: row.department_active,
+      permissions:
+        row.role === 'admin'
+          ? ['view', 'create', 'edit', 'delete']
+          : Array.isArray(row.permissions) && row.permissions.length > 0
+            ? row.permissions
+            : ['view', 'create', 'edit'],
     },
   };
 }

@@ -162,6 +162,7 @@ export async function createTestUser(
     username: string;
     password?: string;
     role?: UserRole;
+    permissions?: string[];
     displayName?: string;
     employeeNumber?: string | null;
     departmentId?: string | null;
@@ -180,6 +181,7 @@ export async function createTestUser(
     employeeNumber: options.employeeNumber,
     departmentId,
     role,
+    permissions: options.permissions,
     passwordHash,
   });
   if (options.isActive === false) {

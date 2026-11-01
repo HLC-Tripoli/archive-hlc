@@ -37,6 +37,7 @@ const USER_ID_PARAMS_SCHEMA = {
 } as const;
 
 const ROLE_ENUM = ['admin', 'employee'] as const;
+const PERMISSION_ENUM = ['view', 'create', 'edit', 'delete'] as const;
 
 function normalizeDepartmentId(value: unknown): string | null {
   if (value === undefined || value === null) return null;
@@ -132,6 +133,11 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
             employeeNumber: { type: ['string', 'null'], maxLength: 128 },
             departmentId: { type: ['string', 'null'], maxLength: 64 },
             role: { type: 'string', enum: ROLE_ENUM },
+            permissions: {
+              type: 'array',
+              items: { type: 'string', enum: PERMISSION_ENUM as unknown as string[] },
+              uniqueItems: true,
+            },
             password: { type: 'string', minLength: 8, maxLength: 200 },
           },
         },
@@ -144,6 +150,7 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
         employeeNumber?: string | null;
         departmentId?: string | null;
         role: 'admin' | 'employee';
+        permissions?: string[];
         password: string;
       };
       const username = body.username.trim();
@@ -153,6 +160,9 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
       const departmentId = normalizeDepartmentId(body.departmentId);
       await assertActiveDepartment(pool, departmentId, body.role);
       const passwordHash = await hashPassword(body.password);
+      const permissions = body.role === 'admin'
+        ? ['view', 'create', 'edit', 'delete']
+        : (Array.isArray(body.permissions) && body.permissions.length > 0 ? body.permissions : ['view', 'create', 'edit']);
       const auditContext: AuditContext = {
         ip: request.ip,
         userAgent: (request.headers['user-agent'] ?? '') || null,
@@ -165,6 +175,7 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
           employeeNumber,
           departmentId,
           role: body.role,
+          permissions,
           passwordHash,
         });
         await writeAudit(
@@ -181,6 +192,7 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
               departmentId: user.departmentId,
               departmentName: user.departmentName,
               role: user.role,
+              permissions: user.permissions,
             },
           },
           auditContext,
@@ -208,6 +220,11 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
             employeeNumber: { type: ['string', 'null'], maxLength: 128 },
             departmentId: { type: ['string', 'null'], maxLength: 64 },
             role: { type: 'string', enum: ROLE_ENUM },
+            permissions: {
+              type: 'array',
+              items: { type: 'string', enum: PERMISSION_ENUM as unknown as string[] },
+              uniqueItems: true,
+            },
             isActive: { type: 'boolean' },
           },
         },
@@ -215,7 +232,7 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
     },
     async (request) => {
       const { id } = request.params as { id: string };
-      const body = request.body as UserUpdate;
+      const body = request.body as UserUpdate & { permissions?: string[] };
       const hasEmployeeNumber = body.employeeNumber !== undefined;
       const employeeNumber = hasEmployeeNumber
         ? normalizeEmployeeNumber(body.employeeNumber)
@@ -258,6 +275,13 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
         }
       }
 
+      let nextPermissions: string[] | undefined = undefined;
+      if (nextRole === 'admin') {
+        nextPermissions = ['view', 'create', 'edit', 'delete'];
+      } else if (body.permissions !== undefined) {
+        nextPermissions = body.permissions;
+      }
+
       const auditContext: AuditContext = {
         ip: request.ip,
         userAgent: (request.headers['user-agent'] ?? '') || null,
@@ -269,6 +293,7 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
           employeeNumber,
           departmentId: hasDepartment ? nextDepartmentId : undefined,
           role: body.role,
+          permissions: nextPermissions,
           isActive: body.isActive,
         });
         if (!updated) throw ApiError.notFound('المستخدم غير موجود.');
@@ -280,10 +305,11 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
           changed.departmentName = updated.departmentName;
         }
         if (body.role !== undefined) changed.role = updated.role;
+        if (nextPermissions !== undefined) changed.permissions = updated.permissions;
         if (body.isActive !== undefined) changed.isActive = updated.isActive;
 
         let revokedSessions = 0;
-        if (body.isActive === false || body.role !== undefined) {
+        if (body.isActive === false || body.role !== undefined || body.permissions !== undefined) {
           revokedSessions = await destroyUserSessions(pool, id);
         }
         await writeAudit(

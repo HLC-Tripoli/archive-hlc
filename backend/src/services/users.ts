@@ -13,6 +13,7 @@ export interface UserRecord {
   departmentActive: boolean | null;
   role: UserRole;
   isActive: boolean;
+  permissions: string[];
   createdAt: Date;
   lastLoginAt: Date | null;
 }
@@ -31,6 +32,7 @@ interface UserRow {
   department_active: boolean | null;
   role: UserRole;
   is_active: boolean;
+  permissions?: string[] | null;
   created_at: Date;
   last_login_at: Date | null;
   password_hash?: string;
@@ -43,7 +45,7 @@ interface UserRow {
 const USER_COLUMNS = `
   u.id, u.username, u.display_name, u.employee_number, u.department_id,
   dep.name AS department_name, dep.is_active AS department_active,
-  u.role, u.is_active, u.created_at, u.last_login_at`;
+  u.role, u.is_active, u.permissions, u.created_at, u.last_login_at`;
 
 const USER_FROM = `
   FROM users u
@@ -53,6 +55,9 @@ const USER_SELECT = `SELECT ${USER_COLUMNS} ${USER_FROM}`;
 const USER_SELECT_WITH_HASH = `SELECT ${USER_COLUMNS}, u.password_hash ${USER_FROM}`;
 
 function toRecord(row: UserRow): UserRecord {
+  const perms = Array.isArray(row.permissions)
+    ? row.permissions
+    : (row.role === 'admin' ? ['view', 'create', 'edit', 'delete'] : ['view', 'create', 'edit']);
   return {
     id: row.id,
     username: row.username,
@@ -63,6 +68,7 @@ function toRecord(row: UserRow): UserRecord {
     departmentActive: row.department_active,
     role: row.role,
     isActive: row.is_active,
+    permissions: perms,
     createdAt: row.created_at,
     lastLoginAt: row.last_login_at,
   };
@@ -205,12 +211,17 @@ export async function createUser(
     employeeNumber?: string | null;
     departmentId?: string | null;
     role: UserRole;
+    permissions?: string[];
     passwordHash: string;
   },
 ): Promise<UserRecord> {
+  const permissions = input.role === 'admin'
+    ? ['view', 'create', 'edit', 'delete']
+    : (input.permissions && input.permissions.length > 0 ? input.permissions : ['view', 'create', 'edit']);
+
   const { rows } = await db.query<{ id: string }>(
-    `INSERT INTO users (username, display_name, employee_number, department_id, role, password_hash)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO users (username, display_name, employee_number, department_id, role, permissions, password_hash)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id`,
     [
       input.username,
@@ -218,6 +229,7 @@ export async function createUser(
       input.employeeNumber ?? null,
       input.departmentId ?? null,
       input.role,
+      permissions,
       input.passwordHash,
     ],
   );
@@ -234,6 +246,7 @@ export interface UserUpdate {
   departmentId?: string | null;
   role?: UserRole;
   isActive?: boolean;
+  permissions?: string[];
 }
 
 export async function updateUser(
@@ -257,6 +270,7 @@ export async function updateUser(
   }
   if (update.role !== undefined) sets.push(`role = ${addParam(update.role)}`);
   if (update.isActive !== undefined) sets.push(`is_active = ${addParam(update.isActive)}`);
+  if (update.permissions !== undefined) sets.push(`permissions = ${addParam(update.permissions)}`);
   if (sets.length === 0) return null;
   sets.push('updated_at = now()');
   params.push(id);

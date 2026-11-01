@@ -185,6 +185,13 @@
     return Boolean(state.user && state.user.role === "admin");
   }
 
+  function hasPermission(perm) {
+    if (!state.user) return false;
+    if (state.user.role === "admin") return true;
+    if (!Array.isArray(state.user.permissions)) return true;
+    return state.user.permissions.includes(perm);
+  }
+
   function isDepartmentBlocked() {
     return Boolean(
       state.user &&
@@ -514,12 +521,21 @@
   function applyRoleUI() {
     var admin = isAdmin();
     var blocked = isDepartmentBlocked();
+    var canCreate = hasPermission("create");
     document.querySelectorAll(".admin-only").forEach(function (node) {
       node.classList.toggle("is-hidden", !admin);
     });
     document.querySelectorAll("[data-requires-department]").forEach(function (node) {
       node.disabled = blocked;
       node.title = blocked ? departmentAccessMessage() : "";
+    });
+
+    var createBtns = ["addIncomingButton", "addOutgoingButton", "addOtherButton", "directUploadBtn", "scannerTriggerBtn"];
+    createBtns.forEach(function (btnId) {
+      var node = el(btnId);
+      if (node) {
+        node.style.display = canCreate ? "" : "none";
+      }
     });
 
     el("userName").textContent = state.user.displayName;
@@ -875,27 +891,25 @@
               escapeHTML(document.id) +
               '">' + escapeHTML(_t("share")) + '</button>'
           );
-          if (!deleted) {
+          if (!deleted && hasPermission("edit")) {
             actions.push(
               '<button type="button" class="small-button" data-doc-action="edit-attachment" data-id="' +
                 escapeHTML(document.id) +
                 '">' + escapeHTML(_t("edit")) + '</button>'
             );
           }
-          if (admin) {
-            if (deleted) {
-              actions.push(
-                '<button type="button" class="small-button" data-doc-action="restore" data-id="' +
-                  escapeHTML(document.id) +
-                  '">' + escapeHTML(_t("restore")) + '</button>'
-              );
-            } else {
-              actions.push(
-                '<button type="button" class="small-button delete-button" data-doc-action="delete" data-id="' +
-                  escapeHTML(document.id) +
-                  '">' + escapeHTML(_t("delete")) + '</button>'
-              );
-            }
+          if (admin && deleted) {
+            actions.push(
+              '<button type="button" class="small-button" data-doc-action="restore" data-id="' +
+                escapeHTML(document.id) +
+                '">' + escapeHTML(_t("restore")) + '</button>'
+            );
+          } else if (!deleted && (admin || hasPermission("delete"))) {
+            actions.push(
+              '<button type="button" class="small-button delete-button" data-doc-action="delete" data-id="' +
+                escapeHTML(document.id) +
+                '">' + escapeHTML(_t("delete")) + '</button>'
+            );
           }
           return (
             "<tr" +
@@ -924,27 +938,25 @@
             escapeHTML(document.id) +
             '">' + escapeHTML(_t("view")) + '</button>'
         );
-        if (!deleted) {
+        if (!deleted && hasPermission("edit")) {
           actions.push(
             '<button type="button" class="small-button" data-doc-action="edit" data-id="' +
               escapeHTML(document.id) +
               '">' + escapeHTML(_t("edit")) + '</button>'
           );
         }
-        if (admin) {
-          if (deleted) {
-            actions.push(
-              '<button type="button" class="small-button" data-doc-action="restore" data-id="' +
-                escapeHTML(document.id) +
-                '">' + escapeHTML(_t("restore")) + '</button>'
-            );
-          } else {
-            actions.push(
-              '<button type="button" class="small-button delete-button" data-doc-action="delete" data-id="' +
-                escapeHTML(document.id) +
-                '">' + escapeHTML(_t("delete")) + '</button>'
-            );
-          }
+        if (admin && deleted) {
+          actions.push(
+            '<button type="button" class="small-button" data-doc-action="restore" data-id="' +
+              escapeHTML(document.id) +
+              '">' + escapeHTML(_t("restore")) + '</button>'
+          );
+        } else if (!deleted && (admin || hasPermission("delete"))) {
+          actions.push(
+            '<button type="button" class="small-button delete-button" data-doc-action="delete" data-id="' +
+              escapeHTML(document.id) +
+              '">' + escapeHTML(_t("delete")) + '</button>'
+          );
         }
         return (
           "<tr" +
@@ -2164,21 +2176,19 @@
         "</div>";
 
       var actions = [];
-      if (!deleted) {
+      if (!deleted && hasPermission("edit")) {
         actions.push(
           '<button type="button" class="button" id="detailEditButton">' + escapeHTML(_t("edit")) + '</button>'
         );
       }
-      if (isAdmin()) {
-        if (deleted) {
-          actions.push(
-            '<button type="button" class="button" id="detailRestoreButton">' + escapeHTML(_t("restore")) + '</button>'
-          );
-        } else {
-          actions.push(
-            '<button type="button" class="button danger-button" id="detailDeleteButton">' + escapeHTML(_t("delete")) + '</button>'
-          );
-        }
+      if (isAdmin() && deleted) {
+        actions.push(
+          '<button type="button" class="button" id="detailRestoreButton">' + escapeHTML(_t("restore")) + '</button>'
+        );
+      } else if (!deleted && (isAdmin() || hasPermission("delete"))) {
+        actions.push(
+          '<button type="button" class="button danger-button" id="detailDeleteButton">' + escapeHTML(_t("delete")) + '</button>'
+        );
       }
       actions.push(
         '<button type="button" class="button secondary-button" id="detailCloseButton">' + escapeHTML(_t("close")) + '</button>'
@@ -2315,6 +2325,18 @@
               ? ' <span class="badge badge-inactive">' + escapeHTML(_t("disabled")) + '</span>'
               : "")
           : '<span class="muted">' + escapeHTML(_t("unspecified")) + '</span>';
+        var permsHtml = "";
+        if (user.role === "admin") {
+          permsHtml = '<span class="permission-badge badge-view" style="font-weight:700;">' + escapeHTML(_t("perm_all")) + '</span>';
+        } else {
+          var userPerms = Array.isArray(user.permissions) ? user.permissions : ["view", "create", "edit"];
+          var badges = [];
+          if (userPerms.includes("view")) badges.push('<span class="permission-badge badge-view">' + escapeHTML(_t("perm_view")) + '</span>');
+          if (userPerms.includes("create")) badges.push('<span class="permission-badge badge-create">' + escapeHTML(_t("perm_create")) + '</span>');
+          if (userPerms.includes("edit")) badges.push('<span class="permission-badge badge-edit">' + escapeHTML(_t("perm_edit")) + '</span>');
+          if (userPerms.includes("delete")) badges.push('<span class="permission-badge badge-delete">' + escapeHTML(_t("perm_delete")) + '</span>');
+          permsHtml = badges.length ? badges.join(" ") : '<span class="muted">—</span>';
+        }
         return (
           "<tr><td>" +
           escapeHTML(user.username) +
@@ -2329,6 +2351,8 @@
           '">' +
           escapeHTML(getRoleLabel(user.role)) +
           "</span></td><td>" +
+          permsHtml +
+          "</td><td>" +
           '<span class="badge badge-' +
           (user.isActive ? "active" : "inactive") +
           '">' +
@@ -2349,6 +2373,7 @@
       _t("user_fullname_label"),
       _t("doc_dept_label"),
       _t("col_user_role"),
+      _t("col_user_permissions"),
       _t("status"),
       _t("col_dept_created"),
       _t("col_user_last_login"),
@@ -2390,16 +2415,44 @@
     el("userDepartment").required = employee;
     el("userDepartmentRequired").hidden = !employee;
     el("userDepartmentHint").textContent = employee
-      ? "إدارة نشطة إلزامية للموظف. لا يمكن حفظ الحساب كموظف دون تعيين إدارة."
-      : "المدير يرى جميع الإدارات، ويمكن تركه بلا إدارة.";
+      ? (window.I18N && window.I18N.getLanguage() === "en"
+          ? "An employee requires an active department to access records."
+          : "إدارة نشطة إلزامية للموظف. لا يمكن حفظ الحساب كموظف دون تعيين إدارة.")
+      : (window.I18N && window.I18N.getLanguage() === "en"
+          ? "Admins see all departments and can be left without an assigned department."
+          : "المدير يرى جميع الإدارات، ويمكن تركه بلا إدارة.");
     var blank = el("userDepartment").querySelector('option[value=""]');
     if (blank) blank.disabled = employee;
+    updateUserPermissionsCheckboxes();
+  }
+
+  function updateUserPermissionsCheckboxes() {
+    var isAdminRole = el("userRole").value === "admin";
+    var checkboxes = [el("permView"), el("permCreate"), el("permEdit"), el("permDelete")];
+    checkboxes.forEach(function (cb) {
+      if (cb) {
+        if (isAdminRole) {
+          cb.checked = true;
+          cb.disabled = true;
+        } else {
+          cb.disabled = false;
+        }
+      }
+    });
+    var hint = el("userPermissionsHint");
+    if (hint) {
+      hint.textContent = isAdminRole
+        ? _t("user_permissions_hint")
+        : (window.I18N && window.I18N.getLanguage() === "en"
+            ? "Check permissions granted to this employee."
+            : "حدد الصلاحيات الممنوحة لهذا الموظف.");
+    }
   }
 
   async function openUserModal(mode, user) {
     state.editingUserId = mode === "edit" ? user.id : null;
     el("userModalTitle").textContent =
-      mode === "edit" ? "تعديل المستخدم «" + user.username + "»" : "إضافة مستخدم";
+      mode === "edit" ? (window.I18N && window.I18N.getLanguage() === "en" ? "Edit User \"" + user.username + "\"" : "تعديل المستخدم «" + user.username + "»") : _t("user_modal_add");
     el("userUsernameField").style.display = mode === "edit" ? "none" : "";
     el("userPasswordField").style.display = mode === "edit" ? "none" : "";
     el("userUsername").required = mode !== "edit";
@@ -2411,6 +2464,15 @@
     el("userRole").value = mode === "edit" ? user.role : "employee";
     el("userPassword").value = "";
     showFormError("userFormError", "");
+
+    var userPerms = user && Array.isArray(user.permissions)
+      ? user.permissions
+      : ["view", "create", "edit"];
+    if (el("permView")) el("permView").checked = userPerms.includes("view");
+    if (el("permCreate")) el("permCreate").checked = userPerms.includes("create");
+    if (el("permEdit")) el("permEdit").checked = userPerms.includes("edit");
+    if (el("permDelete")) el("permDelete").checked = userPerms.includes("delete");
+
     try {
       var data = await api.get("/departments", { includeInactive: true });
       state.userFormDepartments = data.items;
@@ -2432,17 +2494,36 @@
       var role = el("userRole").value;
       var departmentId = el("userDepartment").value || null;
       if (role === "employee" && !departmentId) {
-        showFormError("userFormError", "يجب اختيار إدارة نشطة للموظف.");
+        showFormError("userFormError", window.I18N && window.I18N.getLanguage() === "en" ? "Active department is required for employee." : "يجب اختيار إدارة نشطة للموظف.");
         return;
+      }
+      var permissions = [];
+      if (role === "admin") {
+        permissions = ["view", "create", "edit", "delete"];
+      } else {
+        if (el("permView") && el("permView").checked) permissions.push("view");
+        if (el("permCreate") && el("permCreate").checked) permissions.push("create");
+        if (el("permEdit") && el("permEdit").checked) permissions.push("edit");
+        if (el("permDelete") && el("permDelete").checked) permissions.push("delete");
+        if (permissions.length === 0) {
+          showFormError(
+            "userFormError",
+            window.I18N && window.I18N.getLanguage() === "en"
+              ? "Select at least one permission for the employee."
+              : "يجب اختيار صلاحية واحدة على الأقل للموظف."
+          );
+          return;
+        }
       }
       if (state.editingUserId) {
         await api.patch("/users/" + state.editingUserId, {
           displayName: el("userDisplayName").value.trim(),
           employeeNumber: employeeNumber,
           departmentId: departmentId,
-          role: role
+          role: role,
+          permissions: permissions
         });
-        toast("تم تحديث بيانات المستخدم.");
+        toast(window.I18N && window.I18N.getLanguage() === "en" ? "User updated successfully." : "تم تحديث بيانات المستخدم.");
       } else {
         await api.post("/users", {
           username: el("userUsername").value.trim(),
@@ -2450,9 +2531,10 @@
           employeeNumber: employeeNumber,
           departmentId: departmentId,
           role: role,
+          permissions: permissions,
           password: el("userPassword").value
         });
-        toast("تم إنشاء المستخدم.");
+        toast(window.I18N && window.I18N.getLanguage() === "en" ? "User created successfully." : "تم إنشاء المستخدم.");
       }
       hideModal("userModal");
       loadUsers();

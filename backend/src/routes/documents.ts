@@ -4,6 +4,7 @@ import { withTransaction } from '../db/pool.js';
 import { resolveDocumentAccessScope } from '../lib/access.js';
 import { isValidIsoDate } from '../lib/dates.js';
 import { ApiError } from '../lib/errors.js';
+import { assertPermission } from '../lib/permissions.js';
 import { isUuid } from '../lib/validation.js';
 import type { AuthGuards } from '../plugins/auth.js';
 import { writeAudit, type AuditContext } from '../services/audit.js';
@@ -109,6 +110,7 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
     '/documents',
     { preHandler: guards.requireAuth, schema: { querystring: LIST_QUERY_SCHEMA } },
     async (request) => {
+      assertPermission(request.authUser!, 'view');
       const query = request.query as DocumentListQuery;
       // نطاق الوصول أولاً: الموظف غير المعيّن/ذي الإدارة المعطّلة يحصل على
       // رسالة الحجب الواضحة حتى لو أرسل مرشِّحات غير صالحة.
@@ -160,6 +162,7 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
     '/documents/:id',
     { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
     async (request) => {
+      assertPermission(request.authUser!, 'view');
       const access = resolveDocumentAccessScope(request.authUser!);
       const { id } = request.params as { id: string };
       if (!isUuid(id)) throw ApiError.notFound('المعاملة غير موجودة.');
@@ -183,6 +186,7 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
       },
     },
     async (request, reply) => {
+      assertPermission(request.authUser!, 'create');
       const body = request.body as Partial<DocumentInput> & {
         type: DocumentTypeDb;
       };
@@ -280,6 +284,7 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
       },
     },
     async (request) => {
+      assertPermission(request.authUser!, 'edit');
       const access = resolveDocumentAccessScope(request.authUser!);
       const { id } = request.params as { id: string };
       if (!isUuid(id)) throw ApiError.notFound('المعاملة غير موجودة.');
@@ -380,10 +385,16 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
 
   app.delete(
     '/documents/:id',
-    { preHandler: guards.requireAdmin, schema: { params: ID_PARAMS_SCHEMA } },
+    { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
     async (request) => {
       const { id } = request.params as { id: string };
       if (!isUuid(id)) throw ApiError.notFound('المعاملة غير موجودة.');
+      const access = resolveDocumentAccessScope(request.authUser!);
+      if (!access.isAdmin) {
+        assertPermission(request.authUser!, 'delete');
+        const doc = await getDocumentById(pool, id, access);
+        if (!doc) throw ApiError.notFound('المعاملة غير موجودة.');
+      }
       const userId = request.authUser!.id;
       const outcome = await withTransaction(pool, async (client) => {
         const result = await softDeleteDocument(client, id, userId);
