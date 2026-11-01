@@ -286,6 +286,7 @@
                 <p data-i18n="other_attachments_desc">تخزين وإدارة المرفقات والصور والمستندات والمسح الضوئي المباشر من السكانر.</p>
               </div>
               <div class="panel-actions dual-actions">
+                <input type="file" id="directAttachmentInput" multiple style="display:none;" />
                 <button class="button" id="addAttachmentFromFileBtn" data-requires-department type="button">
                   📁 <span data-i18n="add_from_files">من الملفات</span>
                 </button>
@@ -974,6 +975,31 @@
         <div class="form-actions">
           <button type="button" class="button secondary-button" id="closeShareModalBtn" data-i18n="close">إغلاق</button>
         </div>
+      </div>
+    </div>
+
+    <!-- نافذة تعديل المرفق -->
+    <div class="modal" id="editAttachmentModal" role="dialog" aria-modal="true" aria-labelledby="editAttachmentModalTitle">
+      <div class="modal-box modal-box-small">
+        <div class="modal-header">
+          <h2 id="editAttachmentModalTitle" data-i18n="edit_attachment_modal_title">✏️ تعديل المرفق</h2>
+          <button type="button" class="close-button" id="closeEditAttachmentModal" aria-label="إغلاق" data-i18n-aria="close">✕</button>
+        </div>
+        <form id="editAttachmentForm">
+          <input type="hidden" id="editAttachmentId" />
+          <div class="form-group">
+            <label for="editAttachmentName" data-i18n="edit_attachment_name_label">اسم المرفق أو المستند *</label>
+            <input type="text" id="editAttachmentName" required />
+          </div>
+          <div id="editAttachmentAuditInfo" class="edit-audit-info" style="margin: 12px 0; padding: 10px; background: rgba(127,127,127,0.08); border-radius: 6px; font-size: 0.88rem; line-height: 1.6;">
+            <!-- تفاصيل تدقيق التعديل والإضافة -->
+          </div>
+          <div id="editAttachmentFormError" class="form-error" role="alert" style="display:none;"></div>
+          <div class="form-actions">
+            <button type="submit" class="button" id="saveEditAttachmentBtn" data-i18n="save">حفظ التعديل</button>
+            <button type="button" class="button secondary-button" id="closeEditAttachmentModalBtn" data-i18n="cancel">إلغاء</button>
+          </div>
+        </form>
       </div>
     </div>
 
