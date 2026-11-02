@@ -606,7 +606,7 @@ test('admin can delete a user, but cannot delete self or last admin', async () =
   const user = (created.json() as { user: { id: string } }).user;
 
   // Cannot delete self
-  const selfDel = await apiRequest(context.app, adminClient, 'DELETE', `/users/${context.adminUser.id}`);
+  const selfDel = await apiRequest(context.app, adminClient, 'DELETE', `/users/${adminId}`);
   assert.equal(selfDel.statusCode, 400);
   assert.equal((selfDel.json() as { error: { code: string } }).error.code, 'self_delete');
 
