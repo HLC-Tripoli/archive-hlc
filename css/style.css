@@ -2216,127 +2216,14 @@ hr,
    About / Team Page Styling (Distinctive Archive HLC Engineering Design)
    ========================================================================== */
 .custom-team-container {
-  max-width: 1060px;
+  max-width: 920px;
   margin: 0 auto;
-  padding: 8px 4px 40px;
-}
-
-/* Hero Section: Obsidian & Crimson Glow */
-.custom-hero {
-  position: relative;
-  overflow: hidden;
-  border-radius: 24px;
-  background: radial-gradient(circle at 50% 0%, #2a0812 0%, #111420 55%, #0a0d14 100%);
-  border: 1px solid rgba(225, 29, 72, 0.22);
-  padding: 56px 32px;
-  text-align: center;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-.custom-hero-pattern {
-  position: absolute;
-  inset: 0;
-  opacity: 0.12;
-  pointer-events: none;
-  background-image: radial-gradient(rgba(244, 63, 94, 0.8) 1px, transparent 1px);
-  background-size: 24px 24px;
-}
-
-.custom-hero-glow-center {
-  position: absolute;
-  top: -100px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 500px;
-  height: 250px;
-  background: radial-gradient(ellipse, rgba(225, 29, 72, 0.3) 0%, transparent 70%);
-  filter: blur(60px);
-  pointer-events: none;
-}
-
-.custom-hero-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 18px;
-  border-radius: 30px;
-  background: rgba(225, 29, 72, 0.12);
-  border: 1px solid rgba(244, 63, 94, 0.35);
-  color: #fecdd3;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  margin-bottom: 24px;
-  backdrop-filter: blur(12px);
-  position: relative;
-  z-index: 2;
-}
-
-.custom-hero-badge-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #f43f5e;
-  box-shadow: 0 0 10px #f43f5e;
-  animation: pulse-dot 2s infinite;
-}
-
-.custom-hero-title {
-  font-size: clamp(24px, 3.8vw, 34px);
-  font-weight: 800;
-  line-height: 1.4;
-  color: #ffffff;
-  margin: 0 0 18px;
-  position: relative;
-  z-index: 2;
-}
-
-.custom-hero-gradient-text {
-  background: linear-gradient(135deg, #ff4365 0%, #ff758c 50%, #ff8a65 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  display: inline-block;
-}
-
-.custom-hero-desc {
-  font-size: 15px;
-  line-height: 1.8;
-  color: #cbd5e1;
-  max-width: 680px;
-  margin: 0 auto 32px;
-  position: relative;
-  z-index: 2;
-}
-
-.custom-stats-row {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  position: relative;
-  z-index: 2;
-}
-
-.custom-stat-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 18px;
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #e2e8f0;
-  font-size: 13px;
-  font-weight: 500;
-}
-.custom-stat-chip svg {
-  color: #f43f5e;
+  padding: 16px 8px 40px;
 }
 
 /* Team Members Section Header */
 .custom-section-head {
-  margin: 44px 0 24px;
+  margin: 8px 0 24px;
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
@@ -2497,81 +2384,6 @@ hr,
   color: #f43f5e;
 }
 
-/* Appreciation Banner: Tech Card with Accent Laser Line */
-.custom-trust-card {
-  margin-top: 40px;
-  position: relative;
-  border-radius: 20px;
-  background: linear-gradient(135deg, rgba(19, 25, 38, 0.9) 0%, rgba(13, 18, 28, 0.9) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 24px 32px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-}
-.custom-trust-card::before {
-  content: "";
-  position: absolute;
-  inset-inline: 40px;
-  top: -1px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, #f43f5e, transparent);
-}
-.custom-trust-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-.custom-trust-icon-box {
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #f43f5e, #be123c);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #ffffff;
-  box-shadow: 0 4px 15px rgba(225, 29, 72, 0.35);
-  flex-shrink: 0;
-}
-.custom-trust-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #ffffff;
-  margin: 0 0 4px;
-}
-.custom-trust-desc {
-  font-size: 13px;
-  color: #94a3b8;
-  margin: 0;
-}
-.custom-trust-logo {
-  height: 36px;
-  width: auto;
-  filter: brightness(0) invert(1);
-  opacity: 0.9;
-  object-fit: contain;
-}
-
-/* Light Theme Adaptations */
-html[data-theme="light"] .custom-trust-card {
-  background: #ffffff;
-  border-color: var(--border);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-}
-html[data-theme="light"] .custom-trust-title {
-  color: #0f172a;
-}
-html[data-theme="light"] .custom-trust-desc {
-  color: #64748b;
-}
-html[data-theme="light"] .custom-trust-logo {
-  filter: none;
-  opacity: 0.9;
-}
-
 /* Icons & Micro-utilities */
 .team-icon {
   display: inline-block;
@@ -2607,21 +2419,6 @@ html[data-theme="light"] .custom-trust-logo {
   }
 }
 
-@media (max-width: 640px) {
-  .custom-hero {
-    padding: 38px 18px;
-  }
-  .custom-trust-card {
-    flex-direction: column;
-    text-align: center;
-    justify-content: center;
-    padding: 22px 18px;
-  }
-  .custom-trust-left {
-    flex-direction: column;
-    text-align: center;
-  }
-}
 
 
 
