@@ -105,6 +105,7 @@ test('Disabling a file type rejects uploads of that type', async () => {
   // Create document
   const docRes = await apiRequest(context.app, adminClient, 'POST', '/documents', {
     payload: {
+      reference: 'FT-TEST-1',
       title: 'وثيقة اختبار تعطيل الصيغة',
       date: '2026-11-02',
       type: 'incoming',
@@ -115,15 +116,13 @@ test('Disabling a file type rejects uploads of that type', async () => {
 
   // 1. Uploading txt should succeed initially
   const txtPayload = multipartFixture({
-    file: {
-      filename: 'sample.txt',
-      contentType: 'text/plain',
-      data: Buffer.from('محتوى نصي'),
-    },
+    filename: 'sample.txt',
+    contentType: 'text/plain',
+    content: Buffer.from('محتوى نصي'),
   });
   const firstUpload = await apiRequest(context.app, adminClient, 'POST', `/documents/${docId}/files`, {
-    headers: { 'content-type': txtPayload.contentType },
-    payload: txtPayload.body,
+    headers: txtPayload.headers,
+    payload: txtPayload.payload,
   });
   assert.equal(firstUpload.statusCode, 201);
 
@@ -135,8 +134,8 @@ test('Disabling a file type rejects uploads of that type', async () => {
 
   // 3. Uploading txt now should be rejected with 400 unsupported_file_type
   const secondUpload = await apiRequest(context.app, adminClient, 'POST', `/documents/${docId}/files`, {
-    headers: { 'content-type': txtPayload.contentType },
-    payload: txtPayload.body,
+    headers: txtPayload.headers,
+    payload: txtPayload.payload,
   });
   assert.equal(secondUpload.statusCode, 400);
   const errBody = secondUpload.json() as { error: { code: string; message: string } };
@@ -149,8 +148,8 @@ test('Disabling a file type rejects uploads of that type', async () => {
 
   // 5. Uploading txt should succeed again
   const thirdUpload = await apiRequest(context.app, adminClient, 'POST', `/documents/${docId}/files`, {
-    headers: { 'content-type': txtPayload.contentType },
-    payload: txtPayload.body,
+    headers: txtPayload.headers,
+    payload: txtPayload.payload,
   });
   assert.equal(thirdUpload.statusCode, 201);
 });
