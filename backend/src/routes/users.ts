@@ -17,6 +17,7 @@ import { destroyUserSessions } from '../services/sessions.js';
 import {
   countActiveAdmins,
   createUser,
+  deleteUser,
   getUserById,
   listUsers,
   setUserPassword,
@@ -367,6 +368,67 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
         },
         { ip: request.ip, userAgent: (request.headers['user-agent'] ?? '') || null },
       );
+      return { ok: true };
+    },
+  );
+
+  app.delete(
+    '/users/:id',
+    {
+      preHandler: guards.requireAdmin,
+      schema: {
+        params: USER_ID_PARAMS_SCHEMA,
+      },
+    },
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const target = await getUserById(pool, id);
+      if (!target) throw ApiError.notFound('المستخدم غير موجود.');
+
+      const isSelf = target.id === request.authUser!.id;
+      if (isSelf) {
+        throw ApiError.badRequest('self_delete', 'لا يمكنك حذف حسابك الحالي.');
+      }
+
+      if (target.role === 'admin') {
+        const otherAdmins = await countActiveAdmins(pool, target.id);
+        if (otherAdmins === 0) {
+          throw ApiError.conflict(
+            'last_admin',
+            'لا يمكن تنفيذ العملية لأنها ستترك المنظومة دون أي مدير نظام نشط.',
+          );
+        }
+      }
+
+      const auditContext: AuditContext = {
+        ip: request.ip,
+        userAgent: (request.headers['user-agent'] ?? '') || null,
+      };
+
+      await withTransaction(pool, async (client) => {
+        await destroyUserSessions(pool, id);
+        const deleted = await deleteUser(client, id);
+        if (!deleted) throw ApiError.notFound('المستخدم غير موجود.');
+
+        await writeAudit(
+          client,
+          {
+            actorUserId: request.authUser!.id,
+            actorUsername: request.authUser!.username,
+            action: 'user.deleted',
+            entityType: 'user',
+            entityId: id,
+            details: {
+              username: target.username,
+              displayName: target.displayName,
+              role: target.role,
+              departmentId: target.departmentId,
+            },
+          },
+          auditContext,
+        );
+      });
+
       return { ok: true };
     },
   );

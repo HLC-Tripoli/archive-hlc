@@ -591,3 +591,32 @@ test('admin can manage granular user permissions, and admin always has full perm
     ['view', 'create', 'edit', 'delete'],
   );
 });
+
+test('admin can delete a user, but cannot delete self or last admin', async () => {
+  const created = await apiRequest(context.app, adminClient, 'POST', '/users', {
+    payload: {
+      username: 'user-to-delete',
+      displayName: 'مستخدم للحذف',
+      role: 'employee',
+      departmentId,
+      password: 'password-123',
+    },
+  });
+  assert.equal(created.statusCode, 201);
+  const user = (created.json() as { user: { id: string } }).user;
+
+  // Cannot delete self
+  const selfDel = await apiRequest(context.app, adminClient, 'DELETE', `/users/${context.adminUser.id}`);
+  assert.equal(selfDel.statusCode, 400);
+  assert.equal((selfDel.json() as { error: { code: string } }).error.code, 'self_delete');
+
+  // Delete the employee
+  const delRes = await apiRequest(context.app, adminClient, 'DELETE', `/users/${user.id}`);
+  assert.equal(delRes.statusCode, 200);
+  assert.equal((delRes.json() as { ok: boolean }).ok, true);
+
+  // Verifying user is gone
+  const getRes = await apiRequest(context.app, adminClient, 'GET', `/users/${user.id}`);
+  assert.equal(getRes.statusCode, 404);
+});
+
