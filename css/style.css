@@ -2212,4 +2212,368 @@ hr,
   border-color: rgba(220, 38, 38, 0.3);
 }
 
+/* ==========================================================================
+   About / Team Page Styling (Inspired by Edarah+ Team Design)
+   ========================================================================== */
+.team-container {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 8px 4px 40px;
+}
+
+/* Hero Section */
+.team-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  background: linear-gradient(135deg, #09090b 0%, #3b0712 50%, #18181b 100%);
+  padding: 48px 24px;
+  text-align: center;
+  color: #ffffff;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.team-hero-glow-left {
+  position: absolute;
+  left: -70px;
+  top: 15%;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(244, 63, 94, 0.35) 0%, transparent 70%);
+  filter: blur(55px);
+  pointer-events: none;
+}
+.team-hero-glow-right {
+  position: absolute;
+  right: -60px;
+  bottom: 0;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(220, 38, 38, 0.28) 0%, transparent 70%);
+  filter: blur(55px);
+  pointer-events: none;
+}
+.team-hero-pattern {
+  position: absolute;
+  inset: 0;
+  opacity: 0.08;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+.team-hero-content {
+  position: relative;
+  z-index: 2;
+  max-width: 760px;
+  margin: 0 auto;
+}
+.team-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #ffe4e6;
+  backdrop-filter: blur(8px);
+  margin-bottom: 20px;
+}
+.team-hero-title {
+  font-size: clamp(24px, 3.8vw, 36px);
+  font-weight: 800;
+  line-height: 1.35;
+  color: #ffffff;
+  margin: 0 0 16px;
+  letter-spacing: -0.01em;
+}
+.team-hero-highlight {
+  display: inline-block;
+  background: linear-gradient(135deg, #fda4af, #f87171, #ef4444);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.team-hero-desc {
+  font-size: 15px;
+  line-height: 1.7;
+  color: rgba(255, 228, 230, 0.88);
+  margin: 0 auto 28px;
+  max-width: 620px;
+}
+.team-hero-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+}
+.team-hero-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 15px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 13px;
+  color: rgba(254, 205, 211, 0.95);
+  font-weight: 500;
+}
+
+/* Team Members Section */
+.team-section {
+  margin-top: 36px;
+  padding: 0 2px;
+}
+.team-section-header {
+  margin-bottom: 22px;
+}
+.team-section-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+.team-section-desc {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0;
+}
+.team-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 22px;
+}
+.team-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  padding: 32px 24px 28px;
+  background: #111827;
+  color: #ffffff;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  animation: fi-team-fade-up 0.45s ease-out both;
+}
+.team-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 36px rgba(225, 29, 72, 0.16);
+  border-color: rgba(244, 63, 94, 0.3);
+}
+.team-card-glow {
+  position: absolute;
+  left: -40px;
+  top: -40px;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: rgba(244, 63, 94, 0.16);
+  filter: blur(40px);
+  pointer-events: none;
+  transition: background 0.3s ease;
+}
+.team-card:hover .team-card-glow {
+  background: rgba(244, 63, 94, 0.28);
+}
+.team-card-inner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.team-avatar-wrap {
+  position: relative;
+  margin: 0 auto 18px;
+  width: 90px;
+  height: 90px;
+}
+.team-avatar-glow {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f43f5e, #dc2626);
+  opacity: 0.45;
+  filter: blur(10px);
+}
+.team-avatar {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f43f5e, #be123c);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 800;
+  color: #ffffff;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+  border: 4px solid #111827;
+}
+.team-card-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 12px;
+}
+.team-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 13px;
+  border-radius: 9999px;
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.28);
+  font-size: 12px;
+  font-weight: 600;
+  color: #fecdd3;
+  margin-bottom: 22px;
+}
+.team-card-actions {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 20px;
+  width: 100%;
+}
+.team-contact-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.team-contact-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+.team-card-border-line {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #f43f5e, #dc2626);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.team-card:hover .team-card-border-line {
+  opacity: 1;
+}
+
+/* Appreciation Banner */
+.team-trust-banner {
+  margin-top: 36px;
+  padding: 22px 28px;
+  border-radius: 18px;
+  border: 1px dashed var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.team-trust-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.team-trust-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f43f5e, #dc2626);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.3);
+  flex-shrink: 0;
+}
+.team-trust-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 3px;
+}
+.team-trust-desc {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+.team-trust-logo {
+  height: 34px;
+  width: auto;
+  opacity: 0.85;
+  object-fit: contain;
+}
+html[data-theme="dark"] .team-trust-logo {
+  filter: brightness(0) invert(1);
+  opacity: 0.85;
+}
+
+/* Icons & Micro-utilities */
+.team-icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.team-icon-xs {
+  width: 14px;
+  height: 14px;
+}
+.team-icon-sm {
+  width: 18px;
+  height: 18px;
+}
+.team-icon-md {
+  width: 22px;
+  height: 22px;
+}
+.team-heart-icon {
+  color: #fda4af;
+}
+
+@keyframes fi-team-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .team-hero {
+    padding: 36px 16px;
+  }
+  .team-trust-banner {
+    flex-direction: column;
+    text-align: center;
+    justify-content: center;
+  }
+  .team-trust-main {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
+
 
