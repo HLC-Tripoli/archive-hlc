@@ -40,11 +40,7 @@ after(async () => {
 });
 
 test('GET /file-types returns active allowed file types and acceptString for authenticated users', async () => {
-  const res = await apiRequest(context.app, {
-    method: 'GET',
-    url: '/api/v1/file-types',
-    cookies: employeeClient.cookies,
-  });
+  const res = await apiRequest(context.app, employeeClient, 'GET', '/file-types');
 
   assert.equal(res.statusCode, 200);
   const body = res.json() as { items: any[]; extensions: string[]; acceptString: string };
@@ -57,29 +53,18 @@ test('GET /file-types returns active allowed file types and acceptString for aut
 });
 
 test('GET /settings/file-types is restricted to admin', async () => {
-  const empRes = await apiRequest(context.app, {
-    method: 'GET',
-    url: '/api/v1/settings/file-types',
-    cookies: employeeClient.cookies,
-  });
+  const empRes = await apiRequest(context.app, employeeClient, 'GET', '/settings/file-types');
   assert.equal(empRes.statusCode, 403);
 
-  const adminRes = await apiRequest(context.app, {
-    method: 'GET',
-    url: '/api/v1/settings/file-types',
-    cookies: adminClient.cookies,
-  });
+  const adminRes = await apiRequest(context.app, adminClient, 'GET', '/settings/file-types');
   assert.equal(adminRes.statusCode, 200);
   const body = adminRes.json() as { items: any[] };
   assert.ok(body.items.length >= 17);
 });
 
 test('Admin can add a new file type, toggle it, and delete it', async () => {
-  // 1. Add new file type: customdwg
-  const addRes = await apiRequest(context.app, {
-    method: 'POST',
-    url: '/api/v1/settings/file-types',
-    cookies: adminClient.cookies,
+  // 1. Add new file type: custom dwg
+  const addRes = await apiRequest(context.app, adminClient, 'POST', '/settings/file-types', {
     payload: {
       extension: 'dwg',
       mimeType: 'image/vnd.dwg',
@@ -95,19 +80,12 @@ test('Admin can add a new file type, toggle it, and delete it', async () => {
   assert.equal(created.isEnabled, true);
 
   // Verify it appears in active file types
-  const listRes = await apiRequest(context.app, {
-    method: 'GET',
-    url: '/api/v1/file-types',
-    cookies: employeeClient.cookies,
-  });
+  const listRes = await apiRequest(context.app, employeeClient, 'GET', '/file-types');
   const listBody = listRes.json() as { extensions: string[] };
   assert.ok(listBody.extensions.includes('dwg'));
 
   // 2. Toggle disabled
-  const toggleRes = await apiRequest(context.app, {
-    method: 'PATCH',
-    url: '/api/v1/settings/file-types/dwg',
-    cookies: adminClient.cookies,
+  const toggleRes = await apiRequest(context.app, adminClient, 'PATCH', '/settings/file-types/dwg', {
     payload: { isEnabled: false },
   });
   assert.equal(toggleRes.statusCode, 200);
@@ -115,28 +93,17 @@ test('Admin can add a new file type, toggle it, and delete it', async () => {
   assert.equal(toggled.isEnabled, false);
 
   // Verify it is no longer in active extensions
-  const listAfterToggle = await apiRequest(context.app, {
-    method: 'GET',
-    url: '/api/v1/file-types',
-    cookies: employeeClient.cookies,
-  });
+  const listAfterToggle = await apiRequest(context.app, employeeClient, 'GET', '/file-types');
   assert.ok(!(listAfterToggle.json() as { extensions: string[] }).extensions.includes('dwg'));
 
   // 3. Delete file type
-  const delRes = await apiRequest(context.app, {
-    method: 'DELETE',
-    url: '/api/v1/settings/file-types/dwg',
-    cookies: adminClient.cookies,
-  });
+  const delRes = await apiRequest(context.app, adminClient, 'DELETE', '/settings/file-types/dwg');
   assert.equal(delRes.statusCode, 200);
 });
 
 test('Disabling a file type rejects uploads of that type', async () => {
   // Create document
-  const docRes = await apiRequest(context.app, {
-    method: 'POST',
-    url: '/api/v1/documents',
-    cookies: adminClient.cookies,
+  const docRes = await apiRequest(context.app, adminClient, 'POST', '/documents', {
     payload: {
       title: 'وثيقة اختبار تعطيل الصيغة',
       date: '2026-11-02',
@@ -154,29 +121,20 @@ test('Disabling a file type rejects uploads of that type', async () => {
       data: Buffer.from('محتوى نصي'),
     },
   });
-  const firstUpload = await apiRequest(context.app, {
-    method: 'POST',
-    url: `/api/v1/documents/${docId}/files`,
-    cookies: adminClient.cookies,
+  const firstUpload = await apiRequest(context.app, adminClient, 'POST', `/documents/${docId}/files`, {
     headers: { 'content-type': txtPayload.contentType },
     payload: txtPayload.body,
   });
   assert.equal(firstUpload.statusCode, 201);
 
   // 2. Disable txt format in settings
-  const disableRes = await apiRequest(context.app, {
-    method: 'PATCH',
-    url: '/api/v1/settings/file-types/txt',
-    cookies: adminClient.cookies,
+  const disableRes = await apiRequest(context.app, adminClient, 'PATCH', '/settings/file-types/txt', {
     payload: { isEnabled: false },
   });
   assert.equal(disableRes.statusCode, 200);
 
   // 3. Uploading txt now should be rejected with 400 unsupported_file_type
-  const secondUpload = await apiRequest(context.app, {
-    method: 'POST',
-    url: `/api/v1/documents/${docId}/files`,
-    cookies: adminClient.cookies,
+  const secondUpload = await apiRequest(context.app, adminClient, 'POST', `/documents/${docId}/files`, {
     headers: { 'content-type': txtPayload.contentType },
     payload: txtPayload.body,
   });
@@ -185,18 +143,12 @@ test('Disabling a file type rejects uploads of that type', async () => {
   assert.equal(errBody.error.code, 'unsupported_file_type');
 
   // 4. Re-enable txt format
-  await apiRequest(context.app, {
-    method: 'PATCH',
-    url: '/api/v1/settings/file-types/txt',
-    cookies: adminClient.cookies,
+  await apiRequest(context.app, adminClient, 'PATCH', '/settings/file-types/txt', {
     payload: { isEnabled: true },
   });
 
   // 5. Uploading txt should succeed again
-  const thirdUpload = await apiRequest(context.app, {
-    method: 'POST',
-    url: `/api/v1/documents/${docId}/files`,
-    cookies: adminClient.cookies,
+  const thirdUpload = await apiRequest(context.app, adminClient, 'POST', `/documents/${docId}/files`, {
     headers: { 'content-type': txtPayload.contentType },
     payload: txtPayload.body,
   });
@@ -205,18 +157,10 @@ test('Disabling a file type rejects uploads of that type', async () => {
 
 test('POST /settings/file-types/reset restores all default file types', async () => {
   // Delete a type
-  await apiRequest(context.app, {
-    method: 'DELETE',
-    url: '/api/v1/settings/file-types/csv',
-    cookies: adminClient.cookies,
-  });
+  await apiRequest(context.app, adminClient, 'DELETE', '/settings/file-types/csv');
 
   // Reset to default
-  const resetRes = await apiRequest(context.app, {
-    method: 'POST',
-    url: '/api/v1/settings/file-types/reset',
-    cookies: adminClient.cookies,
-  });
+  const resetRes = await apiRequest(context.app, adminClient, 'POST', '/settings/file-types/reset');
   assert.equal(resetRes.statusCode, 200);
   const body = resetRes.json() as { items: any[] };
   const extensions = body.items.map((i) => i.extension);

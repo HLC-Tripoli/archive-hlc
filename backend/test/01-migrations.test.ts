@@ -171,6 +171,7 @@ test('employee-number migration preserves existing users and leaves their number
       '0005_additional_document_types.sql',
       '0006_attachment_storage_type.sql',
       '0007_user_permissions.sql',
+      '0008_allowed_file_types.sql',
     ]);
 
     const preserved = await pool.query<{
@@ -263,6 +264,7 @@ test('department migration preserves existing departments, users, documents, and
       '0005_additional_document_types.sql',
       '0006_attachment_storage_type.sql',
       '0007_user_permissions.sql',
+      '0008_allowed_file_types.sql',
     ]);
 
     const preserved = await pool.query<{
@@ -354,6 +356,7 @@ test('sequence-number migration preserves existing documents and files and leave
       '0005_additional_document_types.sql',
       '0006_attachment_storage_type.sql',
       '0007_user_permissions.sql',
+      '0008_allowed_file_types.sql',
     ]);
 
     const preserved = await pool.query<{
