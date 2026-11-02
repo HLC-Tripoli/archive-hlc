@@ -135,6 +135,9 @@
     currentPage: "dashboard",
     departments: [],
     userFormDepartments: [],
+    fileTypes: [],
+    activeExtensions: [],
+    fileTypesFilter: { q: "", category: "" },
     views: {
       dashboard: { page: 1, pageSize: 8, q: "", total: 0 },
       incoming: { page: 1, pageSize: 10, q: "", total: 0 },
@@ -572,6 +575,7 @@
     showApp();
     applyRoleUI();
     showPage("dashboard");
+    loadActiveFileTypes();
   }
 
   /**
@@ -608,6 +612,7 @@
       showApp();
       applyRoleUI();
       showPage("dashboard");
+      loadActiveFileTypes();
       toast("مرحباً " + result.user.displayName + "، تم تسجيل الدخول.");
     } catch (error) {
       message.textContent = errorMessage(error);
@@ -1607,7 +1612,13 @@
   }
 
   function addPendingFiles(fileList) {
+    var disabledTypesFound = [];
     Array.prototype.slice.call(fileList || []).forEach(function (file) {
+      var ext = (file.name.split(".").pop() || "").toLowerCase();
+      if (state.activeExtensions && state.activeExtensions.length && !state.activeExtensions.includes(ext)) {
+        disabledTypesFound.push(ext);
+        return;
+      }
       state.pendingCounter += 1;
       state.pendingFiles.push({
         key: state.pendingCounter,
@@ -1616,6 +1627,9 @@
         error: null
       });
     });
+    if (disabledTypesFound.length) {
+      toast(_t("file_type_disabled_alert", { ext: disabledTypesFound.join(", .") }), "error");
+    }
     // تصفير الحقل يسمح باختيار الملف نفسه مرة أخرى دون استبدال القائمة.
     el("attachmentInput").value = "";
     renderPendingAttachments();
@@ -2003,6 +2017,22 @@
       toast(departmentAccessMessage(), "error");
       return;
     }
+    var validFiles = [];
+    var rejectedExts = [];
+    for (var f = 0; f < files.length; f++) {
+      var ext = (files[f].name.split(".").pop() || "").toLowerCase();
+      if (state.activeExtensions && state.activeExtensions.length && !state.activeExtensions.includes(ext)) {
+        rejectedExts.push(ext);
+      } else {
+        validFiles.push(files[f]);
+      }
+    }
+    if (rejectedExts.length) {
+      toast(_t("file_type_disabled_alert", { ext: rejectedExts.join(", .") }), "error");
+    }
+    if (!validFiles.length) return;
+    files = validFiles;
+
     toast("جاري حفظ ورفع المرفقات...", "info");
     var uploadCount = 0;
     try {
@@ -2962,6 +2992,244 @@
       departmentInfo.textContent = _t("settings_dept_info") + _t("role_admin");
     }
     updateLegacyStatus();
+    if (isAdmin()) {
+      loadSettingsFileTypes();
+    }
+  }
+
+  /* ========================================================================
+     إدارة أنواع وصيغ الملفات المسموحة (للمدير)
+     ======================================================================== */
+  var COMMON_MIMES = {
+    zip: { mime: "application/zip", cat: "archive", ar: "أرشيف مضغوط ZIP", en: "ZIP Archive" },
+    rar: { mime: "application/vnd.rar", cat: "archive", ar: "أرشيف مضغوط RAR", en: "RAR Archive" },
+    "7z": { mime: "application/x-7z-compressed", cat: "archive", ar: "أرشيف مضغوط 7-Zip", en: "7-Zip Archive" },
+    tar: { mime: "application/x-tar", cat: "archive", ar: "أرشيف TAR", en: "TAR Archive" },
+    gz: { mime: "application/gzip", cat: "archive", ar: "أرشيف مضغوط GZip", en: "GZip Archive" },
+    mp4: { mime: "video/mp4", cat: "other", ar: "فيديو MP4", en: "MP4 Video" },
+    mp3: { mime: "audio/mpeg", cat: "other", ar: "صوت MP3", en: "MP3 Audio" },
+    wav: { mime: "audio/wav", cat: "other", ar: "صوت WAV", en: "WAV Audio" },
+    dwg: { mime: "image/vnd.dwg", cat: "image", ar: "رسم هندسي DWG", en: "AutoCAD Drawing" },
+    dxf: { mime: "image/vnd.dxf", cat: "image", ar: "رسم هندسي DXF", en: "DXF Drawing" },
+    heic: { mime: "image/heic", cat: "image", ar: "صورة عالية الكفاءة HEIC", en: "HEIC Image" },
+    psd: { mime: "image/vnd.adobe.photoshop", cat: "image", ar: "ملف فوتوشوب PSD", en: "Photoshop Document" },
+    ai: { mime: "application/postscript", cat: "image", ar: "ملف إليستريتور AI", en: "Adobe Illustrator" },
+    epub: { mime: "application/epub+zip", cat: "document", ar: "كتاب إلكتروني EPUB", en: "EPUB eBook" },
+    json: { mime: "application/json", cat: "data", ar: "ملف بيانات JSON", en: "JSON Data File" },
+    xml: { mime: "application/xml", cat: "data", ar: "ملف بيانات XML", en: "XML Data File" }
+  };
+
+  async function loadActiveFileTypes() {
+    try {
+      var data = await api.get("/file-types");
+      state.activeExtensions = data.extensions || [];
+      var acceptStr = data.acceptString || "";
+      var attInput = el("attachmentInput");
+      if (attInput) attInput.accept = acceptStr;
+      var directInput = el("directAttachmentInput");
+      if (directInput) directInput.accept = acceptStr;
+    } catch (e) {
+      /* لا يعيق العمل إن لم يكن المستخدم مسجلاً بعد */
+    }
+  }
+
+  async function loadSettingsFileTypes() {
+    if (!isAdmin()) return;
+    var container = el("fileTypesTable");
+    if (!container) return;
+    try {
+      var data = await api.get("/settings/file-types");
+      state.fileTypes = data.items || [];
+      renderFileTypesTable();
+    } catch (error) {
+      renderError(container, errorMessage(error));
+    }
+  }
+
+  function getCategoryLabel(category) {
+    var key = "cat_" + category;
+    return _t(key) !== key ? _t(key) : category;
+  }
+
+  function getCategoryIcon(category) {
+    switch (category) {
+      case "document": return "📄";
+      case "image": return "🖼️";
+      case "spreadsheet": return "📊";
+      case "presentation": return "📽️";
+      case "archive": return "🗜️";
+      case "data": return "💾";
+      default: return "📁";
+    }
+  }
+
+  function renderFileTypesTable() {
+    var container = el("fileTypesTable");
+    if (!container) return;
+    var items = state.fileTypes || [];
+    var q = (state.fileTypesFilter.q || "").toLowerCase().trim();
+    var cat = state.fileTypesFilter.category || "";
+
+    var filtered = items.filter(function (item) {
+      if (cat && item.category !== cat) return false;
+      if (q) {
+        var matchExt = item.extension.toLowerCase().includes(q);
+        var matchMime = item.mimeType.toLowerCase().includes(q);
+        var matchAr = (item.labelAr || "").toLowerCase().includes(q);
+        var matchEn = (item.labelEn || "").toLowerCase().includes(q);
+        return matchExt || matchMime || matchAr || matchEn;
+      }
+      return true;
+    });
+
+    if (!filtered.length) {
+      renderEmpty(container, _t("no_results_found"));
+      return;
+    }
+
+    var isEn = window.I18N && window.I18N.getLanguage() === "en";
+    var headers = [
+      _t("col_extension"),
+      _t("col_description"),
+      _t("col_category"),
+      _t("col_mime"),
+      _t("col_status"),
+      _t("col_actions")
+    ];
+
+    var rows = filtered
+      .map(function (item) {
+        var desc = isEn ? (item.labelEn || item.labelAr) : (item.labelAr || item.labelEn);
+        var toggleLabel = item.isEnabled
+          ? (isEn ? "Disable" : "تعطيل")
+          : (isEn ? "Enable" : "تفعيل");
+        var deleteLabel = isEn ? "Delete" : "حذف";
+        var statusLabel = item.isEnabled ? _t("active") : _t("disabled");
+        var statusBadgeClass = item.isEnabled ? "badge-active" : "badge-inactive";
+
+        var actions = [
+          '<button type="button" class="small-button" data-file-type-action="toggle" data-ext="' +
+            escapeHTML(item.extension) +
+            '">' +
+            escapeHTML(toggleLabel) +
+            "</button>",
+          '<button type="button" class="small-button delete-button" data-file-type-action="delete" data-ext="' +
+            escapeHTML(item.extension) +
+            '">' +
+            escapeHTML(deleteLabel) +
+            "</button>"
+        ];
+
+        return (
+          "<tr>" +
+          '<td><span class="ext-badge">.' + escapeHTML(item.extension) + "</span></td>" +
+          "<td>" + escapeHTML(desc) + "</td>" +
+          '<td><span class="cat-badge">' + getCategoryIcon(item.category) + " " + escapeHTML(getCategoryLabel(item.category)) + "</span></td>" +
+          "<td><code>" + escapeHTML(item.mimeType) + "</code></td>" +
+          '<td><span class="badge ' + statusBadgeClass + '">' + escapeHTML(statusLabel) + "</span></td>" +
+          '<td><div class="action-buttons">' + actions.join("") + "</div></td>" +
+          "</tr>"
+        );
+      })
+      .join("");
+
+    container.innerHTML =
+      '<div class="table-wrap"><table><thead><tr>' +
+      headers.map(function (h) { return "<th>" + escapeHTML(h) + "</th>"; }).join("") +
+      "</tr></thead><tbody>" +
+      rows +
+      "</tbody></table></div>";
+  }
+
+  async function handleFileTypeAction(button) {
+    var ext = button.dataset.ext;
+    var action = button.dataset.fileTypeAction;
+    if (!ext || !action) return;
+    var item = (state.fileTypes || []).find(function (f) { return f.extension === ext; });
+    if (!item) return;
+
+    if (action === "toggle") {
+      try {
+        await api.patch("/settings/file-types/" + encodeURIComponent(ext), {
+          isEnabled: !item.isEnabled
+        });
+        toast(_t("file_type_toggled"));
+        await loadSettingsFileTypes();
+        await loadActiveFileTypes();
+      } catch (err) {
+        toast(errorMessage(err), "error");
+      }
+      return;
+    }
+
+    if (action === "delete") {
+      var confirmMsg = _t("file_type_delete_confirm", { ext: ext });
+      var confirmed = await confirmDialog(confirmMsg);
+      if (!confirmed) return;
+      try {
+        await api.del("/settings/file-types/" + encodeURIComponent(ext));
+        toast(_t("file_type_deleted"));
+        await loadSettingsFileTypes();
+        await loadActiveFileTypes();
+      } catch (err) {
+        toast(errorMessage(err), "error");
+      }
+    }
+  }
+
+  async function handleResetFileTypes() {
+    var confirmed = await confirmDialog(_t("restore_default_types_confirm"));
+    if (!confirmed) return;
+    try {
+      await api.post("/settings/file-types/reset");
+      toast(_t("file_types_restored"));
+      await loadSettingsFileTypes();
+      await loadActiveFileTypes();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  function openFileTypeModal() {
+    el("newFileExtension").value = "";
+    el("newFileMimeType").value = "";
+    el("newFileCategory").value = "document";
+    el("newFileLabelAr").value = "";
+    el("newFileLabelEn").value = "";
+    showFormError("fileTypeFormError", "");
+    showModal("fileTypeModal");
+    el("newFileExtension").focus();
+  }
+
+  async function submitFileTypeForm(event) {
+    event.preventDefault();
+    var button = el("saveFileTypeButton");
+    showFormError("fileTypeFormError", "");
+    setBusy(button, true, "جارٍ الحفظ…");
+    try {
+      var ext = el("newFileExtension").value.trim().toLowerCase().replace(/^\.+/, "");
+      var mime = el("newFileMimeType").value.trim().toLowerCase();
+      var category = el("newFileCategory").value;
+      var labelAr = el("newFileLabelAr").value.trim();
+      var labelEn = el("newFileLabelEn").value.trim();
+
+      await api.post("/settings/file-types", {
+        extension: ext,
+        mimeType: mime,
+        category: category,
+        labelAr: labelAr || undefined,
+        labelEn: labelEn || undefined,
+        isEnabled: true
+      });
+      toast(_t("file_type_added"));
+      hideModal("fileTypeModal");
+      await loadSettingsFileTypes();
+      await loadActiveFileTypes();
+    } catch (err) {
+      showFormError("fileTypeFormError", errorMessage(err));
+    } finally {
+      setBusy(button, false);
+    }
   }
 
   /* ========================================================================
@@ -3429,6 +3697,61 @@
     el("addUserButton").addEventListener("click", function () {
       openUserModal("create", null);
     });
+
+    if (el("addFileTypeButton")) {
+      el("addFileTypeButton").addEventListener("click", openFileTypeModal);
+    }
+    if (el("resetFileTypesButton")) {
+      el("resetFileTypesButton").addEventListener("click", handleResetFileTypes);
+    }
+    if (el("closeFileTypeModal")) {
+      el("closeFileTypeModal").addEventListener("click", function () {
+        hideModal("fileTypeModal");
+      });
+    }
+    if (el("cancelFileTypeButton")) {
+      el("cancelFileTypeButton").addEventListener("click", function () {
+        hideModal("fileTypeModal");
+      });
+    }
+    if (el("fileTypeModal")) {
+      el("fileTypeModal").addEventListener("click", function (event) {
+        if (event.target === el("fileTypeModal")) hideModal("fileTypeModal");
+      });
+    }
+    if (el("fileTypeForm")) {
+      el("fileTypeForm").addEventListener("submit", submitFileTypeForm);
+    }
+    if (el("newFileExtension")) {
+      el("newFileExtension").addEventListener("input", function () {
+        var val = el("newFileExtension").value.trim().toLowerCase().replace(/^\.+/, "");
+        var found = COMMON_MIMES[val];
+        if (found) {
+          if (!el("newFileMimeType").value) el("newFileMimeType").value = found.mime;
+          if (found.cat) el("newFileCategory").value = found.cat;
+          if (!el("newFileLabelAr").value) el("newFileLabelAr").value = found.ar;
+          if (!el("newFileLabelEn").value) el("newFileLabelEn").value = found.en;
+        }
+      });
+    }
+    if (el("fileTypesSearch")) {
+      el("fileTypesSearch").addEventListener("input", function () {
+        state.fileTypesFilter.q = el("fileTypesSearch").value;
+        renderFileTypesTable();
+      });
+    }
+    if (el("fileTypesCategoryFilter")) {
+      el("fileTypesCategoryFilter").addEventListener("change", function () {
+        state.fileTypesFilter.category = el("fileTypesCategoryFilter").value;
+        renderFileTypesTable();
+      });
+    }
+    if (el("fileTypesTable")) {
+      el("fileTypesTable").addEventListener("click", function (event) {
+        var btn = event.target.closest("[data-file-type-action]");
+        if (btn) handleFileTypeAction(btn);
+      });
+    }
 
     el("promptForm").addEventListener("submit", function (event) {
       event.preventDefault();

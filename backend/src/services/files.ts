@@ -15,6 +15,7 @@ import {
 } from './optimization/optimizer.js';
 import { validateOptimizedCandidate } from './optimization/validate.js';
 import type { StorageProvider } from './storage/types.js';
+import { getMimeTypeForExtension, getActiveAllowedExtensions } from './fileTypes.js';
 
 /**
  * أنواع المرفقات المسموحة: الامتداد -> نوع المحتوى المعتمد.
@@ -31,6 +32,7 @@ export const MIME_BY_EXTENSION: Record<string, string> = {
   bmp: 'image/bmp',
   tif: 'image/tiff',
   tiff: 'image/tiff',
+  svg: 'image/svg+xml',
   doc: 'application/msword',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   xls: 'application/vnd.ms-excel',
@@ -56,13 +58,20 @@ export function sanitizeOriginalName(filename: string): string {
   return (cleaned.length > 0 ? cleaned : 'ملف').slice(0, 300);
 }
 
-export function resolveMimeType(filename: string): { extension: string; mimeType: string } {
+export async function resolveMimeType(
+  filename: string,
+  pool?: Queryable,
+): Promise<{ extension: string; mimeType: string }> {
   const extension = extensionOf(filename);
-  const mimeType = extension ? MIME_BY_EXTENSION[extension] : undefined;
-  if (!extension || !mimeType) {
+  if (!extension) {
+    throw ApiError.badRequest('unsupported_file_type', 'الملف لا يحتوي على امتداد صالح.');
+  }
+  const mimeType = await getMimeTypeForExtension(extension, pool);
+  if (!mimeType) {
+    const active = await getActiveAllowedExtensions(pool).catch(() => ALLOWED_EXTENSIONS);
     throw ApiError.badRequest(
       'unsupported_file_type',
-      `نوع الملف غير مدعوم. الأنواع المسموحة: ${ALLOWED_EXTENSIONS.join(', ')}`,
+      `نوع الملف (.${extension}) غير مدعوم أو تم تعطيله في إعدادات المنظومة. الأنواع المسموحة: ${active.join(', ')}`,
     );
   }
   return { extension, mimeType };
@@ -246,7 +255,7 @@ export async function storeAttachment(
   deps: StoreAttachmentDeps,
   input: StoreAttachmentInput,
 ): Promise<FileRecordPublic & { storageKey: string; optimized: boolean }> {
-  const { extension, mimeType } = resolveMimeType(input.filename);
+  const { extension, mimeType } = await resolveMimeType(input.filename, deps.pool);
   if (
     input.declaredMimeType &&
     input.declaredMimeType !== 'application/octet-stream' &&
