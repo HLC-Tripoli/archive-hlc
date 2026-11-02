@@ -12,10 +12,12 @@ import { registerAuthRoutes } from './routes/auth.js';
 import { registerDepartmentRoutes } from './routes/departments.js';
 import { registerDocumentRoutes } from './routes/documents.js';
 import { registerFileRoutes } from './routes/files.js';
+import { registerFileTypeRoutes } from './routes/fileTypes.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerImportRoutes } from './routes/imports.js';
 import { registerStatsRoutes } from './routes/stats.js';
 import { registerUserRoutes } from './routes/users.js';
+import { refreshFileTypesCache } from './services/fileTypes.js';
 import {
   createAttachmentOptimizer,
   type AttachmentOptimizer,
@@ -169,6 +171,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     reply.code(404).send({ error: { code: 'not_found', message: 'المسار المطلوب غير موجود.' } });
   });
 
+  await refreshFileTypesCache(pool).catch(() => {});
+
   await app.register(
     async (instance) => {
       registerHealthRoutes(instance, { pool, storage });
@@ -177,6 +181,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       registerDepartmentRoutes(instance, { pool, guards });
       registerDocumentRoutes(instance, { pool, guards });
       registerFileRoutes(instance, { pool, guards, storage, config, optimizer });
+      registerFileTypeRoutes(instance, { pool, guards });
       registerStatsRoutes(instance, { pool, guards });
       registerAuditRoutes(instance, { pool, guards });
       registerImportRoutes(instance, { pool, config, guards });
