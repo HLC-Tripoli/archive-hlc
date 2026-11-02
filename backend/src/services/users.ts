@@ -295,3 +295,9 @@ export async function setUserPassword(db: Queryable, id: string, passwordHash: s
 export async function touchLastLogin(db: Queryable, id: string): Promise<void> {
   await db.query('UPDATE users SET last_login_at = now() WHERE id = $1', [id]);
 }
+
+export async function deleteUser(db: Queryable, id: string): Promise<boolean> {
+  const result = await db.query('DELETE FROM users WHERE id = $1', [id]);
+  return (result.rowCount ?? 0) > 0;
+}
+

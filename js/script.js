@@ -2295,6 +2295,7 @@
     var rows = items
       .map(function (user) {
         var isSelf = state.user && user.id === state.user.id;
+        var deleteText = window.I18N && window.I18N.getLanguage() === "en" ? "Delete" : "حذف";
         var toggleText = user.isActive
           ? (window.I18N && window.I18N.getLanguage() === "en" ? "Disable" : "تعطيل")
           : (window.I18N && window.I18N.getLanguage() === "en" ? "Enable" : "تفعيل");
@@ -2306,14 +2307,19 @@
           '<button type="button" class="small-button" data-user-action="password" data-id="' +
             escapeHTML(user.id) +
             '">' + escapeHTML(resetPwText) + '</button>',
-          '<button type="button" class="small-button' +
-            (user.isActive ? " delete-button" : "") +
-            '" data-user-action="toggle" data-id="' +
+          '<button type="button" class="small-button" data-user-action="toggle" data-id="' +
             escapeHTML(user.id) +
             '"' +
             (isSelf ? " disabled" : "") +
             ">" +
             escapeHTML(toggleText) +
+            "</button>",
+          '<button type="button" class="small-button delete-button" data-user-action="delete" data-id="' +
+            escapeHTML(user.id) +
+            '"' +
+            (isSelf ? " disabled" : "") +
+            ">" +
+            escapeHTML(deleteText) +
             "</button>"
         ];
         var employeeNumber = user.employeeNumber
@@ -2590,6 +2596,20 @@
       try {
         await api.post("/users/" + id + "/password", { password: password });
         toast("تم إعادة تعيين كلمة المرور وإنهاء جلسات المستخدم.");
+      } catch (error) {
+        toast(errorMessage(error), "error");
+      }
+      return;
+    }
+
+    if (action === "delete") {
+      var confirmMsg = _t("user_delete_confirm", { username: user.username });
+      var confirmed = await confirmDialog(confirmMsg);
+      if (!confirmed) return;
+      try {
+        await api.del("/users/" + id);
+        toast(_t("user_deleted_success"));
+        loadUsers();
       } catch (error) {
         toast(errorMessage(error), "error");
       }
