@@ -2314,10 +2314,10 @@ hr,
 .custom-team-card {
   position: relative;
   border-radius: 22px;
-  background: linear-gradient(160deg, #131926 0%, #0d121c 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid var(--border);
   padding: 36px 28px 30px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 10px 25px -5px rgba(20, 30, 50, 0.06), 0 8px 10px -6px rgba(20, 30, 50, 0.03);
   transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
   display: flex;
@@ -2329,7 +2329,7 @@ hr,
 .custom-team-card:hover {
   transform: translateY(-6px);
   border-color: rgba(244, 63, 94, 0.4);
-  box-shadow: 0 20px 45px rgba(225, 29, 72, 0.16);
+  box-shadow: 0 20px 40px -5px rgba(244, 63, 94, 0.14), 0 10px 15px -5px rgba(0, 0, 0, 0.04);
 }
 
 .custom-card-ambient {
@@ -2338,7 +2338,7 @@ hr,
   left: 0;
   right: 0;
   height: 120px;
-  background: radial-gradient(ellipse at 50% -20%, rgba(244, 63, 94, 0.25) 0%, transparent 70%);
+  background: radial-gradient(ellipse at 50% -20%, rgba(244, 63, 94, 0.12) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -2353,13 +2353,13 @@ hr,
   position: absolute;
   inset: -4px;
   border-radius: 28px;
-  background: linear-gradient(135deg, #f43f5e, #be123c, #881337);
-  opacity: 0.7;
+  background: linear-gradient(135deg, #f43f5e, #fb7185, #fda4af);
+  opacity: 0.45;
   filter: blur(8px);
   transition: opacity 0.3s;
 }
 .custom-team-card:hover .custom-avatar-ring {
-  opacity: 1;
+  opacity: 0.85;
   filter: blur(12px);
 }
 .custom-avatar {
@@ -2367,18 +2367,18 @@ hr,
   width: 100%;
   height: 100%;
   border-radius: 26px;
-  background: linear-gradient(135deg, #1e2433 0%, #111520 100%);
-  border: 2px solid rgba(244, 63, 94, 0.4);
+  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
+  border: 2px solid rgba(244, 63, 94, 0.28);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 28px;
   font-weight: 800;
-  color: #ffffff;
-  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.1), 0 8px 18px rgba(0, 0, 0, 0.4);
+  color: #be123c;
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.9), 0 8px 18px rgba(244, 63, 94, 0.12);
 }
 .custom-avatar span {
-  background: linear-gradient(135deg, #ffffff, #fecdd3);
+  background: linear-gradient(135deg, #9f1239, #e11d48);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -2386,7 +2386,7 @@ hr,
 .custom-card-name {
   font-size: 18px;
   font-weight: 800;
-  color: #ffffff;
+  color: #0f172a;
   margin: 0 0 10px;
 }
 
@@ -2396,9 +2396,9 @@ hr,
   gap: 6px;
   padding: 5px 14px;
   border-radius: 20px;
-  background: rgba(244, 63, 94, 0.12);
-  border: 1px solid rgba(244, 63, 94, 0.28);
-  color: #fda4af;
+  background: rgba(244, 63, 94, 0.08);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  color: #be123c;
   font-size: 12px;
   font-weight: 600;
   margin-bottom: 24px;
@@ -2406,7 +2406,7 @@ hr,
 
 .custom-card-actions {
   width: 100%;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--border);
   padding-top: 20px;
 }
 .custom-email-btn {
@@ -2417,22 +2417,72 @@ hr,
   width: 100%;
   padding: 11px 18px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #e2e8f0;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  color: #334155;
   font-size: 14px;
   font-weight: 500;
   text-decoration: none;
   transition: all 0.25s ease;
 }
 .custom-email-btn:hover {
-  background: linear-gradient(135deg, rgba(225, 29, 72, 0.18), rgba(244, 63, 94, 0.1));
+  background: linear-gradient(135deg, #fff1f2, #ffe4e6);
   border-color: rgba(244, 63, 94, 0.35);
-  color: #ffffff;
+  color: #be123c;
   transform: translateY(-2px);
 }
 .custom-email-btn svg {
   color: #f43f5e;
+}
+
+/* Dark Mode Overrides for Team Cards */
+[data-theme="dark"] .custom-team-card {
+  background: linear-gradient(160deg, #131926 0%, #0d121c 100%);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+}
+[data-theme="dark"] .custom-team-card:hover {
+  border-color: rgba(244, 63, 94, 0.4);
+  box-shadow: 0 20px 45px rgba(225, 29, 72, 0.16);
+}
+[data-theme="dark"] .custom-card-ambient {
+  background: radial-gradient(ellipse at 50% -20%, rgba(244, 63, 94, 0.25) 0%, transparent 70%);
+}
+[data-theme="dark"] .custom-avatar-ring {
+  background: linear-gradient(135deg, #f43f5e, #be123c, #881337);
+  opacity: 0.7;
+}
+[data-theme="dark"] .custom-avatar {
+  background: linear-gradient(135deg, #1e2433 0%, #111520 100%);
+  border-color: rgba(244, 63, 94, 0.4);
+  color: #ffffff;
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.1), 0 8px 18px rgba(0, 0, 0, 0.4);
+}
+[data-theme="dark"] .custom-avatar span {
+  background: linear-gradient(135deg, #ffffff, #fecdd3);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+[data-theme="dark"] .custom-card-name {
+  color: #ffffff;
+}
+[data-theme="dark"] .custom-role-chip {
+  background: rgba(244, 63, 94, 0.12);
+  border-color: rgba(244, 63, 94, 0.28);
+  color: #fda4af;
+}
+[data-theme="dark"] .custom-card-actions {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+[data-theme="dark"] .custom-email-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+}
+[data-theme="dark"] .custom-email-btn:hover {
+  background: linear-gradient(135deg, rgba(225, 29, 72, 0.18), rgba(244, 63, 94, 0.1));
+  border-color: rgba(244, 63, 94, 0.35);
+  color: #ffffff;
 }
 
 /* Icons & Micro-utilities */
