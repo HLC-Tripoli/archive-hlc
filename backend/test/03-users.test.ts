@@ -588,7 +588,7 @@ test('admin can manage granular user permissions, and admin always has full perm
   assert.equal(createdAdmin.statusCode, 201);
   assert.deepEqual(
     (createdAdmin.json() as { user: { permissions: string[] } }).user.permissions,
-    ['view', 'create', 'edit', 'delete', 'attach_view', 'attach_upload', 'attach_delete'],
+    ['view', 'create', 'edit', 'delete', 'share', 'attach_view', 'attach_upload', 'attach_delete'],
   );
 });
 
