@@ -37,9 +37,9 @@
   gh workflow run publish-images.yml --ref <branch-name>
   ```
 
-### 5. النشر والاختبار على بيئة الاختبار (CT 101)
-- بيئة الاختبار تعمل على الحاوية **`CT 101`** (`master` / `10.31.0.138:8080`) تحت مسار Compose:
-  `/root/compose/archive-hlc/` (مشروع `archive-hlc-test`).
+### 5. النشر والتشغيل على الخادم الإنتاجي (CT 101)
+- المنظومة تعمل على الحاوية **`CT 101`** (`master` / `10.31.0.138:8080`) تحت مسار Compose:
+  `/root/compose/archive-hlc/` (مشروع `archive-hlc`)، ومجلد البيانات تحت `/root/appdata/archive-hlc/`.
 - يتم تحديث وسم الصورة في ملف `.env` (`ARCHIVE_WEB_IMAGE` أو `ARCHIVE_API_IMAGE`).
 - سحب الصور وإعادة تشغيل المكدس:
   ```bash
