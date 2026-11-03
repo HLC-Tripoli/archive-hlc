@@ -6,6 +6,7 @@ export const VALID_PERMISSIONS = [
   'create',
   'edit',
   'delete',
+  'share',
   'attach_view',
   'attach_upload',
   'attach_delete',

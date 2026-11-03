@@ -2250,6 +2250,10 @@ hr,
   color: #dc2626;
   border-color: rgba(220, 38, 38, 0.3);
 }
+.permission-badge.badge-share {
+  color: #7c3aed;
+  border-color: rgba(124, 58, 237, 0.3);
+}
 .permission-badge.badge-attach_view {
   color: #0d9488;
   border-color: rgba(13, 148, 136, 0.3);

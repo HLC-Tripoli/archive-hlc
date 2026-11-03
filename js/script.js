@@ -24,7 +24,7 @@
     incoming: "المراسلات الواردة",
     outgoing: "المراسلات الصادرة",
     other: "مراسلات أخرى",
-    other_attachments: "تخزين مرفقات أخرى",
+    other_attachments: "مراسلات أخرى",
     archive: "الأرشيف الإلكتروني",
     departments: "الإدارات والأقسام",
     reports: "التقارير والإحصائيات",
@@ -902,11 +902,13 @@
                 '">' + escapeHTML(_t("download")) + '</button>'
             );
           }
-          actions.push(
-            '<button type="button" class="small-button action-share-btn" data-doc-action="share" data-id="' +
-              escapeHTML(document.id) +
-              '">' + escapeHTML(_t("share")) + '</button>'
-          );
+          if (!deleted && (admin || hasPermission("share"))) {
+            actions.push(
+              '<button type="button" class="small-button action-share-btn" data-doc-action="share" data-id="' +
+                escapeHTML(document.id) +
+                '">' + escapeHTML(_t("share")) + '</button>'
+            );
+          }
           if (!deleted && hasPermission("edit")) {
             actions.push(
               '<button type="button" class="small-button" data-doc-action="edit-attachment" data-id="' +
@@ -954,9 +956,17 @@
             escapeHTML(document.id) +
             '">' + escapeHTML(_t("view")) + '</button>'
         );
-        if (!deleted && hasPermission("edit")) {
+        if (!deleted && (admin || hasPermission("share"))) {
           actions.push(
-            '<button type="button" class="small-button" data-doc-action="edit" data-id="' +
+            '<button type="button" class="small-button action-share-btn" data-doc-action="share" data-id="' +
+              escapeHTML(document.id) +
+              '">' + escapeHTML(_t("share")) + '</button>'
+          );
+        }
+        if (!deleted && hasPermission("edit")) {
+          var editAction = document.type === "other_attachments" ? "edit-attachment" : "edit";
+          actions.push(
+            '<button type="button" class="small-button" data-doc-action="' + editAction + '" data-id="' +
               escapeHTML(document.id) +
               '">' + escapeHTML(_t("edit")) + '</button>'
           );
@@ -1029,7 +1039,7 @@
       if (view.type) {
         otherQuery.type = view.type;
       } else {
-        otherQuery.types = "other,minutes,proposal,report";
+        otherQuery.types = "other,minutes,proposal,report,other_attachments";
       }
       return otherQuery;
     }
@@ -1233,6 +1243,7 @@
     } else {
       select.innerHTML =
         '<option value="other">' + escapeHTML(_t("type_other")) + '</option>' +
+        '<option value="other_attachments">' + escapeHTML(_t("type_other_attachments")) + '</option>' +
         '<option value="minutes">' + escapeHTML(_t("type_minutes")) + '</option>' +
         '<option value="proposal">' + escapeHTML(_t("type_proposal")) + '</option>' +
         '<option value="report">' + escapeHTML(_t("type_report")) + '</option>';
@@ -1936,6 +1947,10 @@
   }
 
   async function openShareModal(docId) {
+    if (!isAdmin() && !hasPermission("share")) {
+      toast(window.I18N && window.I18N.getLanguage() === "en" ? "You do not have permission to share." : "ليس لديك صلاحية مشاركة المعاملات.", "error");
+      return;
+    }
     try {
       var data = await api.get("/documents/" + docId);
       var doc = data.document;
@@ -2277,6 +2292,11 @@
         "</div>";
 
       var actions = [];
+      if (!deleted && (isAdmin() || hasPermission("share"))) {
+        actions.push(
+          '<button type="button" class="button secondary-button" id="detailShareButton">' + escapeHTML(_t("share")) + '</button>'
+        );
+      }
       if (!deleted && hasPermission("edit")) {
         actions.push(
           '<button type="button" class="button" id="detailEditButton">' + escapeHTML(_t("edit")) + '</button>'
@@ -2296,6 +2316,12 @@
       );
       el("detailActions").innerHTML = actions.join("");
 
+      var shareButton = el("detailShareButton");
+      if (shareButton) {
+        shareButton.addEventListener("click", function () {
+          openShareModal(documentId);
+        });
+      }
       var editButton = el("detailEditButton");
       if (editButton) {
         editButton.addEventListener("click", function () {
@@ -2442,6 +2468,7 @@
           if (userPerms.includes("create")) badges.push('<span class="permission-badge badge-create">' + escapeHTML(_t("perm_create")) + '</span>');
           if (userPerms.includes("edit")) badges.push('<span class="permission-badge badge-edit">' + escapeHTML(_t("perm_edit")) + '</span>');
           if (userPerms.includes("delete")) badges.push('<span class="permission-badge badge-delete">' + escapeHTML(_t("perm_delete")) + '</span>');
+          if (userPerms.includes("share")) badges.push('<span class="permission-badge badge-share">' + escapeHTML(_t("perm_share")) + '</span>');
           if (userPerms.includes("attach_view")) badges.push('<span class="permission-badge badge-attach_view">' + escapeHTML(_t("perm_attach_view")) + '</span>');
           if (userPerms.includes("attach_upload")) badges.push('<span class="permission-badge badge-attach_upload">' + escapeHTML(_t("perm_attach_upload")) + '</span>');
           if (userPerms.includes("attach_delete")) badges.push('<span class="permission-badge badge-attach_delete">' + escapeHTML(_t("perm_attach_delete")) + '</span>');
@@ -2594,11 +2621,12 @@
 
     var userPerms = user && Array.isArray(user.permissions)
       ? user.permissions
-      : ["view", "create", "edit", "attach_view", "attach_upload"];
+      : ["view", "create", "edit", "share", "attach_view", "attach_upload"];
     if (el("permView")) el("permView").checked = userPerms.includes("view");
     if (el("permCreate")) el("permCreate").checked = userPerms.includes("create");
     if (el("permEdit")) el("permEdit").checked = userPerms.includes("edit");
     if (el("permDelete")) el("permDelete").checked = userPerms.includes("delete");
+    if (el("permShare")) el("permShare").checked = userPerms.includes("share");
     if (el("permAttachView")) el("permAttachView").checked = userPerms.includes("attach_view");
     if (el("permAttachUpload")) el("permAttachUpload").checked = userPerms.includes("attach_upload");
     if (el("permAttachDelete")) el("permAttachDelete").checked = userPerms.includes("attach_delete");
@@ -2629,12 +2657,13 @@
       }
       var permissions = [];
       if (role === "admin") {
-        permissions = ["view", "create", "edit", "delete", "attach_view", "attach_upload", "attach_delete"];
+        permissions = ["view", "create", "edit", "delete", "share", "attach_view", "attach_upload", "attach_delete"];
       } else {
         if (el("permView") && el("permView").checked) permissions.push("view");
         if (el("permCreate") && el("permCreate").checked) permissions.push("create");
         if (el("permEdit") && el("permEdit").checked) permissions.push("edit");
         if (el("permDelete") && el("permDelete").checked) permissions.push("delete");
+        if (el("permShare") && el("permShare").checked) permissions.push("share");
         if (el("permAttachView") && el("permAttachView").checked) permissions.push("attach_view");
         if (el("permAttachUpload") && el("permAttachUpload").checked) permissions.push("attach_upload");
         if (el("permAttachDelete") && el("permAttachDelete").checked) permissions.push("attach_delete");
@@ -3328,6 +3357,7 @@
     // واجهة إدارية قديمة بعد تغيير الدور أو تعطيل الحساب أو نقل الإدارة.
     if (state.user) await refreshSession();
     if (!PAGE_TITLES[pageId]) pageId = "dashboard";
+    if (pageId === "other_attachments") pageId = "other";
     if (!isAdmin() && (pageId === "departments" || pageId === "users" || pageId === "audit")) {
       pageId = "dashboard";
     }
@@ -3346,7 +3376,7 @@
     if (pageId === "dashboard") {
       loadDashboardStats();
       loadDocumentsView("dashboard");
-    } else if (pageId === "incoming" || pageId === "outgoing" || pageId === "other" || pageId === "other_attachments") {
+    } else if (pageId === "incoming" || pageId === "outgoing" || pageId === "other") {
       loadDocumentsView(pageId);
     } else if (pageId === "archive") {
       loadDepartmentsForSelects();
@@ -3637,7 +3667,8 @@
           await api.patch("/documents/" + id, { title: newTitle });
           hideModal("editAttachmentModal");
           toast("تم تعديل المرفق بنجاح.");
-          loadDocumentsView("other_attachments");
+          loadDocumentsView(state.currentPage === "other" ? "other" : (state.currentPage || "other"));
+          refreshDocumentsAndStats();
         } catch (err) {
           if (errorEl) {
             errorEl.textContent = errorMessage(err);
