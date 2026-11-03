@@ -61,7 +61,7 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
     '/documents/:id/files',
     { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
     async (request, reply) => {
-      assertPermission(request.authUser!, 'create');
+      assertPermission(request.authUser!, 'attach_upload');
       const access = resolveDocumentAccessScope(request.authUser!);
       const { id: documentId } = request.params as { id: string };
       if (!isUuid(documentId)) throw ApiError.notFound('المعاملة غير موجودة.');
@@ -137,7 +137,7 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
     '/files/:id/download',
     { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
     async (request, reply) => {
-      assertPermission(request.authUser!, 'view');
+      assertPermission(request.authUser!, 'attach_view');
       const access = resolveDocumentAccessScope(request.authUser!);
       const { id } = request.params as { id: string };
       if (!isUuid(id)) throw ApiError.notFound('الملف غير موجود.');
@@ -177,7 +177,7 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
     '/files/:id/view',
     { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
     async (request, reply) => {
-      assertPermission(request.authUser!, 'view');
+      assertPermission(request.authUser!, 'attach_view');
       const access = resolveDocumentAccessScope(request.authUser!);
       const { id } = request.params as { id: string };
       if (!isUuid(id)) throw ApiError.notFound('الملف غير موجود.');
@@ -236,7 +236,7 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
       if (found.document.deletedAt && !access.isAdmin) {
         throw ApiError.notFound('الملف غير موجود.');
       }
-      assertPermission(request.authUser!, 'delete');
+      assertPermission(request.authUser!, 'attach_delete');
       assertSupportedProvider(request, found.file, storage);
 
       // نحذف الكائن من التخزين أولاً؛ إذا فشل الحذف نُبقي السجل كي لا يبقى الكائن يتيماً.

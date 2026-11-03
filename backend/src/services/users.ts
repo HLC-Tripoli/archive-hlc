@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import type { Queryable } from '../db/pool.js';
+import { VALID_PERMISSIONS } from '../lib/permissions.js';
 import { containsPattern } from '../lib/sql.js';
 import type { UserRole } from './sessions.js';
 
@@ -57,7 +58,7 @@ const USER_SELECT_WITH_HASH = `SELECT ${USER_COLUMNS}, u.password_hash ${USER_FR
 function toRecord(row: UserRow): UserRecord {
   const perms = Array.isArray(row.permissions)
     ? row.permissions
-    : ['view', 'create', 'edit', 'delete'];
+    : [...VALID_PERMISSIONS];
   return {
     id: row.id,
     username: row.username,
@@ -216,8 +217,8 @@ export async function createUser(
   },
 ): Promise<UserRecord> {
   const permissions = input.role === 'admin'
-    ? ['view', 'create', 'edit', 'delete']
-    : (input.permissions && input.permissions.length > 0 ? input.permissions : ['view', 'create', 'edit', 'delete']);
+    ? [...VALID_PERMISSIONS]
+    : (input.permissions && input.permissions.length > 0 ? input.permissions : [...VALID_PERMISSIONS]);
 
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO users (username, display_name, employee_number, department_id, role, permissions, password_hash)

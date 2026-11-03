@@ -34,7 +34,15 @@ beforeEach(async () => {
   await createTestUser(context.pool, {
     username: 'employee',
     role: 'employee',
-    permissions: ['view', 'create', 'edit', 'delete'],
+    permissions: [
+      'view',
+      'create',
+      'edit',
+      'delete',
+      'attach_view',
+      'attach_upload',
+      'attach_delete',
+    ],
   });
   adminClient = await loginClient(context.app, 'admin');
   employeeClient = await loginClient(context.app, 'employee');
@@ -270,4 +278,34 @@ test('anonymous users cannot download files; deleted documents hide files from e
     '/files/00000000-0000-4000-8000-000000000000/download',
   );
   assert.equal(missing.statusCode, 404);
+});
+
+test('attachment permissions enforce granular view, upload, and delete checks', async () => {
+  await createTestUser(context.pool, {
+    username: 'no-perm-employee',
+    role: 'employee',
+    permissions: ['view', 'create', 'edit', 'delete'],
+  });
+  const restrictedClient = await loginClient(context.app, 'no-perm-employee');
+
+  const documentId = await createDocument('PERM-FILE-1');
+
+  const deniedUpload = await apiRequest(context.app, restrictedClient, 'POST', `/documents/${documentId}/files`, {
+    headers: { 'content-type': 'multipart/form-data; boundary=----boundary' },
+    payload: Buffer.from('dummy'),
+  });
+  assert.equal(deniedUpload.statusCode, 403);
+
+  const uploaded = await uploadFile(documentId, 'perm-doc.png', 'image/png', PNG_BYTES);
+  assert.equal(uploaded.statusCode, 201);
+  const fileId = (uploaded.json() as { file: { id: string } }).file.id;
+
+  const deniedView = await apiRequest(context.app, restrictedClient, 'GET', `/files/${fileId}/view`);
+  assert.equal(deniedView.statusCode, 403);
+
+  const deniedDownload = await apiRequest(context.app, restrictedClient, 'GET', `/files/${fileId}/download`);
+  assert.equal(deniedDownload.statusCode, 403);
+
+  const deniedDelete = await apiRequest(context.app, restrictedClient, 'DELETE', `/files/${fileId}`);
+  assert.equal(deniedDelete.statusCode, 403);
 });

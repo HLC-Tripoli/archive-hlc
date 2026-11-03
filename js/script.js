@@ -533,11 +533,20 @@
       node.title = blocked ? departmentAccessMessage() : "";
     });
 
-    var createBtns = ["addIncomingButton", "addOutgoingButton", "addOtherButton", "directUploadBtn", "scannerTriggerBtn"];
+    var createBtns = ["addIncomingButton", "addOutgoingButton", "addOtherButton"];
     createBtns.forEach(function (btnId) {
       var node = el(btnId);
       if (node) {
         node.style.display = canCreate ? "" : "none";
+      }
+    });
+
+    var canAttachUpload = isAdmin() || hasPermission("attach_upload");
+    var uploadBtns = ["addAttachmentFromFileBtn", "addAttachmentFromScanBtn", "directUploadBtn", "scannerTriggerBtn"];
+    uploadBtns.forEach(function (btnId) {
+      var node = el(btnId);
+      if (node) {
+        node.style.display = canAttachUpload ? "" : "none";
       }
     });
 
@@ -881,16 +890,18 @@
               escapeHTML(document.id) +
               '">' + escapeHTML(_t("view")) + '</button>'
           );
-          actions.push(
-            '<button type="button" class="small-button action-preview-btn" data-doc-action="preview" data-id="' +
-              escapeHTML(document.id) +
-              '">' + escapeHTML(_t("preview")) + '</button>'
-          );
-          actions.push(
-            '<button type="button" class="small-button" data-doc-action="download" data-id="' +
-              escapeHTML(document.id) +
-              '">' + escapeHTML(_t("download")) + '</button>'
-          );
+          if (admin || hasPermission("attach_view")) {
+            actions.push(
+              '<button type="button" class="small-button action-preview-btn" data-doc-action="preview" data-id="' +
+                escapeHTML(document.id) +
+                '">' + escapeHTML(_t("preview")) + '</button>'
+            );
+            actions.push(
+              '<button type="button" class="small-button" data-doc-action="download" data-id="' +
+                escapeHTML(document.id) +
+                '">' + escapeHTML(_t("download")) + '</button>'
+            );
+          }
           actions.push(
             '<button type="button" class="small-button action-share-btn" data-doc-action="share" data-id="' +
               escapeHTML(document.id) +
@@ -1164,27 +1175,30 @@
      المعاملات: النموذج والتفاصيل والحذف والاستعادة
      ======================================================================== */
   function canDeleteAttachments() {
-    return Boolean(isAdmin() || (state.user && state.user.role === "employee" && !isDepartmentBlocked()));
+    return Boolean(isAdmin() || (hasPermission("attach_delete") && !isDepartmentBlocked()));
   }
 
   function attachmentActions(file) {
     var actions = [];
-    if (PREVIEWABLE_MIME_TYPES[file.mimeType]) {
+    var canView = isAdmin() || hasPermission("attach_view");
+    if (canView) {
+      if (PREVIEWABLE_MIME_TYPES[file.mimeType]) {
+        actions.push(
+          '<button type="button" class="small-button" data-file-action="view" data-id="' +
+            escapeHTML(file.id) +
+            '" data-name="' +
+            escapeHTML(file.originalName || file.filename || '') +
+            '" data-mime="' +
+            escapeHTML(file.mimeType || '') +
+            '">' + escapeHTML(_t("view")) + '</button>'
+        );
+      }
       actions.push(
-        '<button type="button" class="small-button" data-file-action="view" data-id="' +
+        '<button type="button" class="small-button" data-file-action="download" data-id="' +
           escapeHTML(file.id) +
-          '" data-name="' +
-          escapeHTML(file.originalName || file.filename || '') +
-          '" data-mime="' +
-          escapeHTML(file.mimeType || '') +
-          '">' + escapeHTML(_t("view")) + '</button>'
+          '">' + escapeHTML(_t("download")) + '</button>'
       );
     }
-    actions.push(
-      '<button type="button" class="small-button" data-file-action="download" data-id="' +
-        escapeHTML(file.id) +
-        '">' + escapeHTML(_t("download")) + '</button>'
-    );
     if (canDeleteAttachments()) {
       actions.push(
         '<button type="button" class="small-button delete-button" data-file-action="delete" data-id="' +
@@ -1381,12 +1395,21 @@
     var attachmentsSection = el("attachmentsSection");
     var attachmentInput = el("attachmentInput");
     var attachmentHint = el("attachmentHint");
+    var canAttachUpload = isAdmin() || hasPermission("attach_upload");
+    var canAttachView = isAdmin() || hasPermission("attach_view");
+    var uploadBox = attachmentsSection ? attachmentsSection.querySelector(".attachment-upload") : null;
+    if (uploadBox) uploadBox.style.display = canAttachUpload ? "" : "none";
+    if (attachmentHint) attachmentHint.style.display = canAttachUpload ? "" : "none";
     attachmentInput.value = "";
-    attachmentInput.disabled = false;
+    attachmentInput.disabled = !canAttachUpload;
     attachmentsSection.hidden = false;
     if (doc) {
       attachmentHint.textContent = _t("doc_attachments_hint");
-      await refreshAttachmentList(doc.id);
+      if (canAttachView) {
+        await refreshAttachmentList(doc.id);
+      } else {
+        renderEmpty(el("attachmentList"), window.I18N && window.I18N.getLanguage() === "en" ? "You do not have permission to view attachments." : "ليس لديك صلاحية عرض المرفقات.");
+      }
     } else {
       // وضع الإنشاء: يختار المستخدم الملفات الآن وتُرفع تلقائياً بعد حفظ المراسلة.
       attachmentHint.textContent = _t("doc_attachments_hint");
@@ -1874,6 +1897,10 @@
   }
 
   async function openDirectDocumentPreview(docId) {
+    if (!isAdmin() && !hasPermission("attach_view")) {
+      toast(window.I18N && window.I18N.getLanguage() === "en" ? "You do not have permission to view attachments." : "ليس لديك صلاحية عرض المرفقات.", "error");
+      return;
+    }
     try {
       var data = await api.get("/documents/" + docId);
       var doc = data.document;
@@ -1889,6 +1916,10 @@
   }
 
   async function directDownloadDocumentFiles(docId) {
+    if (!isAdmin() && !hasPermission("attach_view")) {
+      toast(window.I18N && window.I18N.getLanguage() === "en" ? "You do not have permission to view attachments." : "ليس لديك صلاحية تحميل المرفقات.", "error");
+      return;
+    }
     try {
       var data = await api.get("/documents/" + docId);
       var doc = data.document;
@@ -2051,6 +2082,10 @@
     if (!files || !files.length) return;
     if (isDepartmentBlocked()) {
       toast(departmentAccessMessage(), "error");
+      return;
+    }
+    if (!isAdmin() && !hasPermission("attach_upload")) {
+      toast(window.I18N && window.I18N.getLanguage() === "en" ? "You do not have permission to upload attachments." : "ليس لديك صلاحية إرفاق ملفات.", "error");
       return;
     }
     var validFiles = [];
@@ -2407,6 +2442,9 @@
           if (userPerms.includes("create")) badges.push('<span class="permission-badge badge-create">' + escapeHTML(_t("perm_create")) + '</span>');
           if (userPerms.includes("edit")) badges.push('<span class="permission-badge badge-edit">' + escapeHTML(_t("perm_edit")) + '</span>');
           if (userPerms.includes("delete")) badges.push('<span class="permission-badge badge-delete">' + escapeHTML(_t("perm_delete")) + '</span>');
+          if (userPerms.includes("attach_view")) badges.push('<span class="permission-badge badge-attach_view">' + escapeHTML(_t("perm_attach_view")) + '</span>');
+          if (userPerms.includes("attach_upload")) badges.push('<span class="permission-badge badge-attach_upload">' + escapeHTML(_t("perm_attach_upload")) + '</span>');
+          if (userPerms.includes("attach_delete")) badges.push('<span class="permission-badge badge-attach_delete">' + escapeHTML(_t("perm_attach_delete")) + '</span>');
           permsHtml = badges.length ? badges.join(" ") : '<span class="muted">—</span>';
         }
         return (
@@ -2509,7 +2547,15 @@
     var roleEl = el("userRole");
     if (!roleEl) return;
     var isAdminRole = roleEl.value === "admin";
-    var checkboxes = [el("permView"), el("permCreate"), el("permEdit"), el("permDelete")];
+    var checkboxes = [
+      el("permView"),
+      el("permCreate"),
+      el("permEdit"),
+      el("permDelete"),
+      el("permAttachView"),
+      el("permAttachUpload"),
+      el("permAttachDelete")
+    ];
     checkboxes.forEach(function (cb) {
       if (cb) {
         if (isAdminRole) {
@@ -2548,11 +2594,14 @@
 
     var userPerms = user && Array.isArray(user.permissions)
       ? user.permissions
-      : ["view", "create", "edit"];
+      : ["view", "create", "edit", "attach_view", "attach_upload"];
     if (el("permView")) el("permView").checked = userPerms.includes("view");
     if (el("permCreate")) el("permCreate").checked = userPerms.includes("create");
     if (el("permEdit")) el("permEdit").checked = userPerms.includes("edit");
     if (el("permDelete")) el("permDelete").checked = userPerms.includes("delete");
+    if (el("permAttachView")) el("permAttachView").checked = userPerms.includes("attach_view");
+    if (el("permAttachUpload")) el("permAttachUpload").checked = userPerms.includes("attach_upload");
+    if (el("permAttachDelete")) el("permAttachDelete").checked = userPerms.includes("attach_delete");
 
     try {
       var data = await api.get("/departments", { includeInactive: true });
@@ -2580,12 +2629,15 @@
       }
       var permissions = [];
       if (role === "admin") {
-        permissions = ["view", "create", "edit", "delete"];
+        permissions = ["view", "create", "edit", "delete", "attach_view", "attach_upload", "attach_delete"];
       } else {
         if (el("permView") && el("permView").checked) permissions.push("view");
         if (el("permCreate") && el("permCreate").checked) permissions.push("create");
         if (el("permEdit") && el("permEdit").checked) permissions.push("edit");
         if (el("permDelete") && el("permDelete").checked) permissions.push("delete");
+        if (el("permAttachView") && el("permAttachView").checked) permissions.push("attach_view");
+        if (el("permAttachUpload") && el("permAttachUpload").checked) permissions.push("attach_upload");
+        if (el("permAttachDelete") && el("permAttachDelete").checked) permissions.push("attach_delete");
         if (permissions.length === 0) {
           showFormError(
             "userFormError",
