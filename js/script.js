@@ -1799,43 +1799,40 @@
     // المدير وحده يختار الإدارة؛ أما الموظف فيفرض الخادم إدارته الحالية
     // من قاعدة البيانات، ولا نرسل قيمة محلية قد تكون قديمة.
     if (isAdmin()) payload.departmentId = el("department").value || null;
+    // إغلاق النموذج مباشرة وفوراً عند الضغط على الحفظ واجتياز التحقق
+    hideModal("documentModal");
+
     var queued = state.pendingFiles.length > 0;
+    toast(createMode && queued ? "جارٍ الحفظ ورفع المرفقات…" : "جارٍ الحفظ…");
     setBusy(button, true, createMode && queued ? "جارٍ الحفظ ورفع المرفقات…" : "جارٍ الحفظ…");
     try {
       if (!createMode) {
         await api.patch("/documents/" + state.editingDocumentId, payload);
         if (state.pendingFiles.length) {
           await uploadPendingEntries(state.editingDocumentId);
-          if (!state.pendingFiles.length) {
-            toast("تم تحديث المراسلة وحفظ المرفقات.");
-            hideModal("documentModal");
-          }
         } else {
           toast("تم تحديث المراسلة.");
-          hideModal("documentModal");
         }
+        refreshDocumentsAndStats();
       } else {
         var created = await api.post("/documents", payload);
         var newDocumentId =
           created && created.document && created.document.id ? created.document.id : null;
         if (!newDocumentId) throw new Error("تعذّر تحديد المراسلة المنشأة.");
-        // ننتقل إلى وضع التعديل فوراً كي تظهر المرفقات المخزَّنة وأزرارها،
-        // مع إبقاء الملفات الفاشلة قابلة لإعادة المحاولة دون تكرار الناجحة.
         state.editingDocumentId = newDocumentId;
-        el("formTitle").textContent = "تعديل بيانات الرسالة";
-        el("attachmentHint").textContent = "اختر ملفاً أو أكثر.";
         refreshDocumentsAndStats();
         if (state.pendingFiles.length) {
+          toast("تم تسجيل المراسلة بنجاح. جارٍ رفع المرفقات…");
           await uploadPendingEntries(newDocumentId);
-          // تبقى النافذة مفتوحة لعرض المرفقات المرفوعة ونتائج أي فشل جزئي.
         } else {
           toast("تم تسجيل المراسلة بنجاح.");
-          hideModal("documentModal");
         }
       }
     } catch (error) {
-      // في وضع الإنشاء تبقى الملفات في قائمة الانتظار للسماح بإعادة المحاولة.
+      // في حال حدوث خطأ، إعادة إظهار النموذج لتمكين المستخدم من المتابعة دون فقدان البيانات
+      showModal("documentModal");
       showFormError("documentFormError", errorMessage(error));
+      toast(errorMessage(error), "error");
     } finally {
       setBusy(button, false);
     }
