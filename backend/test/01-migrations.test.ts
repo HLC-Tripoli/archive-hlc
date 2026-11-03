@@ -59,6 +59,7 @@ test('schema is created from scratch, applied once, and migrations are idempoten
     '0007_user_permissions.sql',
     '0008_allowed_file_types.sql',
     '0009_attachment_permissions.sql',
+    '0010_share_permission.sql',
   ]);
 
   const { rows } = await pool.query<{ table_name: string }>(
@@ -143,6 +144,7 @@ test('schema is created from scratch, applied once, and migrations are idempoten
     '0007_user_permissions.sql',
     '0008_allowed_file_types.sql',
     '0009_attachment_permissions.sql',
+    '0010_share_permission.sql',
   ]);
 });
 
@@ -175,6 +177,7 @@ test('employee-number migration preserves existing users and leaves their number
       '0007_user_permissions.sql',
       '0008_allowed_file_types.sql',
       '0009_attachment_permissions.sql',
+    '0010_share_permission.sql',
     ]);
 
     const preserved = await pool.query<{
@@ -269,6 +272,7 @@ test('department migration preserves existing departments, users, documents, and
       '0007_user_permissions.sql',
       '0008_allowed_file_types.sql',
       '0009_attachment_permissions.sql',
+    '0010_share_permission.sql',
     ]);
 
     const preserved = await pool.query<{
@@ -362,6 +366,7 @@ test('sequence-number migration preserves existing documents and files and leave
       '0007_user_permissions.sql',
       '0008_allowed_file_types.sql',
       '0009_attachment_permissions.sql',
+    '0010_share_permission.sql',
     ]);
 
     const preserved = await pool.query<{
