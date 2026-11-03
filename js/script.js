@@ -1320,26 +1320,15 @@
     }
   }
 
-  function handleSenderEditToggle() {
+  function handleSenderUnlock() {
     var senderInput = el("sender");
     var editBtn = el("senderEditButton");
     if (!senderInput || !editBtn) return;
 
-    if (senderInput.readOnly) {
-      senderInput.readOnly = false;
-      senderInput.classList.remove("input-locked");
-      senderInput.focus();
-      editBtn.textContent = _t("lock");
-      editBtn.title = _t("lock");
-    } else {
-      senderInput.readOnly = true;
-      senderInput.classList.add("input-locked");
-      editBtn.textContent = _t("edit");
-      editBtn.title = _t("edit");
-      if (!senderInput.value.trim() && state.user && state.user.departmentName) {
-        senderInput.value = state.user.departmentName;
-      }
-    }
+    senderInput.readOnly = false;
+    senderInput.classList.remove("input-locked");
+    editBtn.classList.add("is-hidden");
+    senderInput.focus();
   }
 
   async function openDocumentForm(mode, documentId, defaultType, allowAll) {
@@ -3699,7 +3688,7 @@
     }
 
     if (el("senderEditButton")) {
-      el("senderEditButton").addEventListener("click", handleSenderEditToggle);
+      el("senderEditButton").addEventListener("click", handleSenderUnlock);
     }
 
     el("documentForm").addEventListener("submit", submitDocumentForm);
