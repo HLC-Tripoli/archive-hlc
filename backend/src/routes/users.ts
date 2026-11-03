@@ -10,6 +10,7 @@ import {
   validateUsername,
 } from '../lib/security.js';
 import { isUuid } from '../lib/validation.js';
+import { VALID_PERMISSIONS } from '../lib/permissions.js';
 import type { AuthGuards } from '../plugins/auth.js';
 import { writeAudit, type AuditContext } from '../services/audit.js';
 import { getDepartmentById } from '../services/departments.js';
@@ -38,7 +39,7 @@ const USER_ID_PARAMS_SCHEMA = {
 } as const;
 
 const ROLE_ENUM = ['admin', 'employee'] as const;
-const PERMISSION_ENUM = ['view', 'create', 'edit', 'delete'] as const;
+const PERMISSION_ENUM = VALID_PERMISSIONS;
 
 function normalizeDepartmentId(value: unknown): string | null {
   if (value === undefined || value === null) return null;
@@ -162,8 +163,8 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
       await assertActiveDepartment(pool, departmentId, body.role);
       const passwordHash = await hashPassword(body.password);
       const permissions = body.role === 'admin'
-        ? ['view', 'create', 'edit', 'delete']
-        : (Array.isArray(body.permissions) && body.permissions.length > 0 ? body.permissions : ['view', 'create', 'edit', 'delete']);
+        ? [...VALID_PERMISSIONS]
+        : (Array.isArray(body.permissions) && body.permissions.length > 0 ? body.permissions : [...VALID_PERMISSIONS]);
       const auditContext: AuditContext = {
         ip: request.ip,
         userAgent: (request.headers['user-agent'] ?? '') || null,
@@ -278,7 +279,7 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
 
       let nextPermissions: string[] | undefined = undefined;
       if (nextRole === 'admin') {
-        nextPermissions = ['view', 'create', 'edit', 'delete'];
+        nextPermissions = [...VALID_PERMISSIONS];
       } else if (body.permissions !== undefined) {
         nextPermissions = body.permissions;
       }

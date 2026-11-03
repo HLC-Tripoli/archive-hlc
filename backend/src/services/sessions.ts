@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import type { Queryable } from '../db/pool.js';
+import { VALID_PERMISSIONS } from '../lib/permissions.js';
 import { randomToken, safeEqual, sha256Hex } from '../lib/security.js';
 
 export const SESSION_COOKIE_NAME = 'hlc_session';
@@ -108,10 +109,10 @@ export async function findSessionWithUser(pool: Pool, token: string): Promise<Se
       departmentActive: row.department_active,
       permissions:
         row.role === 'admin'
-          ? ['view', 'create', 'edit', 'delete']
+          ? [...VALID_PERMISSIONS]
           : Array.isArray(row.permissions) && row.permissions.length > 0
             ? row.permissions
-            : ['view', 'create', 'edit', 'delete'],
+            : [...VALID_PERMISSIONS],
     },
   };
 }

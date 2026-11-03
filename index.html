@@ -6,7 +6,7 @@
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
     <script src="./js/theme-pre.js"></script>
-    <link rel="stylesheet" href="./css/style.css?v=1.0.39" />
+    <link rel="stylesheet" href="./css/style.css?v=1.0.40" />
     <link rel="icon" href="./img/logo.svg" />
     <meta name="referrer" content="same-origin" />
   </head>
@@ -857,23 +857,45 @@
           </div>
           <div id="userPermissionsField">
             <label data-i18n="user_permissions_label">الصلاحيات الممنوحة</label>
-            <div class="permissions-checklist">
-              <label class="permission-checkbox-item">
-                <input type="checkbox" id="permView" value="view" checked />
-                <span data-i18n="perm_view">عرض</span>
-              </label>
-              <label class="permission-checkbox-item">
-                <input type="checkbox" id="permCreate" value="create" checked />
-                <span data-i18n="perm_create">إضافة</span>
-              </label>
-              <label class="permission-checkbox-item">
-                <input type="checkbox" id="permEdit" value="edit" checked />
-                <span data-i18n="perm_edit">تعديل</span>
-              </label>
-              <label class="permission-checkbox-item">
-                <input type="checkbox" id="permDelete" value="delete" />
-                <span data-i18n="perm_delete">حذف</span>
-              </label>
+            <div class="permissions-groups">
+              <div class="permission-group">
+                <span class="permission-group-title" data-i18n="perm_group_documents">المعاملات</span>
+                <div class="permissions-checklist">
+                  <label class="permission-checkbox-item">
+                    <input type="checkbox" id="permView" value="view" checked />
+                    <span data-i18n="perm_view">عرض</span>
+                  </label>
+                  <label class="permission-checkbox-item">
+                    <input type="checkbox" id="permCreate" value="create" checked />
+                    <span data-i18n="perm_create">إضافة</span>
+                  </label>
+                  <label class="permission-checkbox-item">
+                    <input type="checkbox" id="permEdit" value="edit" checked />
+                    <span data-i18n="perm_edit">تعديل</span>
+                  </label>
+                  <label class="permission-checkbox-item">
+                    <input type="checkbox" id="permDelete" value="delete" />
+                    <span data-i18n="perm_delete">حذف</span>
+                  </label>
+                </div>
+              </div>
+              <div class="permission-group">
+                <span class="permission-group-title" data-i18n="perm_group_attachments">المرفقات</span>
+                <div class="permissions-checklist">
+                  <label class="permission-checkbox-item">
+                    <input type="checkbox" id="permAttachView" value="attach_view" checked />
+                    <span data-i18n="perm_attach_view">عرض المرفقات</span>
+                  </label>
+                  <label class="permission-checkbox-item">
+                    <input type="checkbox" id="permAttachUpload" value="attach_upload" checked />
+                    <span data-i18n="perm_attach_upload">إرفاق ملفات</span>
+                  </label>
+                  <label class="permission-checkbox-item">
+                    <input type="checkbox" id="permAttachDelete" value="attach_delete" />
+                    <span data-i18n="perm_attach_delete">حذف المرفقات</span>
+                  </label>
+                </div>
+              </div>
             </div>
             <small class="hint" id="userPermissionsHint" data-i18n="user_permissions_hint">
               مدير النظام يمتلك كافة الصلاحيات تلقائياً.
@@ -1133,7 +1155,7 @@
 
     <script src="./js/theme.js"></script>
     <script src="./js/api.js"></script>
-    <script src="./js/i18n.js?v=1.0.39"></script>
-    <script src="./js/script.js?v=1.0.39"></script>
+    <script src="./js/i18n.js?v=1.0.40"></script>
+    <script src="./js/script.js?v=1.0.40"></script>
   </body>
 </html>

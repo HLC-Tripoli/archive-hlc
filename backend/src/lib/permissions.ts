@@ -1,7 +1,15 @@
 import type { SessionUserInfo } from '../services/sessions.js';
 import { ApiError } from './errors.js';
 
-export const VALID_PERMISSIONS = ['view', 'create', 'edit', 'delete'] as const;
+export const VALID_PERMISSIONS = [
+  'view',
+  'create',
+  'edit',
+  'delete',
+  'attach_view',
+  'attach_upload',
+  'attach_delete',
+] as const;
 export type Permission = (typeof VALID_PERMISSIONS)[number];
 
 export function hasPermission(user: SessionUserInfo, permission: Permission): boolean {
