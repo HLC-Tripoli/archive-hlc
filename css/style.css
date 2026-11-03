@@ -2458,6 +2458,30 @@ hr,
   color: var(--text-secondary);
 }
 
+.input-with-action {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.input-with-action input {
+  flex: 1;
+}
+
+.input-with-action .input-action-btn {
+  padding: 8px 14px;
+  font-size: 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+input.input-locked {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  cursor: default;
+  border-style: dashed;
+}
+
 
 
 

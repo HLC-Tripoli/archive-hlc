@@ -1293,6 +1293,55 @@
       : (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. Libya Telecom Company" : "مثال: شركة هاتف ليبيا");
   }
 
+  function updateSenderFieldState(docType, isEdit, existingSender) {
+    var senderInput = el("sender");
+    var editBtn = el("senderEditButton");
+    if (!senderInput || !editBtn) return;
+
+    var isOutgoing = docType === "outgoing";
+    if (isOutgoing) {
+      editBtn.classList.remove("is-hidden");
+      editBtn.textContent = _t("edit");
+      editBtn.title = _t("edit");
+
+      if (!isEdit) {
+        if (state.user && state.user.departmentName) {
+          senderInput.value = state.user.departmentName;
+        }
+      } else if (existingSender !== undefined) {
+        senderInput.value = existingSender || "";
+      }
+      senderInput.readOnly = true;
+      senderInput.classList.add("input-locked");
+    } else {
+      editBtn.classList.add("is-hidden");
+      senderInput.readOnly = false;
+      senderInput.classList.remove("input-locked");
+    }
+  }
+
+  function handleSenderEditToggle() {
+    var senderInput = el("sender");
+    var editBtn = el("senderEditButton");
+    if (!senderInput || !editBtn) return;
+
+    if (senderInput.readOnly) {
+      senderInput.readOnly = false;
+      senderInput.classList.remove("input-locked");
+      senderInput.focus();
+      editBtn.textContent = _t("lock");
+      editBtn.title = _t("lock");
+    } else {
+      senderInput.readOnly = true;
+      senderInput.classList.add("input-locked");
+      editBtn.textContent = _t("edit");
+      editBtn.title = _t("edit");
+      if (!senderInput.value.trim() && state.user && state.user.departmentName) {
+        senderInput.value = state.user.departmentName;
+      }
+    }
+  }
+
   async function openDocumentForm(mode, documentId, defaultType, allowAll) {
     if (state.uploadingAttachments) {
       toast("انتظر انتهاء رفع المرفقات قبل فتح نافذة أخرى.", "error");
@@ -1328,7 +1377,8 @@
     el("sequenceNumber").value = doc && doc.sequenceNumber ? doc.sequenceNumber : "";
     el("title").value = doc ? (doc.title || "") : "";
     el("date").value = doc ? (doc.date || "") : todayString();
-    el("sender").value = doc ? doc.sender : "";
+    el("sender").value = doc ? (doc.sender || "") : "";
+    updateSenderFieldState(state.documentType, Boolean(doc), doc ? doc.sender : undefined);
     el("recipient").value = doc ? doc.recipient : "";
     el("department").value = doc && doc.department
       ? doc.department.id
@@ -3644,7 +3694,12 @@
       el("documentType").addEventListener("change", function () {
         state.documentType = el("documentType").value;
         updateDocumentFormLabels(state.documentType, Boolean(state.editingDocumentId));
+        updateSenderFieldState(state.documentType, Boolean(state.editingDocumentId), el("sender").value);
       });
+    }
+
+    if (el("senderEditButton")) {
+      el("senderEditButton").addEventListener("click", handleSenderEditToggle);
     }
 
     el("documentForm").addEventListener("submit", submitDocumentForm);
