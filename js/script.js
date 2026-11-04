@@ -541,15 +541,6 @@
       }
     });
 
-    var canAttachUpload = isAdmin() || hasPermission("attach_upload");
-    var uploadBtns = ["addAttachmentFromFileBtn", "addAttachmentFromScanBtn", "directUploadBtn", "scannerTriggerBtn"];
-    uploadBtns.forEach(function (btnId) {
-      var node = el(btnId);
-      if (node) {
-        node.style.display = canAttachUpload ? "" : "none";
-      }
-    });
-
     el("userName").textContent = state.user.displayName;
     var roleLabel = getRoleLabel(state.user.role);
     if (state.user.role === "employee" && currentDepartmentName()) {
@@ -1993,159 +1984,6 @@
     hideModal("shareModal");
   }
 
-  var scannerStream = null;
-  var scannerCapturedBlob = null;
-
-  async function startScannerCamera() {
-    var video = el("scannerVideo");
-    var placeholder = el("scannerPlaceholder");
-    var statusMsg = el("scannerStatusMessage");
-    var captureBtn = el("scannerCaptureBtn");
-    var retakeBtn = el("scannerRetakeBtn");
-    var saveBtn = el("scannerSaveBtn");
-    var previewImg = el("scannerCapturedPreview");
-
-    previewImg.style.display = "none";
-    video.style.display = "block";
-    captureBtn.style.display = "inline-flex";
-    retakeBtn.style.display = "none";
-    saveBtn.style.display = "none";
-
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      try {
-        statusMsg.textContent = "جارٍ تشغيل طابعة السكانر / الكاميرا…";
-        placeholder.style.display = "flex";
-        scannerStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
-          },
-          audio: false
-        });
-        video.srcObject = scannerStream;
-        await video.play();
-        placeholder.style.display = "none";
-      } catch (err) {
-        placeholder.style.display = "flex";
-        video.style.display = "none";
-        captureBtn.style.display = "none";
-        statusMsg.textContent = _t("scanner_camera_permission_denied");
-      }
-    } else {
-      placeholder.style.display = "flex";
-      video.style.display = "none";
-      captureBtn.style.display = "none";
-      statusMsg.textContent = _t("no_scanner_support");
-    }
-  }
-
-  function stopScannerCamera() {
-    if (scannerStream) {
-      try {
-        scannerStream.getTracks().forEach(function (track) { track.stop(); });
-      } catch (_) {}
-      scannerStream = null;
-    }
-    var video = el("scannerVideo");
-    if (video) video.srcObject = null;
-  }
-
-  function captureScanSnapshot() {
-    var video = el("scannerVideo");
-    var canvas = el("scannerCanvas");
-    var previewImg = el("scannerCapturedPreview");
-    var captureBtn = el("scannerCaptureBtn");
-    var retakeBtn = el("scannerRetakeBtn");
-    var saveBtn = el("scannerSaveBtn");
-
-    if (!video || !canvas) return;
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
-    var ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    canvas.toBlob(function (blob) {
-      if (!blob) return;
-      scannerCapturedBlob = blob;
-      var url = URL.createObjectURL(blob);
-      previewImg.src = url;
-      previewImg.style.display = "block";
-      video.style.display = "none";
-      captureBtn.style.display = "none";
-      retakeBtn.style.display = "inline-flex";
-      saveBtn.style.display = "inline-flex";
-    }, "image/png", 0.95);
-  }
-
-  function retakeScan() {
-    scannerCapturedBlob = null;
-    var previewImg = el("scannerCapturedPreview");
-    var video = el("scannerVideo");
-    var captureBtn = el("scannerCaptureBtn");
-    var retakeBtn = el("scannerRetakeBtn");
-    var saveBtn = el("scannerSaveBtn");
-
-    previewImg.style.display = "none";
-    video.style.display = "block";
-    captureBtn.style.display = "inline-flex";
-    retakeBtn.style.display = "none";
-    saveBtn.style.display = "none";
-  }
-
-  async function handleDirectAttachmentUpload(files) {
-    if (!files || !files.length) return;
-    if (isDepartmentBlocked()) {
-      toast(departmentAccessMessage(), "error");
-      return;
-    }
-    if (!isAdmin() && !hasPermission("attach_upload")) {
-      toast(window.I18N && window.I18N.getLanguage() === "en" ? "You do not have permission to upload attachments." : "ليس لديك صلاحية إرفاق ملفات.", "error");
-      return;
-    }
-    var validFiles = [];
-    var rejectedExts = [];
-    for (var f = 0; f < files.length; f++) {
-      var ext = (files[f].name.split(".").pop() || "").toLowerCase();
-      if (state.activeExtensions && state.activeExtensions.length && !state.activeExtensions.includes(ext)) {
-        rejectedExts.push(ext);
-      } else {
-        validFiles.push(files[f]);
-      }
-    }
-    if (rejectedExts.length) {
-      toast(_t("file_type_disabled_alert", { ext: rejectedExts.join(", .") }), "error");
-    }
-    if (!validFiles.length) return;
-    files = validFiles;
-
-    toast("جاري حفظ ورفع المرفقات...", "info");
-    var uploadCount = 0;
-    try {
-      for (var i = 0; i < files.length; i++) {
-        var file = files[i];
-        var docPayload = {
-          type: "other_attachments",
-          title: file.name,
-          date: todayString()
-        };
-        var res = await api.post("/documents", docPayload);
-        var docId = res && (res.id || (res.document && res.document.id));
-        if (docId) {
-          var formData = new FormData();
-          formData.append("file", file);
-          await api.postForm("/documents/" + docId + "/files", formData);
-          uploadCount++;
-        }
-      }
-      toast(uploadCount === 1 ? "تم حفظ المرفق بنجاح." : "تم حفظ " + uploadCount + " مرفقات بنجاح.");
-      loadDocumentsView("other_attachments");
-    } catch (err) {
-      toast(errorMessage(err), "error");
-      loadDocumentsView("other_attachments");
-    }
-  }
-
   async function openEditAttachmentModal(documentId) {
     try {
       var data = await api.get("/documents/" + documentId);
@@ -2176,35 +2014,6 @@
     } catch (err) {
       toast(errorMessage(err), "error");
     }
-  }
-
-  async function saveScannedAttachment() {
-    if (!scannerCapturedBlob) return;
-    var now = new Date();
-    var pad = function (n) { return String(n).padStart(2, "0"); };
-    var timestamp = now.getFullYear() +
-      pad(now.getMonth() + 1) +
-      pad(now.getDate()) + "_" +
-      pad(now.getHours()) +
-      pad(now.getMinutes()) +
-      pad(now.getSeconds());
-    var filename = "scan_" + timestamp + ".png";
-    var file = new File([scannerCapturedBlob], filename, { type: "image/png" });
-
-    hideModal("scannerModal");
-    stopScannerCamera();
-
-    await handleDirectAttachmentUpload([file]);
-  }
-
-  async function handleScannerFilePicker(event) {
-    var files = event.target.files;
-    if (!files || !files.length) return;
-    hideModal("scannerModal");
-    stopScannerCamera();
-    var fileList = Array.from(files);
-    event.target.value = "";
-    await handleDirectAttachmentUpload(fileList);
   }
 
   async function openDocumentDetail(documentId) {
@@ -3143,8 +2952,6 @@
       var acceptStr = data.acceptString || "";
       var attInput = el("attachmentInput");
       if (attInput) attInput.accept = acceptStr;
-      var directInput = el("directAttachmentInput");
-      if (directInput) directInput.accept = acceptStr;
     } catch (e) {
       /* لا يعيق العمل إن لم يكن المستخدم مسجلاً بعد */
     }
@@ -3632,22 +3439,6 @@
         openDocumentForm("create", null, "other");
       });
     }
-    if (el("addAttachmentFromFileBtn")) {
-      el("addAttachmentFromFileBtn").addEventListener("click", function () {
-        var input = el("directAttachmentInput");
-        if (input) input.click();
-      });
-    }
-    if (el("directAttachmentInput")) {
-      el("directAttachmentInput").addEventListener("change", function (event) {
-        var files = event.target.files;
-        if (files && files.length) {
-          var fileList = Array.from(files);
-          event.target.value = "";
-          handleDirectAttachmentUpload(fileList);
-        }
-      });
-    }
     if (el("editAttachmentForm")) {
       el("editAttachmentForm").addEventListener("submit", async function (event) {
         event.preventDefault();
@@ -3687,45 +3478,6 @@
     if (el("closeEditAttachmentModalBtn")) {
       el("closeEditAttachmentModalBtn").addEventListener("click", function () {
         hideModal("editAttachmentModal");
-      });
-    }
-    if (el("addAttachmentFromScanBtn")) {
-      el("addAttachmentFromScanBtn").addEventListener("click", function () {
-        showModal("scannerModal");
-        startScannerCamera();
-      });
-    }
-    if (el("closeScannerModal")) {
-      el("closeScannerModal").addEventListener("click", function () {
-        hideModal("scannerModal");
-        stopScannerCamera();
-      });
-    }
-    if (el("closeScannerModalBtn")) {
-      el("closeScannerModalBtn").addEventListener("click", function () {
-        hideModal("scannerModal");
-        stopScannerCamera();
-      });
-    }
-    if (el("scannerCaptureBtn")) {
-      el("scannerCaptureBtn").addEventListener("click", captureScanSnapshot);
-    }
-    if (el("scannerRetakeBtn")) {
-      el("scannerRetakeBtn").addEventListener("click", retakeScan);
-    }
-    if (el("scannerSaveBtn")) {
-      el("scannerSaveBtn").addEventListener("click", saveScannedAttachment);
-    }
-    if (el("scannerFileInput")) {
-      el("scannerFileInput").addEventListener("change", handleScannerFilePicker);
-    }
-    var scanModal = el("scannerModal");
-    if (scanModal) {
-      scanModal.addEventListener("click", function (event) {
-        if (event.target === scanModal) {
-          hideModal("scannerModal");
-          stopScannerCamera();
-        }
       });
     }
 
@@ -3913,12 +3665,6 @@
       var prevModal = el("previewModal");
       if (prevModal && prevModal.classList.contains("show")) {
         closePreviewModal();
-        return;
-      }
-      var scanM = el("scannerModal");
-      if (scanM && scanM.classList.contains("show")) {
-        hideModal("scannerModal");
-        stopScannerCamera();
         return;
       }
       var shareM = el("shareModal");
