@@ -1114,64 +1114,6 @@
     }
   }
 
-  async function loadReports() {
-    try {
-      var summary = await api.get("/reports/summary", {});
-      var typeCount = function (type) {
-        var entry = (summary.byType || []).find(function (row) {
-          return row.type === type;
-        });
-        return entry ? entry.count : 0;
-      };
-      el("reportTotal").textContent = summary.total;
-      el("reportIncoming").textContent = typeCount("incoming");
-      el("reportOutgoing").textContent = typeCount("outgoing");
-      if (el("reportOther")) {
-        el("reportOther").textContent =
-          typeCount("other") + typeCount("minutes") + typeCount("proposal") + typeCount("report");
-      }
-      renderReportList(
-        "reportByType",
-        (summary.byType || []).map(function (row) {
-          return { label: getTypeLabel(row.type), count: row.count };
-        })
-      );
-      renderReportList(
-        "reportByDepartment",
-        (summary.byDepartment || []).map(function (row) {
-          return { label: row.department, count: row.count };
-        })
-      );
-      renderReportList(
-        "reportByMonth",
-        (summary.byMonth || []).map(function (row) {
-          return { label: row.month, count: row.count };
-        })
-      );
-    } catch (error) {
-      toast(errorMessage(error), "error");
-    }
-  }
-
-  function renderReportList(containerId, rows) {
-    var container = el(containerId);
-    if (!rows.length) {
-      container.innerHTML = '<div class="empty">' + escapeHTML(_t("no_report_data")) + '</div>';
-      return;
-    }
-    container.innerHTML = rows
-      .map(function (row) {
-        return (
-          '<div class="report-row"><span>' +
-          escapeHTML(row.label) +
-          "</span><strong>" +
-          escapeHTML(row.count) +
-          "</strong></div>"
-        );
-      })
-      .join("");
-  }
-
   /* ========================================================================
      المعاملات: النموذج والتفاصيل والحذف والاستعادة
      ======================================================================== */
@@ -3190,8 +3132,6 @@
       loadDocumentsView("archive");
     } else if (pageId === "departments") {
       loadDepartmentListPage();
-    } else if (pageId === "reports") {
-      loadReports();
     } else if (pageId === "users") {
       if (isAdmin()) loadUsers();
     } else if (pageId === "audit") {
@@ -3355,8 +3295,6 @@
           loadDocumentsView(state.currentPage);
         } else if (state.currentPage === "departments") {
           loadDepartmentListPage();
-        } else if (state.currentPage === "reports") {
-          loadReports();
         } else if (state.currentPage === "users") {
           loadUsers();
         } else if (state.currentPage === "audit") {
@@ -3827,12 +3765,6 @@
 
     el("exportArchiveCsvButton").addEventListener("click", function () {
       exportDocumentsCsv(false);
-    });
-    el("exportReportsCsvButton").addEventListener("click", function () {
-      exportDocumentsCsv(false);
-    });
-    el("printReportButton").addEventListener("click", function () {
-      window.print();
     });
 
     el("departmentForm").addEventListener("submit", async function (event) {
