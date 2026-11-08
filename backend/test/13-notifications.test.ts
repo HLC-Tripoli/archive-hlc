@@ -48,8 +48,10 @@ test('Notifications workflow: list, unread-count, read, read-all, and triggers',
 
   // 2. Employee creates a ticket -> triggers notification for admin
   const ticketRes = await apiRequest(context.app, employeeClient, 'POST', '/tickets', {
-    title: 'طلب صيانة طابعة',
-    message: 'الطابعة لا تستجيب للأمر.',
+    payload: {
+      title: 'طلب صيانة طابعة',
+      message: 'الطابعة لا تستجيب للأمر.',
+    },
   });
   assert.equal(ticketRes.statusCode, 201);
   const ticketData = ticketRes.json() as { id: string };
@@ -76,7 +78,9 @@ test('Notifications workflow: list, unread-count, read, read-all, and triggers',
 
   // 6. Admin replies to ticket -> triggers notification for employee
   const replyRes = await apiRequest(context.app, adminClient, 'POST', `/tickets/${ticketData.id}/messages`, {
-    message: 'جاري فحص اتصال الكابل بالطابعة.',
+    payload: {
+      message: 'جاري فحص اتصال الكابل بالطابعة.',
+    },
   });
   assert.equal(replyRes.statusCode, 201);
 
