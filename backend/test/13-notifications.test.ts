@@ -99,4 +99,20 @@ test('Notifications workflow: list, unread-count, read, read-all, and triggers',
 
   const empNotifsAfter = await apiRequest(context.app, employeeClient, 'GET', '/notifications');
   assert.equal((empNotifsAfter.json() as { unreadCount: number }).unreadCount, 0);
+
+  // 9. Employee deletes single notification
+  const empNotifId = empNotifs.items[0]!.id;
+  const delRes = await apiRequest(context.app, employeeClient, 'DELETE', `/notifications/${empNotifId}`);
+  assert.equal(delRes.statusCode, 200);
+
+  const empNotifsAfterDel = await apiRequest(context.app, employeeClient, 'GET', '/notifications');
+  assert.equal((empNotifsAfterDel.json() as { items: unknown[] }).items.length, 0);
+
+  // 10. Admin clears all notifications
+  const clearRes = await apiRequest(context.app, adminClient, 'DELETE', '/notifications');
+  assert.equal(clearRes.statusCode, 200);
+  assert.equal((clearRes.json() as { success: boolean; unreadCount: number }).unreadCount, 0);
+
+  const adminNotifsAfterClear = await apiRequest(context.app, adminClient, 'GET', '/notifications');
+  assert.equal((adminNotifsAfterClear.json() as { items: unknown[] }).items.length, 0);
 });

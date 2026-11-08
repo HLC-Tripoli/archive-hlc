@@ -4,6 +4,8 @@ import { ApiError } from '../lib/errors.js';
 import { isUuid } from '../lib/validation.js';
 import type { AuthGuards } from '../plugins/auth.js';
 import {
+  clearAllNotifications,
+  deleteNotification,
   getUnreadCount,
   listUserNotifications,
   markAllNotificationsRead,
@@ -88,6 +90,39 @@ export function registerNotificationRoutes(
       const user = request.authUser!;
       const markedCount = await markAllNotificationsRead(pool, user.id);
       return { success: true, markedCount, unreadCount: 0 };
+    },
+  );
+
+  // حذف إشعار معين للمستخدم الحالي
+  app.delete(
+    '/notifications/:id',
+    { preHandler: guards.requireAuth },
+    async (request) => {
+      const user = request.authUser!;
+      const { id } = request.params as { id: string };
+
+      if (!isUuid(id)) {
+        throw new ApiError(400, 'invalid_id', 'معرف الإشعار غير صحيح');
+      }
+
+      const deleted = await deleteNotification(pool, user.id, id);
+      if (!deleted) {
+        throw new ApiError(404, 'not_found', 'الإشعار غير موجود');
+      }
+
+      const unreadCount = await getUnreadCount(pool, user.id);
+      return { success: true, unreadCount };
+    },
+  );
+
+  // مسح كافة إشعارات المستخدم الحالي
+  app.delete(
+    '/notifications',
+    { preHandler: guards.requireAuth },
+    async (request) => {
+      const user = request.authUser!;
+      const deletedCount = await clearAllNotifications(pool, user.id);
+      return { success: true, deletedCount, unreadCount: 0 };
     },
   );
 }
