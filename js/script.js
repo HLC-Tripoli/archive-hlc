@@ -2835,9 +2835,11 @@
 
   async function openTicketChat(ticketId) {
     try {
-      var ticket = await api.get("/tickets/" + ticketId);
+      var data = await api.get("/tickets/" + ticketId);
+      var ticket = data.ticket || data;
+      var messages = data.messages || [];
       state.activeTicketId = ticketId;
-      el("ticketChatTitle").textContent = "🎫 " + ticket.title;
+      el("ticketChatTitle").textContent = "🎫 " + (ticket.title || "");
       el("ticketChatStatusBadge").className = "ticket-status-badge status-" + ticket.status;
       el("ticketChatStatusBadge").textContent = _t("ticket_status_" + ticket.status) || ticket.status;
 
@@ -2852,11 +2854,11 @@
       var meta = el("ticketMetaInfo");
       if (meta) {
         meta.innerHTML =
-          "<span>بواسطة: <strong>" + escapeHTML(ticket.username || "—") + "</strong> (" + escapeHTML(ticket.departmentName || "غير محدد") + ")</span>" +
+          "<span>بواسطة: <strong>" + escapeHTML(ticket.creatorName || ticket.username || "—") + "</strong> (" + escapeHTML(ticket.departmentName || "غير محدد") + ")</span>" +
           " &nbsp;|&nbsp; <span>تاريخ الفتح: " + escapeHTML(formatDateTime(ticket.createdAt)) + "</span>";
       }
 
-      renderTicketMessages(ticket.messages || []);
+      renderTicketMessages(messages);
       showModal("ticketChatModal");
     } catch (err) {
       toast(errorMessage(err), "error");

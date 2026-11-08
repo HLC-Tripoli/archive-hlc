@@ -97,11 +97,11 @@ test('Support tickets workflow: create, list, chat message, status update', asyn
   // Verify details
   const getCreated = await apiRequest(context.app, employeeClient, 'GET', `/tickets/${created.id}`);
   assert.equal(getCreated.statusCode, 200);
-  const ticket = getCreated.json() as { id: string; title: string; status: string; messages: any[] };
-  assert.equal(ticket.title, 'مشكلة في تحميل المرفقات');
-  assert.equal(ticket.status, 'open');
-  assert.equal(ticket.messages.length, 1);
-  assert.equal(ticket.messages[0].message, 'لا أستطيع تحميل ملف بحجم 30 ميجابايت');
+  const detail = getCreated.json() as { ticket: { id: string; title: string; status: string }; messages: any[] };
+  assert.equal(detail.ticket.title, 'مشكلة في تحميل المرفقات');
+  assert.equal(detail.ticket.status, 'open');
+  assert.equal(detail.messages.length, 1);
+  assert.equal(detail.messages[0].message, 'لا أستطيع تحميل ملف بحجم 30 ميجابايت');
 
   // 2. Listing tickets
   // Employee sees own ticket
@@ -117,7 +117,7 @@ test('Support tickets workflow: create, list, chat message, status update', asyn
   assert.equal(adminTickets.items.length, 1);
 
   // 3. Admin replies to ticket
-  const replyRes = await apiRequest(context.app, adminClient, 'POST', `/tickets/${ticket.id}/messages`, {
+  const replyRes = await apiRequest(context.app, adminClient, 'POST', `/tickets/${created.id}/messages`, {
     payload: {
       message: 'تم زيادة الحد الأقصى للمرفقات إلى 50 ميجابايت، يرجى المحاولة الآن.',
     },
@@ -125,14 +125,14 @@ test('Support tickets workflow: create, list, chat message, status update', asyn
   assert.equal(replyRes.statusCode, 201);
 
   // 4. Fetch ticket details and verify 2 messages
-  const detailRes = await apiRequest(context.app, employeeClient, 'GET', `/tickets/${ticket.id}`);
+  const detailRes = await apiRequest(context.app, employeeClient, 'GET', `/tickets/${created.id}`);
   assert.equal(detailRes.statusCode, 200);
-  const detail = detailRes.json() as { messages: any[] };
-  assert.equal(detail.messages.length, 2);
-  assert.equal(detail.messages[1].senderRole, 'admin');
+  const detail2 = detailRes.json() as { messages: any[] };
+  assert.equal(detail2.messages.length, 2);
+  assert.equal(detail2.messages[1].senderRole, 'admin');
 
   // 5. Admin updates status to resolved
-  const statusRes = await apiRequest(context.app, adminClient, 'PATCH', `/tickets/${ticket.id}/status`, {
+  const statusRes = await apiRequest(context.app, adminClient, 'PATCH', `/tickets/${created.id}/status`, {
     payload: {
       status: 'resolved',
     },
@@ -142,7 +142,7 @@ test('Support tickets workflow: create, list, chat message, status update', asyn
   assert.equal(updatedTicket.status, 'resolved');
 
   // Employee cannot update status
-  const empStatus = await apiRequest(context.app, employeeClient, 'PATCH', `/tickets/${ticket.id}/status`, {
+  const empStatus = await apiRequest(context.app, employeeClient, 'PATCH', `/tickets/${created.id}/status`, {
     payload: {
       status: 'closed',
     },
