@@ -50,16 +50,20 @@ test('GET /settings returns default uploadMaxMb', async () => {
   const res = await apiRequest(context.app, employeeClient, 'GET', '/settings');
   assert.equal(res.statusCode, 200);
   const body = res.json() as { uploadMaxMb: number };
-  assert.equal(body.uploadMaxMb, 25);
+  assert.equal(body.uploadMaxMb, context.config.uploadMaxMb);
 });
 
 test('PATCH /settings is restricted to admin and updates value', async () => {
   // Employee cannot change settings
-  const forbidden = await apiRequest(context.app, employeeClient, 'PATCH', '/settings', { uploadMaxMb: 50 });
+  const forbidden = await apiRequest(context.app, employeeClient, 'PATCH', '/settings', {
+    payload: { uploadMaxMb: 50 },
+  });
   assert.equal(forbidden.statusCode, 403);
 
   // Admin updates setting
-  const res = await apiRequest(context.app, adminClient, 'PATCH', '/settings', { uploadMaxMb: 50 });
+  const res = await apiRequest(context.app, adminClient, 'PATCH', '/settings', {
+    payload: { uploadMaxMb: 50 },
+  });
   assert.equal(res.statusCode, 200);
   const body = res.json() as { uploadMaxMb: number };
   assert.equal(body.uploadMaxMb, 50);
@@ -70,15 +74,19 @@ test('PATCH /settings is restricted to admin and updates value', async () => {
   assert.equal((verify.json() as { uploadMaxMb: number }).uploadMaxMb, 50);
 
   // Out of range rejected
-  const invalid = await apiRequest(context.app, adminClient, 'PATCH', '/settings', { uploadMaxMb: 200 });
+  const invalid = await apiRequest(context.app, adminClient, 'PATCH', '/settings', {
+    payload: { uploadMaxMb: 200 },
+  });
   assert.equal(invalid.statusCode, 400);
 });
 
 test('Support tickets workflow: create, list, chat message, status update', async () => {
   // 1. Employee creates a ticket
   const createRes = await apiRequest(context.app, employeeClient, 'POST', '/tickets', {
-    title: 'مشكلة في تحميل المرفقات',
-    message: 'لا أستطيع تحميل ملف بحجم 30 ميجابايت',
+    payload: {
+      title: 'مشكلة في تحميل المرفقات',
+      message: 'لا أستطيع تحميل ملف بحجم 30 ميجابايت',
+    },
   });
   assert.equal(createRes.statusCode, 201);
   const ticket = createRes.json() as { id: string; title: string; status: string; messages: any[] };
@@ -102,7 +110,9 @@ test('Support tickets workflow: create, list, chat message, status update', asyn
 
   // 3. Admin replies to ticket
   const replyRes = await apiRequest(context.app, adminClient, 'POST', `/tickets/${ticket.id}/messages`, {
-    message: 'تم زيادة الحد الأقصى للمرفقات إلى 50 ميجابايت، يرجى المحاولة الآن.',
+    payload: {
+      message: 'تم زيادة الحد الأقصى للمرفقات إلى 50 ميجابايت، يرجى المحاولة الآن.',
+    },
   });
   assert.equal(replyRes.statusCode, 201);
 
@@ -115,7 +125,9 @@ test('Support tickets workflow: create, list, chat message, status update', asyn
 
   // 5. Admin updates status to resolved
   const statusRes = await apiRequest(context.app, adminClient, 'PATCH', `/tickets/${ticket.id}/status`, {
-    status: 'resolved',
+    payload: {
+      status: 'resolved',
+    },
   });
   assert.equal(statusRes.statusCode, 200);
   const updatedTicket = statusRes.json() as { status: string };
@@ -123,7 +135,9 @@ test('Support tickets workflow: create, list, chat message, status update', asyn
 
   // Employee cannot update status
   const empStatus = await apiRequest(context.app, employeeClient, 'PATCH', `/tickets/${ticket.id}/status`, {
-    status: 'closed',
+    payload: {
+      status: 'closed',
+    },
   });
   assert.equal(empStatus.statusCode, 403);
 });

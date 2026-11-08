@@ -8,11 +8,6 @@ CREATE TABLE IF NOT EXISTS system_settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- إدراج الحد الأقصى الافتراضي لرفع المرفقات (25 ميجابايت)
-INSERT INTO system_settings (key, value)
-VALUES ('upload_max_mb', '25')
-ON CONFLICT (key) DO NOTHING;
-
 -- 2. جدول تذاكر الدعم الفني والاستفسارات
 CREATE TABLE IF NOT EXISTS support_tickets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
