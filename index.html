@@ -6,7 +6,7 @@
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
     <script src="./js/theme-pre.js"></script>
-    <link rel="stylesheet" href="./css/style.css?v=1.0.45" />
+    <link rel="stylesheet" href="./css/style.css?v=1.0.46" />
     <link rel="icon" href="./img/logo.svg" />
     <meta name="referrer" content="same-origin" />
   </head>
@@ -981,12 +981,12 @@
 
     <!-- نافذة إنشاء تذكرة دعم جديدة -->
     <div class="modal" id="createTicketModal" role="dialog" aria-modal="true" aria-labelledby="createTicketModalTitle">
-      <div class="modal-box modal-box-small">
+      <div class="modal-box modal-box-ticket">
         <div class="modal-header">
           <h2 id="createTicketModalTitle" data-i18n="create_ticket_title">🎫 فتح تذكرة دعم جديدة</h2>
           <button type="button" class="close-button" id="closeCreateTicketModal" aria-label="إغلاق" data-i18n-aria="close">✕</button>
         </div>
-        <form id="createTicketForm">
+        <form id="createTicketForm" class="ticket-form">
           <label for="newTicketTitle" data-i18n="ticket_title_label">عنوان أو موضوع التذكرة *</label>
           <input type="text" id="newTicketTitle" required placeholder="مثال: استفسار بخصوص تصدير المعاملات" data-i18n-placeholder="ticket_title_placeholder" />
           
@@ -1002,22 +1002,55 @@
       </div>
     </div>
 
+    <!-- نافذة تعديل تذكرة الدعم (للمدير) -->
+    <div class="modal" id="editTicketModal" role="dialog" aria-modal="true" aria-labelledby="editTicketModalTitle">
+      <div class="modal-box modal-box-ticket">
+        <div class="modal-header">
+          <h2 id="editTicketModalTitle" data-i18n="edit_ticket_title">✏️ تعديل تذكرة الدعم</h2>
+          <button type="button" class="close-button" id="closeEditTicketModal" aria-label="إغلاق" data-i18n-aria="close">✕</button>
+        </div>
+        <form id="editTicketForm" class="ticket-form">
+          <input type="hidden" id="editTicketId" />
+          <label for="editTicketTitle" data-i18n="ticket_title_label">عنوان أو موضوع التذكرة *</label>
+          <input type="text" id="editTicketTitle" required minlength="3" maxlength="255" />
+          
+          <label for="editTicketStatus" data-i18n="ticket_status_label">حالة التذكرة *</label>
+          <select id="editTicketStatus">
+            <option value="open">مفتوحة</option>
+            <option value="in_progress">قيد المعالجة</option>
+            <option value="resolved">تم الحل</option>
+            <option value="closed">مغلقة</option>
+          </select>
+          
+          <div id="editTicketError" class="form-error" role="alert" style="display:none; margin-top: 10px;"></div>
+          <div class="form-actions">
+            <button type="submit" class="button" id="saveEditTicketBtn" data-i18n="save">حفظ التعديل</button>
+            <button type="button" class="button secondary-button" id="closeEditTicketModalBtn" data-i18n="cancel">إلغاء</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- نافذة محادثة تذكرة الدعم -->
     <div class="modal" id="ticketChatModal" role="dialog" aria-modal="true" aria-labelledby="ticketChatTitle">
-      <div class="modal-box" style="max-width: 720px; width: 95%;">
+      <div class="modal-box modal-box-chat">
         <div class="modal-header">
-          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-            <h2 id="ticketChatTitle" style="margin: 0; font-size: 1.25rem;">محادثة التذكرة</h2>
+          <div class="ticket-chat-header-info">
+            <h2 id="ticketChatTitle" class="ticket-chat-title">محادثة التذكرة</h2>
             <span id="ticketChatStatusBadge" class="ticket-status-badge status-open">مفتوحة</span>
           </div>
-          <button type="button" class="close-button" id="closeTicketChatModal" aria-label="إغلاق" data-i18n-aria="close">✕</button>
+          <div class="ticket-chat-header-actions">
+            <button type="button" class="button small-button admin-only is-hidden" id="chatEditTicketBtn" title="تعديل التذكرة">✏️ تعديل</button>
+            <button type="button" class="button small-button delete-button admin-only is-hidden" id="chatDeleteTicketBtn" title="حذف التذكرة">🗑️ حذف</button>
+            <button type="button" class="close-button" id="closeTicketChatModal" aria-label="إغلاق" data-i18n-aria="close">✕</button>
+          </div>
         </div>
 
-        <div id="ticketChatMeta" style="background: var(--surface-alt); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin: 15px 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 0.9rem;">
+        <div id="ticketChatMeta" class="ticket-chat-meta">
           <div id="ticketMetaInfo"></div>
-          <div id="ticketAdminStatusControl" class="admin-only is-hidden" style="display: flex; align-items: center; gap: 8px;">
-            <label for="ticketStatusSelect" style="font-weight: 600; margin: 0; font-size: 0.85rem;" data-i18n="ticket_status_label">الحالة:</label>
-            <select id="ticketStatusSelect" style="padding: 4px 8px; border-radius: 6px; font-size: 0.85rem;">
+          <div id="ticketAdminStatusControl" class="admin-only is-hidden ticket-status-control">
+            <label for="ticketStatusSelect" data-i18n="ticket_status_label">الحالة:</label>
+            <select id="ticketStatusSelect">
               <option value="open">مفتوحة</option>
               <option value="in_progress">قيد المعالجة</option>
               <option value="resolved">تم الحل</option>
@@ -1026,13 +1059,13 @@
           </div>
         </div>
 
-        <div id="ticketMessagesContainer" style="height: 340px; overflow-y: auto; padding: 15px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 14px;">
+        <div id="ticketMessagesContainer" class="ticket-messages-box">
           <!-- رسائل المحادثة ستُحقن هنا -->
         </div>
 
-        <form id="ticketReplyForm" style="display: flex; gap: 10px; align-items: flex-end;">
-          <textarea id="ticketReplyMessage" rows="2" required placeholder="اكتب ردك هنا..." style="flex: 1; resize: none; margin: 0;" data-i18n-placeholder="ticket_reply_placeholder"></textarea>
-          <button type="submit" class="button" id="sendTicketReplyBtn" style="white-space: nowrap; height: 42px;" data-i18n="send_reply">
+        <form id="ticketReplyForm" class="ticket-reply-form">
+          <textarea id="ticketReplyMessage" rows="2" required placeholder="اكتب ردك هنا..." data-i18n-placeholder="ticket_reply_placeholder"></textarea>
+          <button type="submit" class="button" id="sendTicketReplyBtn" data-i18n="send_reply">
             إرسال الرد
           </button>
         </form>
@@ -1090,7 +1123,7 @@
 
     <script src="./js/theme.js"></script>
     <script src="./js/api.js"></script>
-    <script src="./js/i18n.js?v=1.0.45"></script>
-    <script src="./js/script.js?v=1.0.45"></script>
+    <script src="./js/i18n.js?v=1.0.46"></script>
+    <script src="./js/script.js?v=1.0.46"></script>
   </body>
 </html>

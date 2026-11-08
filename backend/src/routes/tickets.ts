@@ -7,8 +7,10 @@ import { writeAudit, type AuditContext } from '../services/audit.js';
 import {
   addTicketMessage,
   createTicket,
+  deleteTicket,
   getTicketById,
   listTickets,
+  updateTicket,
   updateTicketStatus,
 } from '../services/tickets.js';
 
@@ -182,6 +184,85 @@ export function registerTicketRoutes(app: FastifyInstance, deps: TicketRoutesDep
       );
 
       return { success: true, status: body.status };
+    },
+  );
+
+  // تعديل تذكرة الدعم (عنوان أو حالة - للمدير فقط)
+  app.patch(
+    '/tickets/:id',
+    {
+      preHandler: guards.requireAdmin,
+      schema: {
+        body: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', minLength: 3, maxLength: 255 },
+            status: { type: 'string', enum: ['open', 'in_progress', 'resolved', 'closed'] },
+          },
+          additionalProperties: false,
+        },
+      },
+    },
+    async (request) => {
+      const { id } = request.params as { id: string };
+      if (!isUuid(id)) {
+        throw ApiError.badRequest('invalid_id', 'معرّف التذكرة غير صالح.');
+      }
+      const user = request.authUser!;
+      const body = request.body as { title?: string; status?: string };
+
+      if (!body.title && !body.status) {
+        throw ApiError.badRequest('empty_payload', 'يجب تحديد حقل واحد على الأقل للتعديل.');
+      }
+
+      const updated = await updateTicket(pool, id, body);
+
+      await writeAudit(
+        pool,
+        {
+          actorUserId: user.id,
+          actorUsername: user.username,
+          action: 'ticket.updated',
+          entityType: 'ticket',
+          entityId: id,
+          details: { title: updated.title, status: updated.status },
+        },
+        extractAuditContext(request),
+      );
+
+      return { success: true, ticket: updated };
+    },
+  );
+
+  // حذف تذكرة الدعم بالكامل ورسائلها (للمدير فقط)
+  app.delete(
+    '/tickets/:id',
+    {
+      preHandler: guards.requireAdmin,
+    },
+    async (request) => {
+      const { id } = request.params as { id: string };
+      if (!isUuid(id)) {
+        throw ApiError.badRequest('invalid_id', 'معرّف التذكرة غير صالح.');
+      }
+      const user = request.authUser!;
+
+      const deleted = await deleteTicket(pool, id);
+
+      await writeAudit(
+        pool,
+        {
+          actorUserId: user.id,
+          actorUsername: user.username,
+          action: 'ticket.deleted',
+          entityType: 'ticket',
+          entityId: id,
+          details: { title: deleted.title },
+        },
+        extractAuditContext(request),
+      );
+
+      return { success: true };
     },
   );
 }

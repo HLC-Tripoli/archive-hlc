@@ -131,7 +131,7 @@
   var LEGACY_DOCUMENTS_KEY = "hl_archive_data_v1";
   var LEGACY_DEPARTMENTS_KEY = "hl_archive_departments_v1";
 
-  var CURRENT_APP_VERSION = "1.0.45";
+  var CURRENT_APP_VERSION = "1.0.46";
 
   /* ========================================================================
      الحالة العامة
@@ -2788,20 +2788,37 @@
       renderEmpty(container, _t("no_tickets"));
       return;
     }
+    var admin = isAdmin();
     var rows = items
       .map(function (t, idx) {
+        var actions = [];
+        actions.push(
+          '<button type="button" class="button small-button view-ticket-btn" data-id="' + escapeHTML(t.id) + '">' +
+          escapeHTML(_t("view_chat")) +
+          '</button>'
+        );
+        if (admin) {
+          actions.push(
+            '<button type="button" class="button small-button edit-ticket-btn" data-id="' + escapeHTML(t.id) + '" title="' + escapeHTML(_t("edit")) + '">' +
+            '✏️ ' + escapeHTML(_t("edit")) +
+            '</button>'
+          );
+          actions.push(
+            '<button type="button" class="button small-button delete-button delete-ticket-btn" data-id="' + escapeHTML(t.id) + '" title="' + escapeHTML(_t("delete")) + '">' +
+            '🗑️ ' + escapeHTML(_t("delete")) +
+            '</button>'
+          );
+        }
         return (
           "<tr>" +
           "<td>#" + (idx + 1) + "</td>" +
           "<td><strong>" + escapeHTML(t.title) + "</strong></td>" +
-          "<td>" + escapeHTML(t.username || "—") + "</td>" +
+          "<td>" + escapeHTML(t.creatorName || t.username || "—") + "</td>" +
           "<td>" + escapeHTML(t.departmentName || "—") + "</td>" +
           "<td>" + getTicketStatusBadge(t.status) + "</td>" +
           "<td>" + escapeHTML(formatDateTime(t.createdAt)) + "</td>" +
           "<td>" +
-          '<button type="button" class="button small-button view-ticket-btn" data-id="' + escapeHTML(t.id) + '">' +
-          escapeHTML(_t("view_chat")) +
-          '</button>' +
+          '<div class="table-actions">' + actions.join(" ") + '</div>' +
           "</td>" +
           "</tr>"
         );
@@ -2831,6 +2848,72 @@
         if (id) openTicketChat(id);
       });
     });
+
+    container.querySelectorAll(".edit-ticket-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.dataset.id;
+        var ticket = items.find(function (it) { return it.id === id; });
+        if (ticket) openEditTicketModal(ticket);
+      });
+    });
+
+    container.querySelectorAll(".delete-ticket-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.dataset.id;
+        if (id) promptDeleteTicket(id);
+      });
+    });
+  }
+
+  function openEditTicketModal(ticket) {
+    if (!isAdmin()) return;
+    el("editTicketId").value = ticket.id;
+    el("editTicketTitle").value = ticket.title || "";
+    el("editTicketStatus").value = ticket.status || "open";
+    showFormError("editTicketError", "");
+    showModal("editTicketModal");
+  }
+
+  async function submitEditTicket(event) {
+    event.preventDefault();
+    if (!isAdmin()) return;
+    showFormError("editTicketError", "");
+    var id = el("editTicketId").value;
+    var title = el("editTicketTitle").value.trim();
+    var status = el("editTicketStatus").value;
+    if (!id || !title) return;
+    var btn = el("saveEditTicketBtn");
+    setBusy(btn, true, "جارٍ الحفظ…");
+    try {
+      await api.patch("/tickets/" + id, { title: title, status: status });
+      hideModal("editTicketModal");
+      toast(_t("ticket_updated_success"));
+      loadSupportTickets();
+      if (state.activeTicketId === id) {
+        openTicketChat(id);
+      }
+    } catch (err) {
+      showFormError("editTicketError", errorMessage(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  }
+
+  function promptDeleteTicket(ticketId, closeChatOnSuccess) {
+    if (!isAdmin()) return;
+    showConfirm(_t("delete_ticket_confirm"), async function () {
+      try {
+        await api.delete("/tickets/" + ticketId);
+        toast(_t("ticket_deleted_success"));
+        if (closeChatOnSuccess || state.activeTicketId === ticketId) {
+          hideModal("ticketChatModal");
+          state.activeTicketId = null;
+        }
+        loadSupportTickets();
+      } catch (err) {
+        toast(errorMessage(err), "error");
+      }
+    });
   }
 
   async function openTicketChat(ticketId) {
@@ -2849,6 +2932,22 @@
         if (isAdmin()) {
           el("ticketStatusSelect").value = ticket.status;
         }
+      }
+
+      var chatEditBtn = el("chatEditTicketBtn");
+      if (chatEditBtn) {
+        chatEditBtn.classList.toggle("is-hidden", !isAdmin());
+        chatEditBtn.onclick = function () {
+          openEditTicketModal(ticket);
+        };
+      }
+
+      var chatDeleteBtn = el("chatDeleteTicketBtn");
+      if (chatDeleteBtn) {
+        chatDeleteBtn.classList.toggle("is-hidden", !isAdmin());
+        chatDeleteBtn.onclick = function () {
+          promptDeleteTicket(ticket.id, true);
+        };
       }
 
       var meta = el("ticketMetaInfo");
@@ -3985,6 +4084,23 @@
     var createTicketForm = el("createTicketForm");
     if (createTicketForm) {
       createTicketForm.addEventListener("submit", submitCreateTicket);
+    }
+
+    var closeEditTicketBtn = el("closeEditTicketModal");
+    if (closeEditTicketBtn) {
+      closeEditTicketBtn.addEventListener("click", function () {
+        hideModal("editTicketModal");
+      });
+    }
+    var closeEditTicketBtn2 = el("closeEditTicketModalBtn");
+    if (closeEditTicketBtn2) {
+      closeEditTicketBtn2.addEventListener("click", function () {
+        hideModal("editTicketModal");
+      });
+    }
+    var editTicketForm = el("editTicketForm");
+    if (editTicketForm) {
+      editTicketForm.addEventListener("submit", submitEditTicket);
     }
 
     var closeChatBtn = el("closeTicketChatModal");
