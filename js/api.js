@@ -168,6 +168,9 @@
     del: function (path) {
       return request("DELETE", path);
     },
+    delete: function (path) {
+      return request("DELETE", path);
+    },
     download: async function (path, query) {
       var response = await request("GET", withQuery(path, query), {
         rawResponse: true

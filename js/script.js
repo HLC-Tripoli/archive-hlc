@@ -3720,7 +3720,7 @@
     try {
       var itemObj = state.notifications.find(function (n) { return n.id === id; });
       var wasUnread = itemObj && !itemObj.isRead;
-      await api.delete("/notifications/" + id);
+      await api.del("/notifications/" + id);
       state.notifications = state.notifications.filter(function (n) { return n.id !== id; });
       if (wasUnread && state.unreadNotificationsCount > 0) {
         state.unreadNotificationsCount--;
@@ -3743,7 +3743,7 @@
   async function clearAllNotificationsHandler() {
     if (!state.notifications || state.notifications.length === 0) return;
     try {
-      await api.delete("/notifications");
+      await api.del("/notifications");
       state.notifications = [];
       state.unreadNotificationsCount = 0;
       var badge = el("notificationsBadge");
