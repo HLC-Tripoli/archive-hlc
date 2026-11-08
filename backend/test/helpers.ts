@@ -132,7 +132,7 @@ export async function ensureMigrated(pool: Pool): Promise<void> {
 
 export async function resetDatabase(pool: Pool): Promise<void> {
   await pool.query(
-    'TRUNCATE audit_log, data_imports, document_files, documents, departments, sessions, users RESTART IDENTITY CASCADE',
+    'TRUNCATE audit_log, data_imports, document_files, documents, departments, sessions, users, system_settings, support_tickets, support_ticket_messages RESTART IDENTITY CASCADE',
   );
 }
 

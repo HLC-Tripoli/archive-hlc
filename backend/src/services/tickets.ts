@@ -1,0 +1,299 @@
+import type { Pool } from 'pg';
+import { ApiError } from '../lib/errors.js';
+
+export interface TicketSummary {
+  id: string;
+  title: string;
+  status: string;
+  userId: string;
+  creatorName: string;
+  departmentName: string | null;
+  messageCount: number;
+  lastMessageAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface TicketMessage {
+  id: string;
+  ticketId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: string;
+  message: string;
+  createdAt: Date;
+}
+
+export interface TicketDetails {
+  ticket: TicketSummary;
+  messages: TicketMessage[];
+}
+
+export async function listTickets(
+  pool: Pool,
+  options: { userId: string; isAdmin: boolean },
+): Promise<TicketSummary[]> {
+  const params: unknown[] = [];
+  let userCondition = '';
+  if (!options.isAdmin) {
+    params.push(options.userId);
+    userCondition = `WHERE t.user_id = $${params.length}`;
+  }
+
+  const { rows } = await pool.query<{
+    id: string;
+    title: string;
+    status: string;
+    user_id: string;
+    creator_name: string;
+    department_name: string | null;
+    message_count: string;
+    last_message_at: Date;
+    created_at: Date;
+    updated_at: Date;
+  }>(
+    `SELECT t.id,
+            t.title,
+            t.status,
+            t.user_id,
+            u.display_name AS creator_name,
+            d.name AS department_name,
+            COUNT(m.id)::int AS message_count,
+            COALESCE(MAX(m.created_at), t.created_at) AS last_message_at,
+            t.created_at,
+            t.updated_at
+       FROM support_tickets t
+       JOIN users u ON u.id = t.user_id
+  LEFT JOIN departments d ON d.id = t.department_id
+  LEFT JOIN support_ticket_messages m ON m.ticket_id = t.id
+      ${userCondition}
+   GROUP BY t.id, u.display_name, d.name
+   ORDER BY t.updated_at DESC`,
+    params,
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    status: r.status,
+    userId: r.user_id,
+    creatorName: r.creator_name,
+    departmentName: r.department_name,
+    messageCount: Number(r.message_count) || 0,
+    lastMessageAt: r.last_message_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+export async function createTicket(
+  pool: Pool,
+  input: {
+    userId: string;
+    departmentId: string | null;
+    title: string;
+    message: string;
+  },
+): Promise<string> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query<{ id: string }>(
+      `INSERT INTO support_tickets (user_id, department_id, title, status)
+       VALUES ($1, $2, $3, 'open')
+       RETURNING id`,
+      [input.userId, input.departmentId, input.title.trim()],
+    );
+    const ticketId = rows[0]!.id;
+
+    await client.query(
+      `INSERT INTO support_ticket_messages (ticket_id, sender_id, message)
+       VALUES ($1, $2, $3)`,
+      [ticketId, input.userId, input.message.trim()],
+    );
+
+    await client.query('COMMIT');
+    return ticketId;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getTicketById(
+  pool: Pool,
+  ticketId: string,
+  options: { userId: string; isAdmin: boolean },
+): Promise<TicketDetails> {
+  const { rows: ticketRows } = await pool.query<{
+    id: string;
+    title: string;
+    status: string;
+    user_id: string;
+    creator_name: string;
+    department_name: string | null;
+    created_at: Date;
+    updated_at: Date;
+  }>(
+    `SELECT t.id, t.title, t.status, t.user_id,
+            u.display_name AS creator_name,
+            d.name AS department_name,
+            t.created_at, t.updated_at
+       FROM support_tickets t
+       JOIN users u ON u.id = t.user_id
+  LEFT JOIN departments d ON d.id = t.department_id
+      WHERE t.id = $1`,
+    [ticketId],
+  );
+
+  const t = ticketRows[0];
+  if (!t) {
+    throw ApiError.notFound('تذكرة الدعم غير موجودة.');
+  }
+
+  if (!options.isAdmin && t.user_id !== options.userId) {
+    throw ApiError.forbidden('ليس لديك صلاحية الوصول إلى هذه التذكرة.');
+  }
+
+  const { rows: messageRows } = await pool.query<{
+    id: string;
+    ticket_id: string;
+    sender_id: string;
+    sender_name: string;
+    sender_role: string;
+    message: string;
+    created_at: Date;
+  }>(
+    `SELECT m.id, m.ticket_id, m.sender_id, m.message, m.created_at,
+            u.display_name AS sender_name,
+            u.role AS sender_role
+       FROM support_ticket_messages m
+       JOIN users u ON u.id = m.sender_id
+      WHERE m.ticket_id = $1
+      ORDER BY m.created_at ASC`,
+    [ticketId],
+  );
+
+  return {
+    ticket: {
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      userId: t.user_id,
+      creatorName: t.creator_name,
+      departmentName: t.department_name,
+      messageCount: messageRows.length,
+      lastMessageAt: messageRows[messageRows.length - 1]?.created_at || t.created_at,
+      createdAt: t.created_at,
+      updatedAt: t.updated_at,
+    },
+    messages: messageRows.map((m) => ({
+      id: m.id,
+      ticketId: m.ticket_id,
+      senderId: m.sender_id,
+      senderName: m.sender_name,
+      senderRole: m.sender_role,
+      message: m.message,
+      createdAt: m.created_at,
+    })),
+  };
+}
+
+export async function addTicketMessage(
+  pool: Pool,
+  ticketId: string,
+  input: {
+    senderId: string;
+    message: string;
+    isAdmin: boolean;
+  },
+): Promise<TicketMessage> {
+  const { rows: ticketRows } = await pool.query<{ user_id: string; status: string }>(
+    'SELECT user_id, status FROM support_tickets WHERE id = $1',
+    [ticketId],
+  );
+  const ticket = ticketRows[0];
+  if (!ticket) {
+    throw ApiError.notFound('تذكرة الدعم غير موجودة.');
+  }
+
+  if (!input.isAdmin && ticket.user_id !== input.senderId) {
+    throw ApiError.forbidden('ليس لديك صلاحية الرد على هذه التذكرة.');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query<{ id: string; created_at: Date }>(
+      `INSERT INTO support_ticket_messages (ticket_id, sender_id, message)
+       VALUES ($1, $2, $3)
+       RETURNING id, created_at`,
+      [ticketId, input.senderId, input.message.trim()],
+    );
+
+    // إذا كان الرد من موظف وكانت مغلقة، يُعاد فتحها؛ وإذا كان الرد من مدير وتذكرة مفتوحة، يمكن أن تصبح قيد المعالجة
+    const newStatus = input.isAdmin && ticket.status === 'open' ? 'in_progress' : ticket.status === 'closed' ? 'open' : ticket.status;
+
+    await client.query(
+      'UPDATE support_tickets SET updated_at = NOW(), status = $1 WHERE id = $2',
+      [newStatus, ticketId],
+    );
+
+    await client.query('COMMIT');
+
+    const { rows: senderRows } = await pool.query<{ display_name: string; role: string }>(
+      'SELECT display_name, role FROM users WHERE id = $1',
+      [input.senderId],
+    );
+
+    return {
+      id: rows[0]!.id,
+      ticketId,
+      senderId: input.senderId,
+      senderName: senderRows[0]?.display_name || '—',
+      senderRole: senderRows[0]?.role || 'employee',
+      message: input.message.trim(),
+      createdAt: rows[0]!.created_at,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function updateTicketStatus(
+  pool: Pool,
+  ticketId: string,
+  status: string,
+  options: { userId: string; isAdmin: boolean },
+): Promise<void> {
+  const validStatuses = ['open', 'in_progress', 'resolved', 'closed'];
+  if (!validStatuses.includes(status)) {
+    throw ApiError.badRequest('invalid_status', 'حالة التذكرة غير صالحة.');
+  }
+
+  const { rows: ticketRows } = await pool.query<{ user_id: string }>(
+    'SELECT user_id FROM support_tickets WHERE id = $1',
+    [ticketId],
+  );
+  const ticket = ticketRows[0];
+  if (!ticket) {
+    throw ApiError.notFound('تذكرة الدعم غير موجودة.');
+  }
+
+  // يمكن للموظف إغلاق تذكرته الخاصة فقط؛ المدير يمكنه تغيير أي حالة
+  if (!options.isAdmin) {
+    if (ticket.user_id !== options.userId || status !== 'closed') {
+      throw ApiError.forbidden('لا تملك صلاحية تعديل هذه الحالة.');
+    }
+  }
+
+  await pool.query(
+    'UPDATE support_tickets SET status = $1, updated_at = NOW() WHERE id = $2',
+    [status, ticketId],
+  );
+}

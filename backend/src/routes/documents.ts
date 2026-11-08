@@ -64,7 +64,7 @@ const LIST_QUERY_SCHEMA = {
     sort: {
       type: 'string',
       enum: ['date', 'createdAt', 'updatedAt', 'reference', 'sequenceNumber', 'title'],
-      default: 'date',
+      default: 'createdAt',
     },
     order: { type: 'string', enum: ['asc', 'desc'], default: 'desc' },
     page: { type: 'integer', minimum: 1, default: 1 },
