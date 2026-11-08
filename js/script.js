@@ -131,7 +131,7 @@
   var LEGACY_DOCUMENTS_KEY = "hl_archive_data_v1";
   var LEGACY_DEPARTMENTS_KEY = "hl_archive_departments_v1";
 
-  var CURRENT_APP_VERSION = "1.0.47";
+  var CURRENT_APP_VERSION = "1.0.48";
 
   /* ========================================================================
      الحالة العامة
@@ -142,6 +142,10 @@
     uploadMaxMb: 25,
     activeTicketId: null,
     tickets: [],
+    notifications: [],
+    unreadNotificationsCount: 0,
+    seenNotificationIds: new Set(),
+    hasFetchedNotificationsOnce: false,
     departments: [],
     userFormDepartments: [],
     fileTypes: [],
@@ -587,6 +591,7 @@
     loadActiveFileTypes();
     loadSystemSettings();
     checkForUpdates();
+    fetchNotifications();
   }
 
   /**
@@ -3512,10 +3517,298 @@
   }
 
   /* ========================================================================
+     نظام الإشعارات والتنبيهات (In-App & Browser Notifications)
+     ======================================================================== */
+  function formatRelativeTime(dateStr) {
+    if (!dateStr) return "";
+    var d = new Date(dateStr);
+    var now = new Date();
+    var diffMs = now - d;
+    var diffSec = Math.floor(diffMs / 1000);
+    var diffMin = Math.floor(diffSec / 60);
+    var diffHours = Math.floor(diffMin / 60);
+    var diffDays = Math.floor(diffHours / 24);
+
+    if (diffMin < 1) return _t("notification_just_now");
+    if (diffMin < 60) return _t("notification_minutes_ago").replace("{m}", diffMin);
+    if (diffHours < 24) return _t("notification_hours_ago").replace("{h}", diffHours);
+    return _t("notification_days_ago").replace("{d}", diffDays);
+  }
+
+  function getNotificationIcon(type) {
+    switch (type) {
+      case "ticket":
+        return "🎫";
+      case "document":
+        return "📄";
+      default:
+        return "🔔";
+    }
+  }
+
+  function sendBrowserNotification(title, body, link) {
+    if (!("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+    try {
+      var n = new Notification(title, {
+        body: body,
+        icon: "./img/logo.svg",
+        badge: "./img/logo.svg"
+      });
+      n.onclick = function () {
+        window.focus();
+        if (link) {
+          handleNotificationNavigation(link);
+        }
+        n.close();
+      };
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function handleNotificationNavigation(link) {
+    if (!link) return;
+    var dropdown = el("notificationsDropdown");
+    if (dropdown) dropdown.classList.add("is-hidden");
+
+    if (link.indexOf("#about") === 0) {
+      showPage("about");
+      var match = link.match(/ticket=([a-f0-9\-]+)/i);
+      if (match && match[1]) {
+        openTicketChat(match[1]);
+      }
+    } else if (link === "#incoming") {
+      showPage("incoming");
+    } else if (link === "#outgoing") {
+      showPage("outgoing");
+    } else if (link === "#archive") {
+      showPage("archive");
+    } else if (link.indexOf("#") === 0) {
+      var pageName = link.slice(1);
+      if (pageName) showPage(pageName);
+    }
+  }
+
+  async function fetchNotifications() {
+    if (!state.user) return;
+    try {
+      var res = await api.get("/notifications?limit=30");
+      if (!res || !Array.isArray(res.items)) return;
+
+      var newItems = res.items;
+      var unreadCount = typeof res.unreadCount === "number" ? res.unreadCount : 0;
+      state.unreadNotificationsCount = unreadCount;
+      state.notifications = newItems;
+
+      // Update Bell Badge
+      var badge = el("notificationsBadge");
+      if (badge) {
+        if (unreadCount > 0) {
+          badge.textContent = unreadCount > 99 ? "99+" : unreadCount;
+          badge.classList.remove("is-hidden");
+        } else {
+          badge.classList.add("is-hidden");
+        }
+      }
+
+      // Detect newly arrived unread notifications
+      if (state.hasFetchedNotificationsOnce) {
+        newItems.forEach(function (item) {
+          if (!item.isRead && !state.seenNotificationIds.has(item.id)) {
+            // Trigger native browser notification
+            sendBrowserNotification(item.title, item.body, item.link);
+            // Also show in-app toast
+            toast(item.title + ": " + item.body);
+          }
+        });
+      }
+      state.hasFetchedNotificationsOnce = true;
+
+      newItems.forEach(function (item) {
+        state.seenNotificationIds.add(item.id);
+      });
+
+      renderNotificationsDropdown();
+    } catch (e) {
+      /* ignore network poll errors */
+    }
+  }
+
+  function renderNotificationsDropdown() {
+    var listEl = el("notificationsList");
+    if (!listEl) return;
+
+    if (!state.notifications || state.notifications.length === 0) {
+      listEl.innerHTML = '<div class="notifications-empty">' + escapeHTML(_t("no_notifications")) + '</div>';
+      return;
+    }
+
+    var html = "";
+    state.notifications.forEach(function (item) {
+      var unreadClass = item.isRead ? "" : " unread";
+      var icon = getNotificationIcon(item.type);
+      var timeStr = formatRelativeTime(item.createdAt);
+      html +=
+        '<div class="notification-item' + unreadClass + '" data-id="' + escapeHTML(item.id) + '" data-link="' + escapeHTML(item.link || "") + '">' +
+        '  <span class="notification-icon" aria-hidden="true">' + icon + '</span>' +
+        '  <div class="notification-content">' +
+        '    <div class="notification-item-title">' + escapeHTML(item.title) + '</div>' +
+        '    <div class="notification-item-body">' + escapeHTML(item.body) + '</div>' +
+        '    <div class="notification-item-time">' + escapeHTML(timeStr) + '</div>' +
+        '  </div>' +
+        (!item.isRead ? '  <span class="notification-unread-dot" aria-hidden="true"></span>' : '') +
+        '</div>';
+    });
+
+    listEl.innerHTML = html;
+
+    // Attach click events
+    var itemEls = listEl.querySelectorAll(".notification-item");
+    itemEls.forEach(function (itemEl) {
+      itemEl.addEventListener("click", async function () {
+        var id = itemEl.getAttribute("data-id");
+        var link = itemEl.getAttribute("data-link");
+        if (id) {
+          try {
+            await api.patch("/notifications/" + id + "/read");
+            var itemObj = state.notifications.find(function (n) { return n.id === id; });
+            if (itemObj) itemObj.isRead = true;
+            if (state.unreadNotificationsCount > 0) {
+              state.unreadNotificationsCount--;
+              var badge = el("notificationsBadge");
+              if (badge) {
+                if (state.unreadNotificationsCount > 0) {
+                  badge.textContent = state.unreadNotificationsCount > 99 ? "99+" : state.unreadNotificationsCount;
+                  badge.classList.remove("is-hidden");
+                } else {
+                  badge.classList.add("is-hidden");
+                }
+              }
+            }
+            itemEl.classList.remove("unread");
+            var dot = itemEl.querySelector(".notification-unread-dot");
+            if (dot) dot.remove();
+          } catch (e) {
+            /* ignore */
+          }
+        }
+        if (link) {
+          handleNotificationNavigation(link);
+        }
+      });
+    });
+  }
+
+  async function markAllNotificationsReadHandler() {
+    try {
+      await api.post("/notifications/read-all");
+      state.unreadNotificationsCount = 0;
+      state.notifications.forEach(function (item) {
+        item.isRead = true;
+      });
+      var badge = el("notificationsBadge");
+      if (badge) badge.classList.add("is-hidden");
+      renderNotificationsDropdown();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
+
+  function initNotificationSystem() {
+    var bellBtn = el("notificationsBellBtn");
+    var dropdown = el("notificationsDropdown");
+    var markAllBtn = el("markAllNotificationsReadBtn");
+    var enableBrowserBtn = el("enableBrowserNotifBtn");
+    var browserBanner = el("browserNotifBanner");
+
+    if (bellBtn && dropdown) {
+      bellBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var isHidden = dropdown.classList.contains("is-hidden");
+        if (isHidden) {
+          dropdown.classList.remove("is-hidden");
+          bellBtn.setAttribute("aria-expanded", "true");
+        } else {
+          dropdown.classList.add("is-hidden");
+          bellBtn.setAttribute("aria-expanded", "false");
+        }
+      });
+
+      document.addEventListener("click", function (e) {
+        if (!dropdown.classList.contains("is-hidden")) {
+          var wrap = el("notificationsWrap");
+          if (wrap && !wrap.contains(e.target)) {
+            dropdown.classList.add("is-hidden");
+            bellBtn.setAttribute("aria-expanded", "false");
+          }
+        }
+      });
+
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && !dropdown.classList.contains("is-hidden")) {
+          dropdown.classList.add("is-hidden");
+          bellBtn.setAttribute("aria-expanded", "false");
+        }
+      });
+    }
+
+    if (markAllBtn) {
+      markAllBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        markAllNotificationsReadHandler();
+      });
+    }
+
+    // Check browser notification permission banner
+    if (browserBanner && enableBrowserBtn) {
+      if ("Notification" in window) {
+        if (Notification.permission === "default") {
+          browserBanner.classList.remove("is-hidden");
+        } else {
+          browserBanner.classList.add("is-hidden");
+        }
+
+        enableBrowserBtn.addEventListener("click", async function (e) {
+          e.stopPropagation();
+          try {
+            var perm = await Notification.requestPermission();
+            if (perm === "granted") {
+              browserBanner.classList.add("is-hidden");
+              toast(_t("notifications_enabled_toast"));
+              sendBrowserNotification(
+                _t("notifications_title"),
+                _t("notifications_enabled_toast")
+              );
+            } else if (perm === "denied") {
+              browserBanner.classList.add("is-hidden");
+              toast(_t("browser_notifications_denied"), "error");
+            }
+          } catch (err) {
+            /* ignore */
+          }
+        });
+      } else {
+        browserBanner.classList.add("is-hidden");
+      }
+    }
+
+    // Polling setup: every 25 seconds
+    setInterval(fetchNotifications, 25000);
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) fetchNotifications();
+    });
+    window.addEventListener("focus", function () {
+      fetchNotifications();
+    });
+  }
+
+  /* ========================================================================
      الربط بالأحداث
      ======================================================================== */
   function bindEvents() {
     initDateControls();
+    initNotificationSystem();
     el("loginForm").addEventListener("submit", doLogin);
     el("logoutButton").addEventListener("click", doLogout);
 

@@ -9,6 +9,7 @@ import { isUuid } from '../lib/validation.js';
 import type { AuthGuards } from '../plugins/auth.js';
 import { writeAudit, type AuditContext } from '../services/audit.js';
 import { getDepartmentById } from '../services/departments.js';
+import { notifyDepartmentUsers } from '../services/notifications.js';
 import {
   DOCUMENT_STATUSES,
   DOCUMENT_TYPES,
@@ -262,6 +263,30 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
         );
         return createdId;
       });
+
+      try {
+        const typeLabels: Record<string, string> = {
+          incoming: 'معاملة واردة',
+          outgoing: 'معاملة صادرة',
+          other: 'مراسلة أخرى',
+          minutes: 'محضر اجتماع',
+          proposal: 'عرض حال / مقترح',
+          report: 'تقرير',
+          other_attachments: 'مرفق محفوظ',
+        };
+        const docTypeLabel = typeLabels[body.type] || 'معاملة جديدة';
+        const effectiveDeptId = access.isAdmin ? (body.departmentId ?? null) : access.departmentId;
+        await notifyDepartmentUsers(pool, effectiveDeptId, {
+          actorUserId: userId,
+          title: 'تسجيل معاملة جديدة',
+          body: `تم تسجيل ${docTypeLabel}: "${title || reference || 'معاملة جديدة'}"${reference ? ` (إشاري: ${reference})` : ''}`,
+          type: 'document',
+          link: body.type === 'incoming' ? '#incoming' : body.type === 'outgoing' ? '#outgoing' : '#archive',
+          metadata: { documentId: id, reference, type: body.type },
+        });
+      } catch {
+        /* ignore notification errors */
+      }
 
       const document = await getDocumentById(pool, id, access);
       reply.code(201);
