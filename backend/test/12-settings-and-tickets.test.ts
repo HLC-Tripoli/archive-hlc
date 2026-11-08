@@ -141,10 +141,10 @@ test('Support tickets workflow: create, list, chat message, status update', asyn
   const updatedTicket = statusRes.json() as { status: string };
   assert.equal(updatedTicket.status, 'resolved');
 
-  // Employee cannot update status
+  // Employee cannot change status to in_progress (only admin can)
   const empStatus = await apiRequest(context.app, employeeClient, 'PATCH', `/tickets/${created.id}/status`, {
     payload: {
-      status: 'closed',
+      status: 'in_progress',
     },
   });
   assert.equal(empStatus.statusCode, 403);
