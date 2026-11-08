@@ -135,7 +135,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   app.addHook('onSend', async (_request, reply) => {
-    reply.header('X-App-Version', '1.0.49');
+    reply.header('X-App-Version', '1.0.50');
   });
 
   const guards = buildAuthGuards({ pool, config });
@@ -182,7 +182,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   await app.register(
     async (instance) => {
-      instance.get('/version', async () => ({ version: '1.0.49' }));
+      instance.get('/version', async () => ({ version: '1.0.50' }));
       registerHealthRoutes(instance, { pool, storage });
       registerAuthRoutes(instance, { pool, config, guards });
       registerUserRoutes(instance, { pool, config, guards });

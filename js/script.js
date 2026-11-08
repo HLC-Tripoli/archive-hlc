@@ -131,7 +131,7 @@
   var LEGACY_DOCUMENTS_KEY = "hl_archive_data_v1";
   var LEGACY_DEPARTMENTS_KEY = "hl_archive_departments_v1";
 
-  var CURRENT_APP_VERSION = "1.0.49";
+  var CURRENT_APP_VERSION = "1.0.50";
 
   /* ========================================================================
      الحالة العامة
@@ -3657,16 +3657,32 @@
         '    <div class="notification-item-body">' + escapeHTML(item.body) + '</div>' +
         '    <div class="notification-item-time">' + escapeHTML(timeStr) + '</div>' +
         '  </div>' +
-        (!item.isRead ? '  <span class="notification-unread-dot" aria-hidden="true"></span>' : '') +
+        '  <div class="notification-item-actions">' +
+        (!item.isRead ? '    <span class="notification-unread-dot" aria-hidden="true"></span>' : '') +
+        '    <button type="button" class="notification-delete-btn" data-id="' + escapeHTML(item.id) + '" title="' + escapeHTML(_t("delete_notification")) + '" aria-label="' + escapeHTML(_t("delete_notification")) + '">✕</button>' +
+        '  </div>' +
         '</div>';
     });
 
     listEl.innerHTML = html;
 
+    // Attach delete button events
+    var deleteBtns = listEl.querySelectorAll(".notification-delete-btn");
+    deleteBtns.forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var id = btn.getAttribute("data-id");
+        if (id) {
+          deleteNotificationItem(id);
+        }
+      });
+    });
+
     // Attach click events
     var itemEls = listEl.querySelectorAll(".notification-item");
     itemEls.forEach(function (itemEl) {
-      itemEl.addEventListener("click", async function () {
+      itemEl.addEventListener("click", async function (e) {
+        if (e.target.closest(".notification-delete-btn")) return;
         var id = itemEl.getAttribute("data-id");
         var link = itemEl.getAttribute("data-link");
         if (id) {
@@ -3689,7 +3705,7 @@
             itemEl.classList.remove("unread");
             var dot = itemEl.querySelector(".notification-unread-dot");
             if (dot) dot.remove();
-          } catch (e) {
+          } catch (err) {
             /* ignore */
           }
         }
@@ -3698,6 +3714,44 @@
         }
       });
     });
+  }
+
+  async function deleteNotificationItem(id) {
+    try {
+      var itemObj = state.notifications.find(function (n) { return n.id === id; });
+      var wasUnread = itemObj && !itemObj.isRead;
+      await api.delete("/notifications/" + id);
+      state.notifications = state.notifications.filter(function (n) { return n.id !== id; });
+      if (wasUnread && state.unreadNotificationsCount > 0) {
+        state.unreadNotificationsCount--;
+        var badge = el("notificationsBadge");
+        if (badge) {
+          if (state.unreadNotificationsCount > 0) {
+            badge.textContent = state.unreadNotificationsCount > 99 ? "99+" : state.unreadNotificationsCount;
+            badge.classList.remove("is-hidden");
+          } else {
+            badge.classList.add("is-hidden");
+          }
+        }
+      }
+      renderNotificationsDropdown();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
+
+  async function clearAllNotificationsHandler() {
+    if (!state.notifications || state.notifications.length === 0) return;
+    try {
+      await api.delete("/notifications");
+      state.notifications = [];
+      state.unreadNotificationsCount = 0;
+      var badge = el("notificationsBadge");
+      if (badge) badge.classList.add("is-hidden");
+      renderNotificationsDropdown();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
   }
 
   async function markAllNotificationsReadHandler() {
@@ -3719,6 +3773,7 @@
     var bellBtn = el("notificationsBellBtn");
     var dropdown = el("notificationsDropdown");
     var markAllBtn = el("markAllNotificationsReadBtn");
+    var clearAllBtn = el("clearAllNotificationsBtn");
     var enableBrowserBtn = el("enableBrowserNotifBtn");
     var browserBanner = el("browserNotifBanner");
 
@@ -3757,6 +3812,13 @@
       markAllBtn.addEventListener("click", function (e) {
         e.stopPropagation();
         markAllNotificationsReadHandler();
+      });
+    }
+
+    if (clearAllBtn) {
+      clearAllBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        clearAllNotificationsHandler();
       });
     }
 

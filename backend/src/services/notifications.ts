@@ -203,3 +203,26 @@ export async function markAllNotificationsRead(
   );
   return res.rowCount ?? 0;
 }
+
+export async function deleteNotification(
+  pool: Pool,
+  userId: string,
+  notificationId: string,
+): Promise<boolean> {
+  const res = await pool.query(
+    `DELETE FROM notifications WHERE id = $1 AND user_id = $2`,
+    [notificationId, userId],
+  );
+  return (res.rowCount ?? 0) > 0;
+}
+
+export async function clearAllNotifications(
+  pool: Pool,
+  userId: string,
+): Promise<number> {
+  const res = await pool.query(
+    `DELETE FROM notifications WHERE user_id = $1`,
+    [userId],
+  );
+  return res.rowCount ?? 0;
+}
