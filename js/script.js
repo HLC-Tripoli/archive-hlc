@@ -2867,11 +2867,20 @@
 
   function openEditTicketModal(ticket) {
     if (!isAdmin()) return;
+    state.editingTicketChatOpen = (state.activeTicketId === ticket.id);
+    hideModal("ticketChatModal");
     el("editTicketId").value = ticket.id;
     el("editTicketTitle").value = ticket.title || "";
     el("editTicketStatus").value = ticket.status || "open";
     showFormError("editTicketError", "");
     showModal("editTicketModal");
+  }
+
+  function closeEditTicketModalHandler() {
+    hideModal("editTicketModal");
+    if (state.editingTicketChatOpen && state.activeTicketId) {
+      showModal("ticketChatModal");
+    }
   }
 
   async function submitEditTicket(event) {
@@ -2889,7 +2898,7 @@
       hideModal("editTicketModal");
       toast(_t("ticket_updated_success"));
       loadSupportTickets();
-      if (state.activeTicketId === id) {
+      if (state.editingTicketChatOpen && state.activeTicketId === id) {
         openTicketChat(id);
       }
     } catch (err) {
@@ -2899,21 +2908,21 @@
     }
   }
 
-  function promptDeleteTicket(ticketId, closeChatOnSuccess) {
+  async function promptDeleteTicket(ticketId, closeChatOnSuccess) {
     if (!isAdmin()) return;
-    showConfirm(_t("delete_ticket_confirm"), async function () {
-      try {
-        await api.delete("/tickets/" + ticketId);
-        toast(_t("ticket_deleted_success"));
-        if (closeChatOnSuccess || state.activeTicketId === ticketId) {
-          hideModal("ticketChatModal");
-          state.activeTicketId = null;
-        }
-        loadSupportTickets();
-      } catch (err) {
-        toast(errorMessage(err), "error");
+    var confirmed = await confirmDialog(_t("delete_ticket_confirm"));
+    if (!confirmed) return;
+    try {
+      await api.del("/tickets/" + ticketId);
+      toast(_t("ticket_deleted_success"));
+      if (closeChatOnSuccess || state.activeTicketId === ticketId) {
+        hideModal("ticketChatModal");
+        state.activeTicketId = null;
       }
-    });
+      loadSupportTickets();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
   }
 
   async function openTicketChat(ticketId) {
@@ -4088,15 +4097,11 @@
 
     var closeEditTicketBtn = el("closeEditTicketModal");
     if (closeEditTicketBtn) {
-      closeEditTicketBtn.addEventListener("click", function () {
-        hideModal("editTicketModal");
-      });
+      closeEditTicketBtn.addEventListener("click", closeEditTicketModalHandler);
     }
     var closeEditTicketBtn2 = el("closeEditTicketModalBtn");
     if (closeEditTicketBtn2) {
-      closeEditTicketBtn2.addEventListener("click", function () {
-        hideModal("editTicketModal");
-      });
+      closeEditTicketBtn2.addEventListener("click", closeEditTicketModalHandler);
     }
     var editTicketForm = el("editTicketForm");
     if (editTicketForm) {
