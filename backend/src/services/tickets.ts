@@ -297,3 +297,53 @@ export async function updateTicketStatus(
     [status, ticketId],
   );
 }
+
+export async function deleteTicket(pool: Pool, ticketId: string): Promise<{ title: string }> {
+  const { rows } = await pool.query<{ title: string }>(
+    'DELETE FROM support_tickets WHERE id = $1 RETURNING title',
+    [ticketId],
+  );
+  if (!rows[0]) {
+    throw ApiError.notFound('تذكرة الدعم غير موجودة.');
+  }
+  return rows[0];
+}
+
+export async function updateTicket(
+  pool: Pool,
+  ticketId: string,
+  input: { title?: string; status?: string },
+): Promise<{ id: string; title: string; status: string }> {
+  const sets: string[] = ['updated_at = NOW()'];
+  const params: unknown[] = [];
+
+  if (input.title !== undefined) {
+    const trimmed = input.title.trim();
+    if (trimmed.length < 3 || trimmed.length > 255) {
+      throw ApiError.badRequest('invalid_title', 'عنوان التذكرة يجب أن يكون بين 3 و 255 حرفاً.');
+    }
+    params.push(trimmed);
+    sets.push(`title = $${params.length}`);
+  }
+
+  if (input.status !== undefined) {
+    const validStatuses = ['open', 'in_progress', 'resolved', 'closed'];
+    if (!validStatuses.includes(input.status)) {
+      throw ApiError.badRequest('invalid_status', 'حالة التذكرة غير صالحة.');
+    }
+    params.push(input.status);
+    sets.push(`status = $${params.length}`);
+  }
+
+  params.push(ticketId);
+  const { rows } = await pool.query<{ id: string; title: string; status: string }>(
+    `UPDATE support_tickets SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING id, title, status`,
+    params,
+  );
+
+  if (!rows[0]) {
+    throw ApiError.notFound('تذكرة الدعم غير موجودة.');
+  }
+  return rows[0];
+}
+

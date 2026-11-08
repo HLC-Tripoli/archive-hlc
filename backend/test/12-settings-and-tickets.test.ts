@@ -42,8 +42,8 @@ test('GET /version returns current application version and header', async () => 
   const res = await apiRequest(context.app, employeeClient, 'GET', '/version');
   assert.equal(res.statusCode, 200);
   const body = res.json() as { version: string };
-  assert.equal(body.version, '1.0.45');
-  assert.equal(res.headers['x-app-version'], '1.0.45');
+  assert.equal(body.version, '1.0.46');
+  assert.equal(res.headers['x-app-version'], '1.0.46');
 });
 
 test('GET /settings returns default uploadMaxMb', async () => {
@@ -148,4 +148,31 @@ test('Support tickets workflow: create, list, chat message, status update', asyn
     },
   });
   assert.equal(empStatus.statusCode, 403);
+
+  // 6. Employee cannot edit ticket via PATCH /tickets/:id
+  const empEdit = await apiRequest(context.app, employeeClient, 'PATCH', `/tickets/${created.id}`, {
+    payload: { title: 'عنوان معدل من موظف' },
+  });
+  assert.equal(empEdit.statusCode, 403);
+
+  // 7. Admin edits ticket via PATCH /tickets/:id
+  const adminEdit = await apiRequest(context.app, adminClient, 'PATCH', `/tickets/${created.id}`, {
+    payload: { title: 'عنوان معدل من المدير', status: 'closed' },
+  });
+  assert.equal(adminEdit.statusCode, 200);
+  const editBody = adminEdit.json() as { ticket: { title: string; status: string } };
+  assert.equal(editBody.ticket.title, 'عنوان معدل من المدير');
+  assert.equal(editBody.ticket.status, 'closed');
+
+  // 8. Employee cannot delete ticket
+  const empDel = await apiRequest(context.app, employeeClient, 'DELETE', `/tickets/${created.id}`);
+  assert.equal(empDel.statusCode, 403);
+
+  // 9. Admin deletes ticket
+  const adminDel = await apiRequest(context.app, adminClient, 'DELETE', `/tickets/${created.id}`);
+  assert.equal(adminDel.statusCode, 200);
+
+  // 10. Verify ticket is gone
+  const verifyGone = await apiRequest(context.app, adminClient, 'GET', `/tickets/${created.id}`);
+  assert.equal(verifyGone.statusCode, 404);
 });
