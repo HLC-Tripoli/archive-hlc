@@ -61,6 +61,7 @@ test('schema is created from scratch, applied once, and migrations are idempoten
     '0009_attachment_permissions.sql',
     '0010_share_permission.sql',
     '0011_system_settings_and_support_tickets.sql',
+    '0012_notifications.sql',
   ]);
 
   const { rows } = await pool.query<{ table_name: string }>(
@@ -81,6 +82,7 @@ test('schema is created from scratch, applied once, and migrations are idempoten
     'system_settings',
     'support_tickets',
     'support_ticket_messages',
+    'notifications',
   ]) {
     assert.ok(tableNames.includes(expected), `missing table: ${expected}`);
   }
@@ -150,6 +152,7 @@ test('schema is created from scratch, applied once, and migrations are idempoten
     '0009_attachment_permissions.sql',
     '0010_share_permission.sql',
     '0011_system_settings_and_support_tickets.sql',
+    '0012_notifications.sql',
   ]);
 });
 
@@ -184,6 +187,7 @@ test('employee-number migration preserves existing users and leaves their number
       '0009_attachment_permissions.sql',
       '0010_share_permission.sql',
       '0011_system_settings_and_support_tickets.sql',
+      '0012_notifications.sql',
     ]);
 
     const preserved = await pool.query<{
@@ -280,6 +284,7 @@ test('department migration preserves existing departments, users, documents, and
       '0009_attachment_permissions.sql',
       '0010_share_permission.sql',
       '0011_system_settings_and_support_tickets.sql',
+      '0012_notifications.sql',
     ]);
 
     const preserved = await pool.query<{
@@ -375,6 +380,7 @@ test('sequence-number migration preserves existing documents and files and leave
       '0009_attachment_permissions.sql',
       '0010_share_permission.sql',
       '0011_system_settings_and_support_tickets.sql',
+      '0012_notifications.sql',
     ]);
 
     const preserved = await pool.query<{

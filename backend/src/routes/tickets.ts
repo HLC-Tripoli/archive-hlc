@@ -5,6 +5,10 @@ import { isUuid } from '../lib/validation.js';
 import type { AuthGuards } from '../plugins/auth.js';
 import { writeAudit, type AuditContext } from '../services/audit.js';
 import {
+  createNotification,
+  notifyAdmins,
+} from '../services/notifications.js';
+import {
   addTicketMessage,
   createTicket,
   deleteTicket,
@@ -84,6 +88,19 @@ export function registerTicketRoutes(app: FastifyInstance, deps: TicketRoutesDep
         extractAuditContext(request),
       );
 
+      try {
+        await notifyAdmins(pool, {
+          actorUserId: user.id,
+          title: 'تذكرة دعم جديدة',
+          body: `قام ${user.displayName || user.username} بفتح تذكرة: ${body.title.trim()}`,
+          type: 'ticket',
+          link: `#about?ticket=${ticketId}`,
+          metadata: { ticketId, action: 'created' },
+        });
+      } catch {
+        /* ignore notification errors */
+      }
+
       reply.code(201);
       return { id: ticketId, title: body.title.trim(), status: 'open' };
     },
@@ -136,6 +153,38 @@ export function registerTicketRoutes(app: FastifyInstance, deps: TicketRoutesDep
         isAdmin: user.role === 'admin',
       });
 
+      try {
+        const details = await getTicketById(pool, id, {
+          userId: user.id,
+          isAdmin: true,
+        });
+        const snippet = body.message.trim().slice(0, 100);
+        if (user.role === 'admin') {
+          if (details.ticket.userId !== user.id) {
+            await createNotification(pool, {
+              userId: details.ticket.userId,
+              actorUserId: user.id,
+              title: 'رد جديد على تذكرة الدعم',
+              body: `${user.displayName || user.username}: ${snippet}`,
+              type: 'ticket',
+              link: `#about?ticket=${id}`,
+              metadata: { ticketId: id, action: 'replied' },
+            });
+          }
+        } else {
+          await notifyAdmins(pool, {
+            actorUserId: user.id,
+            title: 'رد جديد على تذكرة الدعم',
+            body: `${user.displayName || user.username}: ${snippet}`,
+            type: 'ticket',
+            link: `#about?ticket=${id}`,
+            metadata: { ticketId: id, action: 'replied' },
+          });
+        }
+      } catch {
+        /* ignore notification errors */
+      }
+
       reply.code(201);
       return { message: msg };
     },
@@ -169,6 +218,32 @@ export function registerTicketRoutes(app: FastifyInstance, deps: TicketRoutesDep
         userId: user.id,
         isAdmin: user.role === 'admin',
       });
+
+      try {
+        const details = await getTicketById(pool, id, {
+          userId: user.id,
+          isAdmin: true,
+        });
+        const statusMap: Record<string, string> = {
+          open: 'مفتوحة',
+          in_progress: 'قيد المعالجة',
+          resolved: 'تم الحل',
+          closed: 'مغلقة',
+        };
+        if (details.ticket.userId !== user.id) {
+          await createNotification(pool, {
+            userId: details.ticket.userId,
+            actorUserId: user.id,
+            title: 'تحديث حالة تذكرة الدعم',
+            body: `تم تحديث حالة تذكرتك "${details.ticket.title}" إلى: ${statusMap[body.status] || body.status}`,
+            type: 'ticket',
+            link: `#about?ticket=${id}`,
+            metadata: { ticketId: id, action: 'status_updated', status: body.status },
+          });
+        }
+      } catch {
+        /* ignore notification errors */
+      }
 
       await writeAudit(
         pool,

@@ -15,6 +15,7 @@ import { registerFileRoutes } from './routes/files.js';
 import { registerFileTypeRoutes } from './routes/fileTypes.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerImportRoutes } from './routes/imports.js';
+import { registerNotificationRoutes } from './routes/notifications.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerStatsRoutes } from './routes/stats.js';
 import { registerTicketRoutes } from './routes/tickets.js';
@@ -134,7 +135,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   app.addHook('onSend', async (_request, reply) => {
-    reply.header('X-App-Version', '1.0.47');
+    reply.header('X-App-Version', '1.0.48');
   });
 
   const guards = buildAuthGuards({ pool, config });
@@ -181,7 +182,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   await app.register(
     async (instance) => {
-      instance.get('/version', async () => ({ version: '1.0.47' }));
+      instance.get('/version', async () => ({ version: '1.0.48' }));
       registerHealthRoutes(instance, { pool, storage });
       registerAuthRoutes(instance, { pool, config, guards });
       registerUserRoutes(instance, { pool, config, guards });
@@ -191,6 +192,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       registerFileTypeRoutes(instance, { pool, guards });
       registerSettingsRoutes(instance, { pool, guards, defaultUploadMaxMb: config.uploadMaxMb });
       registerTicketRoutes(instance, { pool, guards });
+      registerNotificationRoutes(instance, { pool, guards });
       registerStatsRoutes(instance, { pool, guards });
       registerAuditRoutes(instance, { pool, guards });
       registerImportRoutes(instance, { pool, config, guards });

@@ -6,7 +6,7 @@
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
     <script src="./js/theme-pre.js"></script>
-    <link rel="stylesheet" href="./css/style.css?v=1.0.47" />
+    <link rel="stylesheet" href="./css/style.css?v=1.0.48" />
     <link rel="icon" href="./img/logo.svg" />
     <meta name="referrer" content="same-origin" />
   </head>
@@ -112,6 +112,38 @@
               EN
             </button>
             <div class="theme-toggle-slot" data-theme-toggle></div>
+            <div class="notifications-wrap" id="notificationsWrap">
+              <button
+                type="button"
+                id="notificationsBellBtn"
+                class="notifications-bell-btn"
+                title="الإشعارات"
+                aria-label="الإشعارات"
+                aria-haspopup="true"
+                aria-expanded="false"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                </svg>
+                <span id="notificationsBadge" class="notifications-badge is-hidden">0</span>
+              </button>
+              <div id="notificationsDropdown" class="notifications-dropdown is-hidden" role="menu" aria-label="قائمة الإشعارات">
+                <div class="notifications-dropdown-header">
+                  <div class="notifications-header-title-row">
+                    <span class="notifications-header-title" data-i18n="notifications_title">الإشعارات</span>
+                    <button type="button" id="markAllNotificationsReadBtn" class="link-btn notifications-mark-all" data-i18n="mark_all_read">تحديد الكل كمقروء</button>
+                  </div>
+                  <div id="browserNotifBanner" class="browser-notif-banner is-hidden">
+                    <span data-i18n="enable_browser_notifications">تفعيل إشعارات المتصفح؟</span>
+                    <button type="button" id="enableBrowserNotifBtn" class="button small-button" data-i18n="enable_btn">تفعيل</button>
+                  </div>
+                </div>
+                <div id="notificationsList" class="notifications-list" role="list">
+                  <div class="notifications-empty" data-i18n="no_notifications">لا توجد إشعارات جديدة</div>
+                </div>
+              </div>
+            </div>
             <div class="user-badge">
               <span class="avatar" id="userAvatar">؟</span>
               <div class="user-meta">
@@ -1123,7 +1155,7 @@
 
     <script src="./js/theme.js"></script>
     <script src="./js/api.js"></script>
-    <script src="./js/i18n.js?v=1.0.47"></script>
-    <script src="./js/script.js?v=1.0.47"></script>
+    <script src="./js/i18n.js?v=1.0.48"></script>
+    <script src="./js/script.js?v=1.0.48"></script>
   </body>
 </html>
