@@ -83,7 +83,7 @@ export function registerTicketRoutes(app: FastifyInstance, deps: TicketRoutesDep
       );
 
       reply.code(201);
-      return { id: ticketId };
+      return { id: ticketId, title: body.title.trim(), status: 'open' };
     },
   );
 

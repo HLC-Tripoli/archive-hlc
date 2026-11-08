@@ -89,7 +89,15 @@ test('Support tickets workflow: create, list, chat message, status update', asyn
     },
   });
   assert.equal(createRes.statusCode, 201);
-  const ticket = createRes.json() as { id: string; title: string; status: string; messages: any[] };
+  const created = createRes.json() as { id: string; title: string; status: string };
+  assert.ok(created.id);
+  assert.equal(created.title, 'مشكلة في تحميل المرفقات');
+  assert.equal(created.status, 'open');
+
+  // Verify details
+  const getCreated = await apiRequest(context.app, employeeClient, 'GET', `/tickets/${created.id}`);
+  assert.equal(getCreated.statusCode, 200);
+  const ticket = getCreated.json() as { id: string; title: string; status: string; messages: any[] };
   assert.equal(ticket.title, 'مشكلة في تحميل المرفقات');
   assert.equal(ticket.status, 'open');
   assert.equal(ticket.messages.length, 1);
