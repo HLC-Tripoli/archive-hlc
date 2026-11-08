@@ -109,9 +109,13 @@
     "user.created": "إنشاء مستخدم",
     "user.updated": "تعديل مستخدم",
     "user.password_reset": "إعادة تعيين كلمة مرور",
-    "department.created": "إضافة إدارة",
-    "department.updated": "تعديل إدارة",
-    "department.deleted": "حذف إدارة",
+    "department.created": "إضافة إدارة أو قسم",
+    "department.updated": "تعديل إدارة أو قسم",
+    "department.deleted": "حذف إدارة أو قسم",
+    "setting.updated": "تعديل إعدادات المنظومة",
+    "ticket.created": "فتح تذكرة دعم فني",
+    "ticket.status_updated": "تحديث حالة تذكرة دعم",
+    "ticket.message_added": "رد على تذكرة دعم",
     "import.legacy": "ترحيل بيانات من المتصفح",
     "import.backup": "استيراد نسخة احتياطية"
   };
@@ -127,22 +131,27 @@
   var LEGACY_DOCUMENTS_KEY = "hl_archive_data_v1";
   var LEGACY_DEPARTMENTS_KEY = "hl_archive_departments_v1";
 
+  var CURRENT_APP_VERSION = "1.0.45";
+
   /* ========================================================================
      الحالة العامة
      ======================================================================== */
   var state = {
     user: null,
     currentPage: "dashboard",
+    uploadMaxMb: 25,
+    activeTicketId: null,
+    tickets: [],
     departments: [],
     userFormDepartments: [],
     fileTypes: [],
     activeExtensions: [],
     fileTypesFilter: { q: "", category: "" },
     views: {
-      dashboard: { page: 1, pageSize: 8, q: "", total: 0 },
-      incoming: { page: 1, pageSize: 10, q: "", total: 0 },
-      outgoing: { page: 1, pageSize: 10, q: "", total: 0 },
-      other: { page: 1, pageSize: 10, q: "", type: "", total: 0 },
+      dashboard: { page: 1, pageSize: 8, q: "", sort: "createdAt", order: "desc", total: 0 },
+      incoming: { page: 1, pageSize: 10, q: "", sort: "createdAt", order: "desc", total: 0 },
+      outgoing: { page: 1, pageSize: 10, q: "", sort: "createdAt", order: "desc", total: 0 },
+      other: { page: 1, pageSize: 10, q: "", type: "", sort: "createdAt", order: "desc", total: 0 },
       other_attachments: {
         page: 1,
         pageSize: 10,
@@ -162,7 +171,7 @@
         departmentId: "",
         dateFrom: "",
         dateTo: "",
-        sort: "date",
+        sort: "createdAt",
         order: "desc",
         includeDeleted: false,
         total: 0
@@ -576,6 +585,8 @@
     applyRoleUI();
     showPage("dashboard");
     loadActiveFileTypes();
+    loadSystemSettings();
+    checkForUpdates();
   }
 
   /**
@@ -613,6 +624,8 @@
       applyRoleUI();
       showPage("dashboard");
       loadActiveFileTypes();
+      loadSystemSettings();
+      checkForUpdates();
       toast("مرحباً " + result.user.displayName + "، تم تسجيل الدخول.");
     } catch (error) {
       message.textContent = errorMessage(error);
@@ -1348,7 +1361,7 @@
     attachmentInput.disabled = !canAttachUpload;
     attachmentsSection.hidden = false;
     if (doc) {
-      attachmentHint.textContent = _t("doc_attachments_hint");
+      updateUploadHints();
       if (canAttachView) {
         await refreshAttachmentList(doc.id);
       } else {
@@ -1356,7 +1369,7 @@
       }
     } else {
       // وضع الإنشاء: يختار المستخدم الملفات الآن وتُرفع تلقائياً بعد حفظ المراسلة.
-      attachmentHint.textContent = _t("doc_attachments_hint");
+      updateUploadHints();
       renderEmpty(el("attachmentList"), _t("no_saved_attachments"));
     }
     renderPendingAttachments();
@@ -1619,10 +1632,16 @@
 
   function addPendingFiles(fileList) {
     var disabledTypesFound = [];
+    var oversizedFound = [];
+    var maxBytes = (state.uploadMaxMb || 25) * 1024 * 1024;
     Array.prototype.slice.call(fileList || []).forEach(function (file) {
       var ext = (file.name.split(".").pop() || "").toLowerCase();
       if (state.activeExtensions && state.activeExtensions.length && !state.activeExtensions.includes(ext)) {
         disabledTypesFound.push(ext);
+        return;
+      }
+      if (file.size > maxBytes) {
+        oversizedFound.push(file.name);
         return;
       }
       state.pendingCounter += 1;
@@ -1635,6 +1654,9 @@
     });
     if (disabledTypesFound.length) {
       toast(_t("file_type_disabled_alert", { ext: disabledTypesFound.join(", .") }), "error");
+    }
+    if (oversizedFound.length) {
+      toast("تجاوزت بعض الملفات الحد الأقصى المسموح به (" + (state.uploadMaxMb || 25) + " م.ب): " + oversizedFound.join(", "), "error");
     }
     // تصفير الحقل يسمح باختيار الملف نفسه مرة أخرى دون استبدال القائمة.
     el("attachmentInput").value = "";
@@ -2559,6 +2581,96 @@
     }
   }
 
+  function formatAuditDescription(entry) {
+    var act = entry.action || "";
+    var d = entry.details || {};
+
+    if (act === "auth.login.success") return "تسجيل دخول ناجح إلى النظام";
+    if (act === "auth.login.failed") return "محاولة تسجيل دخول فاشلة" + (d.identifier ? " باسم (" + d.identifier + ")" : "");
+    if (act === "auth.logout") return "تسجيل الخروج من النظام";
+    if (act === "auth.password.changed") return "تغيير كلمة المرور الخاصة بالحساب";
+
+    if (act === "document.created") {
+      var ref = d.reference ? "بالرقم الإشاري: " + d.reference : "";
+      var title = d.title ? " — " + d.title : "";
+      return "تسجيل معاملة جديدة " + ref + title;
+    }
+    if (act === "document.updated") {
+      var ref = d.reference ? " للرقم الإشاري: " + d.reference : "";
+      return "تعديل بيانات المعاملة" + ref;
+    }
+    if (act === "document.deleted") {
+      var ref = d.reference ? " للرقم الإشاري: " + d.reference : "";
+      return "حذف المعاملة" + ref;
+    }
+    if (act === "document.restored") {
+      var ref = d.reference ? " للرقم الإشاري: " + d.reference : "";
+      return "استعادة المعاملة المحذوفة" + ref;
+    }
+
+    if (act === "file.uploaded") {
+      return "رفع ملف مرفق جديد: " + (d.filename || d.originalName || "ملف");
+    }
+    if (act === "file.downloaded") {
+      return "تنزيل ملف مرفق: " + (d.filename || "ملف");
+    }
+    if (act === "file.viewed") {
+      return "عرض أو معاينة ملف مرفق: " + (d.filename || "ملف");
+    }
+    if (act === "file.deleted") {
+      return "حذف ملف مرفق: " + (d.filename || "ملف");
+    }
+
+    if (act === "user.created") {
+      return "إنشاء حساب مستخدم جديد: " + (d.username || d.name || "");
+    }
+    if (act === "user.updated") {
+      return "تعديل بيانات المستخدم: " + (d.username || d.name || "");
+    }
+    if (act === "user.password_reset") {
+      return "إعادة تعيين كلمة مرور المستخدم: " + (d.username || "");
+    }
+    if (act === "user.deleted") {
+      return "حذف حساب المستخدم: " + (d.username || "");
+    }
+
+    if (act === "department.created") {
+      return "إضافة إدارة أو قسم جديد: " + (d.name || "");
+    }
+    if (act === "department.updated") {
+      return "تعديل إدارة أو قسم: " + (d.name || "");
+    }
+    if (act === "department.deleted") {
+      return "حذف إدارة أو قسم: " + (d.name || "");
+    }
+
+    if (act === "setting.updated") {
+      if (d.uploadMaxMb) {
+        return "تعديل الحد الأقصى لحجم رفع الملفات إلى " + d.uploadMaxMb + " ميجابايت";
+      }
+      return "تعديل إعدادات النظام";
+    }
+
+    if (act === "ticket.created") {
+      return "فتح تذكرة دعم فني جديدة: " + (d.title || "");
+    }
+    if (act === "ticket.status_updated") {
+      return "تحديث حالة تذكرة الدعم إلى: " + (d.status || "");
+    }
+    if (act === "ticket.message_added") {
+      return "إضافة رد ومحادثة على تذكرة الدعم";
+    }
+
+    var fallback = getActionLabel(act);
+    var extra = [];
+    if (d.title) extra.push(d.title);
+    else if (d.name) extra.push(d.name);
+    else if (d.reference) extra.push(d.reference);
+    else if (d.filename) extra.push(d.filename);
+    if (extra.length) fallback += " (" + extra.join(" - ") + ")";
+    return fallback;
+  }
+
   function renderAuditTable(container, items) {
     if (!items.length) {
       renderEmpty(container, _t("no_audit"));
@@ -2566,35 +2678,21 @@
     }
     var rows = items
       .map(function (entry) {
-        var details = entry.details ? JSON.stringify(entry.details) : "—";
+        var actionText = formatAuditDescription(entry);
         return (
-          "<tr><td>" +
-          escapeHTML(formatDateTime(entry.createdAt)) +
-          "</td><td>" +
-          escapeHTML(entry.actorUsername || "—") +
-          "</td><td>" +
-          escapeHTML(getActionLabel(entry.action)) +
-          '</td><td dir="ltr">' +
-          escapeHTML(
-            (entry.entityType || "—") +
-              (entry.entityId ? " / " + truncate(entry.entityId, 8) : "")
-          ) +
-          '</td><td dir="ltr" title="' +
-          escapeHTML(details) +
-          '">' +
-          escapeHTML(truncate(details, 70)) +
-          "</td><td>" +
-          escapeHTML(entry.ip || "—") +
-          "</td></tr>"
+          "<tr>" +
+          "<td><strong style='color: var(--text-primary); font-size: 0.95rem;'>" + escapeHTML(actionText) + "</strong></td>" +
+          "<td><span style='font-weight: 600;'>" + escapeHTML(entry.actorUsername || "—") + "</span></td>" +
+          "<td>" + escapeHTML(formatDateTime(entry.createdAt)) + "</td>" +
+          "<td><small dir='ltr' style='color: var(--text-secondary);'>" + escapeHTML(entry.ip || "—") + "</small></td>" +
+          "</tr>"
         );
       })
       .join("");
     var auditColumns = [
-      _t("col_audit_time"),
-      _t("col_audit_user"),
       _t("col_audit_action"),
-      _t("col_audit_entity"),
-      _t("col_audit_details"),
+      _t("col_audit_user"),
+      _t("col_audit_time"),
       _t("col_audit_ip")
     ];
     container.innerHTML =
@@ -2606,7 +2704,7 @@
   }
 
   /* ========================================================================
-     الإعدادات: كلمة المرور، النسخ الاحتياطي، ترحيل بيانات المتصفح
+     الإعدادات: كلمة المرور وإعدادات رفع الملفات
      ======================================================================== */
   async function submitChangePassword(event) {
     event.preventDefault();
@@ -2628,224 +2726,264 @@
     }
   }
 
-  async function exportBackup() {
+  async function loadSystemSettings() {
     try {
-      var result = await api.download("/exports/backup");
-      api.saveBlob(result.blob, result.filename);
-      toast("تم تجهيز النسخة الاحتياطية.");
-    } catch (error) {
-      toast(errorMessage(error), "error");
+      var data = await api.get("/settings");
+      state.uploadMaxMb = data.uploadMaxMb || 25;
+      var sel = el("maxUploadSizeSelect");
+      if (sel) sel.value = String(state.uploadMaxMb);
+      updateUploadHints();
+    } catch (e) {
+      /* ignore */
     }
   }
 
-  async function importBackup() {
-    var input = el("backupFileInput");
-    var file = input.files && input.files[0];
-    if (!file) {
-      toast("اختر ملف النسخة الاحتياطية أولاً.", "error");
-      return;
-    }
-    var text;
+  async function saveSystemSettings() {
+    var btn = el("saveUploadSettingsBtn");
+    var val = parseInt(el("maxUploadSizeSelect").value, 10);
+    setBusy(btn, true, "جارٍ الحفظ…");
     try {
-      text = await file.text();
-    } catch (error) {
-      toast("تعذر قراءة الملف.", "error");
-      return;
-    }
-    var payload;
-    try {
-      payload = JSON.parse(text);
-    } catch (error) {
-      toast("ملف النسخة الاحتياطية غير صالح (JSON غير قابل للقراءة).", "error");
-      return;
-    }
-    if (!payload || !Array.isArray(payload.documents)) {
-      toast("ملف النسخة الاحتياطية غير صالح: لا يحتوي على قائمة معاملات.", "error");
-      return;
-    }
-    var confirmed = await confirmDialog(
-      "سيتم استيراد " +
-        payload.documents.length +
-        " معاملة من النسخة الاحتياطية. تُتجاهل السجلات المكررة ولا تُحذف البيانات الحالية. هل تريد المتابعة؟"
-    );
-    if (!confirmed) return;
-    var button = el("importBackupButton");
-    setBusy(button, true, "جارٍ الاستيراد…");
-    try {
-      var outcome = await api.post("/imports/backup", {
-        formatVersion: payload.formatVersion || 1,
-        departments: Array.isArray(payload.departments) ? payload.departments : [],
-        documents: payload.documents
-      });
-      renderImportResult("backupImportResult", outcome, false);
-      toast("تم استيراد النسخة الاحتياطية.");
-      input.value = "";
-      refreshDocumentsAndStats();
-    } catch (error) {
-      toast(errorMessage(error), "error");
+      var res = await api.patch("/settings", { uploadMaxMb: val });
+      state.uploadMaxMb = res.uploadMaxMb;
+      updateUploadHints();
+      toast(_t("upload_size_saved"));
+    } catch (err) {
+      toast(errorMessage(err), "error");
     } finally {
-      setBusy(button, false);
+      setBusy(btn, false);
     }
   }
 
-  function readLegacyBrowserData() {
-    var documents = [];
-    var departments = [];
+  function updateUploadHints() {
+    var maxMb = state.uploadMaxMb || 25;
+    var hint = el("attachmentHint");
+    if (hint) {
+      hint.textContent = "اختر ملفاً أو أكثر (الحد الأقصى: " + maxMb + " ميجابايت للملف الواحد).";
+    }
+  }
+
+  /* ========================================================================
+     نظام تذاكر الدعم الفني والمحادثة
+     ======================================================================== */
+  function getTicketStatusBadge(status) {
+    var label = _t("ticket_status_" + status) || status;
+    return '<span class="ticket-status-badge status-' + escapeHTML(status) + '">' + escapeHTML(label) + '</span>';
+  }
+
+  async function loadSupportTickets() {
+    var container = el("ticketsListContainer");
+    if (!container) return;
+    renderLoading(container, "جارٍ تحميل تذاكر الدعم الفني…");
     try {
-      var storedDocuments = JSON.parse(localStorage.getItem(LEGACY_DOCUMENTS_KEY) || "null");
-      if (Array.isArray(storedDocuments)) documents = storedDocuments;
-      var storedDepartments = JSON.parse(localStorage.getItem(LEGACY_DEPARTMENTS_KEY) || "null");
-      if (Array.isArray(storedDepartments)) departments = storedDepartments;
-    } catch (error) {
-      /* بيانات المتصفح تالفة: نتعامل معها كغير موجودة. */
+      var data = await api.get("/tickets");
+      state.tickets = data.items || [];
+      renderSupportTicketsTable(container, state.tickets);
+    } catch (err) {
+      renderError(container, errorMessage(err));
     }
-    return { documents: documents, departments: departments };
   }
 
-  function updateLegacyStatus() {
-    var legacy = readLegacyBrowserData();
-    var status = el("legacyStatus");
-    var importButton = el("importLegacyButton");
-    if (!legacy.documents.length && !legacy.departments.length) {
-      status.textContent = "لا توجد بيانات قديمة محفوظة في هذا المتصفح.";
-      importButton.disabled = true;
+  function renderSupportTicketsTable(container, items) {
+    if (!items.length) {
+      renderEmpty(container, _t("no_tickets"));
       return;
     }
-    status.textContent =
-      "المعاملات في المتصفح: " +
-      legacy.documents.length +
-      " — الإدارات: " +
-      legacy.departments.length;
-    importButton.disabled = false;
-  }
+    var rows = items
+      .map(function (t, idx) {
+        return (
+          "<tr>" +
+          "<td>#" + (idx + 1) + "</td>" +
+          "<td><strong>" + escapeHTML(t.title) + "</strong></td>" +
+          "<td>" + escapeHTML(t.username || "—") + "</td>" +
+          "<td>" + escapeHTML(t.departmentName || "—") + "</td>" +
+          "<td>" + getTicketStatusBadge(t.status) + "</td>" +
+          "<td>" + escapeHTML(formatDateTime(t.createdAt)) + "</td>" +
+          "<td>" +
+          '<button type="button" class="button small-button view-ticket-btn" data-id="' + escapeHTML(t.id) + '">' +
+          escapeHTML(_t("view_chat")) +
+          '</button>' +
+          "</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
 
-  async function importLegacyBrowserData() {
-    var legacy = readLegacyBrowserData();
-    if (!legacy.documents.length && !legacy.departments.length) return;
-    var confirmed = await confirmDialog(
-      "سيتم ترحيل " +
-        legacy.documents.length +
-        " معاملة و" +
-        legacy.departments.length +
-        " إدارة من متصفحك إلى الخادم. تُتجاهل السجلات المكررة، ولا تُنقل محتويات المرفقات. هل تريد المتابعة؟"
-    );
-    if (!confirmed) return;
-    var button = el("importLegacyButton");
-    setBusy(button, true, "جارٍ الترحيل…");
-    try {
-      var outcome = await api.post("/imports/legacy", {
-        source: LEGACY_DOCUMENTS_KEY,
-        departments: legacy.departments.map(function (department) {
-          return {
-            legacyId: department && department.id ? String(department.id) : undefined,
-            name: String((department && department.name) || "").trim()
-          };
-        }).filter(function (department) {
-          return department.name;
-        }),
-        documents: legacy.documents.map(function (document) {
-          return {
-            legacyId: document && document.id ? String(document.id) : undefined,
-            reference: String((document && document.reference) || ""),
-            title: String((document && document.title) || ""),
-            type: (document && document.type) || "incoming",
-            date: (document && document.date) || "",
-            sender: (document && document.sender) || "",
-            recipient: (document && document.recipient) || "",
-            sequenceNumber: (document && document.sequenceNumber) || null,
-            status: (document && document.status) || null,
-            notes: (document && document.notes) || "",
-            createdAt: (document && document.createdAt) || null,
-            updatedAt: (document && document.updatedAt) || null,
-            departmentLegacyId:
-              document && document.department ? String(document.department) : undefined
-          };
-        })
+    var cols = [
+      _t("col_ticket_id"),
+      _t("col_ticket_title"),
+      _t("col_ticket_user"),
+      _t("col_ticket_dept"),
+      _t("col_ticket_status"),
+      _t("col_ticket_date"),
+      _t("col_ticket_actions")
+    ];
+
+    container.innerHTML =
+      '<div class="table-wrap"><table><thead><tr>' +
+      cols.map(function (c) { return "<th>" + escapeHTML(c) + "</th>"; }).join("") +
+      "</tr></thead><tbody>" +
+      rows +
+      "</tbody></table></div>";
+
+    container.querySelectorAll(".view-ticket-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.dataset.id;
+        if (id) openTicketChat(id);
       });
-      renderImportResult("legacyResult", outcome, true);
-      el("clearLegacyButton").hidden = false;
-      toast("تم ترحيل بيانات المتصفح إلى الخادم.");
-      refreshDocumentsAndStats();
-    } catch (error) {
-      toast(errorMessage(error), "error");
-    } finally {
-      setBusy(button, false);
-    }
-  }
-
-  function renderImportResult(containerId, outcome, isLegacy) {
-    var container = el(containerId);
-    container.hidden = false;
-    var summary = outcome.summary || {};
-    var rejected = (outcome.results || []).filter(function (result) {
-      return result.status === "rejected";
     });
-    var html =
-      '<div class="import-summary">' +
-      "<span>استُوردت: <strong>" +
-      escapeHTML(summary.documentsImported || 0) +
-      "</strong></span>" +
-      "<span>إدارات جديدة: <strong>" +
-      escapeHTML(summary.departmentsCreated || 0) +
-      "</strong></span>" +
-      "<span>مكررة: <strong>" +
-      escapeHTML(summary.duplicates || 0) +
-      "</strong></span>" +
-      "<span>مرفوضة: <strong>" +
-      escapeHTML(summary.rejected || 0) +
-      "</strong></span>" +
-      "</div>";
-    if (rejected.length) {
-      html +=
-        '<details class="import-rejected"><summary>عرض السجلات المرفوضة (' +
-        rejected.length +
-        ")</summary><ul>" +
-        rejected
-          .map(function (result) {
-            return (
-              "<li>السجل رقم " +
-              escapeHTML(result.index + 1) +
-              ": " +
-              escapeHTML(result.reason || "سبب غير معروف") +
-              "</li>"
-            );
-          })
-          .join("") +
-        "</ul></details>";
-    }
-    if (outcome.warnings && outcome.warnings.length) {
-      html +=
-        '<details class="import-rejected"><summary>تحذيرات (' +
-        outcome.warnings.length +
-        ")</summary><ul>" +
-        outcome.warnings
-          .map(function (warning) {
-            return "<li>" + escapeHTML(warning) + "</li>";
-          })
-          .join("") +
-        "</ul></details>";
-    }
-    if (isLegacy && summary.documentsImported > 0) {
-      html +=
-        '<p class="hint">يمكنك الآن حذف نسخة المتصفح القديمة من هذا الجهاز بالزر المجاور.</p>';
-    }
-    container.innerHTML = html;
   }
 
-  function clearLegacyBrowserCopy() {
-    confirmDialog("هل تريد حذف نسخة البيانات القديمة من هذا المتصفح؟").then(function (confirmed) {
-      if (!confirmed) return;
-      try {
-        localStorage.removeItem(LEGACY_DOCUMENTS_KEY);
-        localStorage.removeItem(LEGACY_DEPARTMENTS_KEY);
-      } catch (error) {
-        /* التخزين غير متاح. */
+  async function openTicketChat(ticketId) {
+    try {
+      var ticket = await api.get("/tickets/" + ticketId);
+      state.activeTicketId = ticketId;
+      el("ticketChatTitle").textContent = "🎫 " + ticket.title;
+      el("ticketChatStatusBadge").className = "ticket-status-badge status-" + ticket.status;
+      el("ticketChatStatusBadge").textContent = _t("ticket_status_" + ticket.status) || ticket.status;
+
+      var adminControl = el("ticketAdminStatusControl");
+      if (adminControl) {
+        adminControl.classList.toggle("is-hidden", !isAdmin());
+        if (isAdmin()) {
+          el("ticketStatusSelect").value = ticket.status;
+        }
       }
-      el("legacyResult").hidden = true;
-      el("clearLegacyButton").hidden = true;
-      updateLegacyStatus();
-      toast("تم حذف نسخة المتصفح.");
-    });
+
+      var meta = el("ticketMetaInfo");
+      if (meta) {
+        meta.innerHTML =
+          "<span>بواسطة: <strong>" + escapeHTML(ticket.username || "—") + "</strong> (" + escapeHTML(ticket.departmentName || "غير محدد") + ")</span>" +
+          " &nbsp;|&nbsp; <span>تاريخ الفتح: " + escapeHTML(formatDateTime(ticket.createdAt)) + "</span>";
+      }
+
+      renderTicketMessages(ticket.messages || []);
+      showModal("ticketChatModal");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  function renderTicketMessages(messages) {
+    var box = el("ticketMessagesContainer");
+    if (!box) return;
+    if (!messages.length) {
+      box.innerHTML = '<div style="text-align: center; color: var(--text-secondary); margin: auto;">لا توجد رسائل بعد.</div>';
+      return;
+    }
+    var currentUserId = state.user ? state.user.id : "";
+    box.innerHTML = messages
+      .map(function (m) {
+        var isMine = m.senderId === currentUserId;
+        var senderType = m.senderRole === "admin" ? "🛡️ الدعم الفني" : "👤 " + (m.senderUsername || "المستخدم");
+        return (
+          '<div class="chat-bubble-row ' + (isMine ? "mine" : "theirs") + '">' +
+          '<div class="chat-bubble-meta">' +
+          '<span class="chat-sender-badge">' + escapeHTML(senderType) + '</span>' +
+          '<span>' + escapeHTML(formatDateTime(m.createdAt)) + '</span>' +
+          '</div>' +
+          '<div class="chat-bubble">' + escapeHTML(m.message) + '</div>' +
+          '</div>'
+        );
+      })
+      .join("");
+    box.scrollTop = box.scrollHeight;
+  }
+
+  async function submitTicketReply(event) {
+    event.preventDefault();
+    if (!state.activeTicketId) return;
+    var textarea = el("ticketReplyMessage");
+    var msg = (textarea.value || "").trim();
+    if (!msg) return;
+    var btn = el("sendTicketReplyBtn");
+    setBusy(btn, true, "جارٍ الإرسال…");
+    try {
+      await api.post("/tickets/" + state.activeTicketId + "/messages", { message: msg });
+      textarea.value = "";
+      toast(_t("ticket_reply_success"));
+      var updated = await api.get("/tickets/" + state.activeTicketId);
+      renderTicketMessages(updated.messages || []);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBusy(btn, false);
+    }
+  }
+
+  async function updateTicketStatus(newStatus) {
+    if (!state.activeTicketId || !isAdmin()) return;
+    try {
+      await api.patch("/tickets/" + state.activeTicketId + "/status", { status: newStatus });
+      el("ticketChatStatusBadge").className = "ticket-status-badge status-" + newStatus;
+      el("ticketChatStatusBadge").textContent = _t("ticket_status_" + newStatus) || newStatus;
+      toast(_t("ticket_status_changed"));
+      loadSupportTickets();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  async function submitCreateTicket(event) {
+    event.preventDefault();
+    showFormError("createTicketError", "");
+    var title = el("newTicketTitle").value.trim();
+    var message = el("newTicketMessage").value.trim();
+    if (!title || !message) return;
+    var btn = el("submitCreateTicketBtn");
+    setBusy(btn, true, "جارٍ الإرسال…");
+    try {
+      await api.post("/tickets", { title: title, message: message });
+      el("newTicketTitle").value = "";
+      el("newTicketMessage").value = "";
+      hideModal("createTicketModal");
+      toast(_t("ticket_created_success"));
+      loadSupportTickets();
+    } catch (err) {
+      showFormError("createTicketError", errorMessage(err));
+    } finally {
+      setBusy(btn, false);
+    }
+  }
+
+  /* ========================================================================
+     التحديث التلقائي للنظام عند نشر إصدار جديد
+     ======================================================================== */
+  async function checkForUpdates() {
+    try {
+      var res = await api.get("/version");
+      if (res && res.version && res.version !== CURRENT_APP_VERSION) {
+        notifyUpdateAvailable(res.version);
+      }
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function notifyUpdateAvailable(newVer) {
+    if (el("versionUpdateBanner")) return;
+    var banner = document.createElement("div");
+    banner.id = "versionUpdateBanner";
+    banner.className = "version-banner";
+    banner.innerHTML =
+      '<span>⚡ ' + escapeHTML(_t("new_version_available")) + ' (' + escapeHTML(newVer) + ')</span>' +
+      '<button type="button" class="button small-button" id="versionReloadBtn" style="padding: 4px 12px; font-size: 0.85rem;">' +
+      escapeHTML(_t("reload_now")) +
+      '</button>';
+    document.body.appendChild(banner);
+    var reloadBtn = el("versionReloadBtn");
+    if (reloadBtn) {
+      reloadBtn.addEventListener("click", function () {
+        window.location.reload(true);
+      });
+    }
+    var activeEl = document.activeElement;
+    var isTyping = activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA" || activeEl.isContentEditable);
+    var openModal = document.querySelector(".modal.active, .modal.is-open, .modal[style*='display: flex']");
+    if (!isTyping && !openModal) {
+      setTimeout(function () {
+        window.location.reload(true);
+      }, 4000);
+    }
   }
 
   function loadSettingsPage() {
@@ -2859,8 +2997,8 @@
     } else {
       departmentInfo.textContent = _t("settings_dept_info") + _t("role_admin");
     }
-    updateLegacyStatus();
     if (isAdmin()) {
+      loadSystemSettings();
       loadSettingsFileTypes();
     }
   }
@@ -3138,6 +3276,8 @@
       if (isAdmin()) loadAudit();
     } else if (pageId === "settings") {
       loadSettingsPage();
+    } else if (pageId === "about") {
+      loadSupportTickets();
     }
   }
 
@@ -3816,10 +3956,59 @@
     el("auditRefreshButton").addEventListener("click", loadAudit);
 
     el("changePasswordForm").addEventListener("submit", submitChangePassword);
-    el("exportBackupButton").addEventListener("click", exportBackup);
-    el("importBackupButton").addEventListener("click", importBackup);
-    el("importLegacyButton").addEventListener("click", importLegacyBrowserData);
-    el("clearLegacyButton").addEventListener("click", clearLegacyBrowserCopy);
+
+    var saveUploadBtn = el("saveUploadSettingsBtn");
+    if (saveUploadBtn) {
+      saveUploadBtn.addEventListener("click", saveSystemSettings);
+    }
+
+    var openTicketBtn = el("openCreateTicketBtn");
+    if (openTicketBtn) {
+      openTicketBtn.addEventListener("click", function () {
+        showModal("createTicketModal");
+      });
+    }
+    var closeTicketBtn = el("closeCreateTicketModal");
+    if (closeTicketBtn) {
+      closeTicketBtn.addEventListener("click", function () {
+        hideModal("createTicketModal");
+      });
+    }
+    var closeTicketBtn2 = el("closeCreateTicketModalBtn");
+    if (closeTicketBtn2) {
+      closeTicketBtn2.addEventListener("click", function () {
+        hideModal("createTicketModal");
+      });
+    }
+    var createTicketForm = el("createTicketForm");
+    if (createTicketForm) {
+      createTicketForm.addEventListener("submit", submitCreateTicket);
+    }
+
+    var closeChatBtn = el("closeTicketChatModal");
+    if (closeChatBtn) {
+      closeChatBtn.addEventListener("click", function () {
+        hideModal("ticketChatModal");
+      });
+    }
+    var ticketReplyForm = el("ticketReplyForm");
+    if (ticketReplyForm) {
+      ticketReplyForm.addEventListener("submit", submitTicketReply);
+    }
+    var ticketStatusSelect = el("ticketStatusSelect");
+    if (ticketStatusSelect) {
+      ticketStatusSelect.addEventListener("change", function () {
+        updateTicketStatus(ticketStatusSelect.value);
+      });
+    }
+
+    setInterval(checkForUpdates, 60000);
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) checkForUpdates();
+    });
+    window.addEventListener("focus", function () {
+      checkForUpdates();
+    });
   }
 
   async function exportDocumentsCsv(fromReports) {

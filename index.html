@@ -6,7 +6,7 @@
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
     <script src="./js/theme-pre.js"></script>
-    <link rel="stylesheet" href="./css/style.css?v=1.0.44" />
+    <link rel="stylesheet" href="./css/style.css?v=1.0.45" />
     <link rel="icon" href="./img/logo.svg" />
     <meta name="referrer" content="same-origin" />
   </head>
@@ -303,8 +303,8 @@
                 <option value="proposal" data-i18n="type_proposal">مقترحات</option>
                 <option value="report" data-i18n="type_report">تقارير</option>
               </select>
-              <select id="departmentFilter">
-                <option value="" data-i18n="all_departments">جميع الإدارات</option>
+              <select id="departmentFilter" class="admin-only is-hidden">
+                <option value="" data-i18n="all_departments">جميع الإدارات والأقسام</option>
               </select>
               <div class="date-field">
                 <input
@@ -337,9 +337,9 @@
                 <input type="date" class="date-native-picker" tabindex="-1" aria-hidden="true" />
               </div>
               <select id="sortFilter" aria-label="ترتيب النتائج">
+                <option value="createdAt:desc" data-i18n="sort_created_desc" selected>تاريخ التسجيل (الأحدث أولاً)</option>
                 <option value="date:desc" data-i18n="sort_date_desc">التاريخ (الأحدث أولاً)</option>
                 <option value="date:asc" data-i18n="sort_date_asc">التاريخ (الأقدم أولاً)</option>
-                <option value="createdAt:desc" data-i18n="sort_created_desc">تاريخ التسجيل (الأحدث)</option>
                 <option value="updatedAt:desc" data-i18n="sort_updated_desc">آخر تعديل</option>
                 <option value="reference:asc" data-i18n="sort_ref_asc">الرقم الاشاري</option>
                 <option value="sequenceNumber:asc" data-i18n="sort_seq_asc">رقم التسلسل</option>
@@ -364,7 +364,7 @@
             <div class="panel-heading">
               <div>
                 <h2 data-i18n="departments_title">الإدارات والأقسام</h2>
-                <p data-i18n="departments_desc">إدارة الإدارات المستخدمة في تصنيف المعاملات.</p>
+                <p data-i18n="departments_desc">إدارة وتعديل الإدارات والأقسام المستخدمة في تصنيف المعاملات.</p>
               </div>
               <label class="checkbox-field admin-only is-hidden" id="includeInactiveDepartmentsField">
                 <input type="checkbox" id="includeInactiveDepartments" />
@@ -421,7 +421,7 @@
             <div class="panel-heading">
               <div>
                 <h2 data-i18n="audit_title">سجل التدقيق</h2>
-                <p data-i18n="audit_desc">تتبّع عمليات الدخول وإدارة المعاملات والمستخدمين والإدارات.</p>
+                <p data-i18n="audit_desc">تتبّع عمليات الدخول وإدارة المعاملات والمستخدمين والإدارات والأقسام.</p>
               </div>
             </div>
             <div class="filters">
@@ -484,40 +484,28 @@
             </form>
           </div>
 
-          <div class="panel admin-only is-hidden">
-            <h2 data-i18n="backup_title">النسخ الاحتياطي والاستيراد</h2>
-            <p data-i18n="backup_desc">تنزيل نسخة JSON من بيانات المنظومة، أو استيراد نسخة سابقة.</p>
-            <div class="form-actions">
-              <button class="button" id="exportBackupButton" type="button" data-i18n="export_backup_btn">
-                تنزيل نسخة احتياطية JSON
-              </button>
+          <!-- إعدادات الحد الأقصى لحجم المرفقات (للمدير فقط) -->
+          <div class="panel admin-only is-hidden" id="uploadSettingsPanel">
+            <div class="panel-heading">
+              <div>
+                <h2 data-i18n="upload_settings_title">الحد الأقصى لحجم المرفقات</h2>
+                <p data-i18n="upload_settings_desc">تحديد الحد الأقصى لحجم الملف الواحد المسموح برفعه في المنظومة.</p>
+              </div>
+              <div class="panel-actions">
+                <button class="button" id="saveUploadSettingsBtn" type="button" data-i18n="save_settings_btn">
+                  حفظ الإعدادات
+                </button>
+              </div>
             </div>
-            <hr />
-            <h3 data-i18n="import_backup_title">استيراد نسخة احتياطية</h3>
-            <input type="file" id="backupFileInput" accept=".json,application/json" />
-            <div class="form-actions">
-              <button class="button secondary-button" id="importBackupButton" type="button" data-i18n="import_backup_btn">
-                استيراد النسخة الاحتياطية
-              </button>
+            <div style="max-width: 320px; margin-top: 15px;">
+              <label for="maxUploadSizeSelect" data-i18n="upload_size_limit_label">الحد الأقصى لحجم الملف الواحد</label>
+              <select id="maxUploadSizeSelect">
+                <option value="10">10 ميجابايت</option>
+                <option value="25">25 ميجابايت (افتراضي)</option>
+                <option value="50">50 ميجابايت</option>
+                <option value="100">100 ميجابايت</option>
+              </select>
             </div>
-            <div id="backupImportResult" class="import-result" hidden></div>
-            <hr />
-            <h3 data-i18n="legacy_import_title">استيراد بيانات النسخة التجريبية من المتصفح</h3>
-            <p data-i18n="legacy_import_desc">
-              إن كانت بيانات الإصدار التجريبي السابق ما زالت محفوظة في هذا المتصفح،
-              فيمكن ترحيلها إلى الخادم. تُنقل المعاملات والإدارات، ويُتجاهل تكرار
-              السجلات، ولا تُنقل محتويات المرفقات.
-            </p>
-            <div id="legacyStatus" class="hint"></div>
-            <div class="form-actions">
-              <button class="button" id="importLegacyButton" type="button" data-i18n="legacy_import_btn">
-                ترحيل بيانات المتصفح إلى الخادم
-              </button>
-              <button class="button danger-button" id="clearLegacyButton" type="button" hidden data-i18n="legacy_clear_btn">
-                حذف نسخة المتصفح بعد النجاح
-              </button>
-            </div>
-            <div id="legacyResult" class="import-result" hidden></div>
           </div>
 
           <!-- إدارة أنواع وصيغ الملفات (للمدير فقط) -->
@@ -625,6 +613,25 @@
                   </a>
                 </div>
               </article>
+            </div>
+
+            <!-- قسم الدعم الفني والمساعدة والتذاكر -->
+            <div class="custom-support-section" style="margin-top: 48px; border-top: 1px solid var(--border); padding-top: 36px;">
+              <div class="custom-section-head" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                <div>
+                  <h2 class="custom-section-title" data-i18n="support_section_title">الدعم الفني والمساعدة</h2>
+                  <p class="custom-section-desc" data-i18n="support_section_desc">يمكنك فتح تذكرة دعم لمتابعة استفسارك أو مشكلتك الفنية والتواصل مباشرة مع الدعم الفني.</p>
+                </div>
+                <div>
+                  <button type="button" class="button" id="openCreateTicketBtn" data-i18n="create_ticket_btn">
+                    + فتح تذكرة جديدة
+                  </button>
+                </div>
+              </div>
+
+              <div id="ticketsListContainer" style="margin-top: 20px;">
+                <!-- جدول أو قائمة التذاكر ستُعرض هنا عبر script.js -->
+              </div>
             </div>
           </div>
         </section>
@@ -760,7 +767,7 @@
               <option value="" data-i18n="unspecified">بدون إدارة (المدير فقط)</option>
             </select>
             <small class="hint" id="userDepartmentHint" data-i18n="user_dept_hint">
-              الموظف يحتاج إدارة نشطة للوصول إلى معاملاتها. المدير يرى جميع الإدارات.
+              الموظف يحتاج إدارة أو قسم نشط للوصول إلى معاملاته. المدير يرى جميع الإدارات والأقسام.
             </small>
           </div>
           <div id="userPermissionsField">
@@ -972,6 +979,66 @@
       </div>
     </div>
 
+    <!-- نافذة إنشاء تذكرة دعم جديدة -->
+    <div class="modal" id="createTicketModal" role="dialog" aria-modal="true" aria-labelledby="createTicketModalTitle">
+      <div class="modal-box modal-box-small">
+        <div class="modal-header">
+          <h2 id="createTicketModalTitle" data-i18n="create_ticket_title">🎫 فتح تذكرة دعم جديدة</h2>
+          <button type="button" class="close-button" id="closeCreateTicketModal" aria-label="إغلاق" data-i18n-aria="close">✕</button>
+        </div>
+        <form id="createTicketForm">
+          <label for="newTicketTitle" data-i18n="ticket_title_label">عنوان أو موضوع التذكرة *</label>
+          <input type="text" id="newTicketTitle" required placeholder="مثال: استفسار بخصوص تصدير المعاملات" data-i18n-placeholder="ticket_title_placeholder" />
+          
+          <label for="newTicketMessage" data-i18n="ticket_message_label">تفاصيل المشكلة أو الاستفسار *</label>
+          <textarea id="newTicketMessage" rows="5" required placeholder="اشرح بالتفصيل ما تواجهه لمساعدتك بسرعة..." data-i18n-placeholder="ticket_message_placeholder"></textarea>
+          
+          <div id="createTicketError" class="form-error" role="alert" style="display:none; margin-top: 10px;"></div>
+          <div class="form-actions">
+            <button type="submit" class="button" id="submitCreateTicketBtn" data-i18n="send_ticket_btn">إرسال التذكرة</button>
+            <button type="button" class="button secondary-button" id="closeCreateTicketModalBtn" data-i18n="cancel">إلغاء</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- نافذة محادثة تذكرة الدعم -->
+    <div class="modal" id="ticketChatModal" role="dialog" aria-modal="true" aria-labelledby="ticketChatTitle">
+      <div class="modal-box" style="max-width: 720px; width: 95%;">
+        <div class="modal-header">
+          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <h2 id="ticketChatTitle" style="margin: 0; font-size: 1.25rem;">محادثة التذكرة</h2>
+            <span id="ticketChatStatusBadge" class="ticket-status-badge status-open">مفتوحة</span>
+          </div>
+          <button type="button" class="close-button" id="closeTicketChatModal" aria-label="إغلاق" data-i18n-aria="close">✕</button>
+        </div>
+
+        <div id="ticketChatMeta" style="background: var(--surface-alt); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin: 15px 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 0.9rem;">
+          <div id="ticketMetaInfo"></div>
+          <div id="ticketAdminStatusControl" class="admin-only is-hidden" style="display: flex; align-items: center; gap: 8px;">
+            <label for="ticketStatusSelect" style="font-weight: 600; margin: 0; font-size: 0.85rem;" data-i18n="ticket_status_label">الحالة:</label>
+            <select id="ticketStatusSelect" style="padding: 4px 8px; border-radius: 6px; font-size: 0.85rem;">
+              <option value="open">مفتوحة</option>
+              <option value="in_progress">قيد المعالجة</option>
+              <option value="resolved">تم الحل</option>
+              <option value="closed">مغلقة</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="ticketMessagesContainer" style="height: 340px; overflow-y: auto; padding: 15px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 14px;">
+          <!-- رسائل المحادثة ستُحقن هنا -->
+        </div>
+
+        <form id="ticketReplyForm" style="display: flex; gap: 10px; align-items: flex-end;">
+          <textarea id="ticketReplyMessage" rows="2" required placeholder="اكتب ردك هنا..." style="flex: 1; resize: none; margin: 0;" data-i18n-placeholder="ticket_reply_placeholder"></textarea>
+          <button type="submit" class="button" id="sendTicketReplyBtn" style="white-space: nowrap; height: 42px;" data-i18n="send_reply">
+            إرسال الرد
+          </button>
+        </form>
+      </div>
+    </div>
+
     <div id="toast" class="toast"></div>
 
     <!-- شاشة تسجيل الدخول -->
@@ -1023,7 +1090,7 @@
 
     <script src="./js/theme.js"></script>
     <script src="./js/api.js"></script>
-    <script src="./js/i18n.js?v=1.0.42"></script>
-    <script src="./js/script.js?v=1.0.44"></script>
+    <script src="./js/i18n.js?v=1.0.45"></script>
+    <script src="./js/script.js?v=1.0.45"></script>
   </body>
 </html>

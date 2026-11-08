@@ -16,6 +16,7 @@ import {
 import { validateOptimizedCandidate } from './optimization/validate.js';
 import type { StorageProvider } from './storage/types.js';
 import { getMimeTypeForExtension, getActiveAllowedExtensions } from './fileTypes.js';
+import { getUploadMaxMb } from './settings.js';
 
 /**
  * أنواع المرفقات المسموحة: الامتداد -> نوع المحتوى المعتمد.
@@ -280,7 +281,8 @@ export async function storeAttachment(
   const originalName = sanitizeOriginalName(input.filename);
   const fileId = randomUUID();
   const storageKey = buildStorageKey(input.documentId, fileId, extension);
-  const maxBytes = deps.config.uploadMaxMb * 1024 * 1024;
+  const effectiveMaxMb = await getUploadMaxMb(deps.pool, deps.config.uploadMaxMb);
+  const maxBytes = effectiveMaxMb * 1024 * 1024;
 
   await mkdir(deps.config.processingTmpDir, { recursive: true, mode: 0o700 });
   const tempDir = await mkdtemp(path.join(deps.config.processingTmpDir, 'hlc-upload-'));
@@ -295,7 +297,7 @@ export async function storeAttachment(
       transform(chunk: Buffer, _encoding, callback): void {
         size += chunk.length;
         if (size > maxBytes) {
-          callback(ApiError.payloadTooLarge(`حجم الملف يتجاوز الحد المسموح (${deps.config.uploadMaxMb} ميجابايت).`));
+          callback(ApiError.payloadTooLarge(`حجم الملف يتجاوز الحد المسموح (${effectiveMaxMb} ميجابايت).`));
           return;
         }
         callback(null, chunk);
@@ -312,14 +314,14 @@ export async function storeAttachment(
       ) {
         throw error instanceof ApiError
           ? error
-          : ApiError.payloadTooLarge(`حجم الملف يتجاوز الحد المسموح (${deps.config.uploadMaxMb} ميجابايت).`);
+          : ApiError.payloadTooLarge(`حجم الملف يتجاوز الحد المسموح (${effectiveMaxMb} ميجابايت).`);
       }
       throw error;
     }
 
     if (input.stream.truncated === true) {
       throw ApiError.payloadTooLarge(
-        `حجم الملف يتجاوز الحد المسموح (${deps.config.uploadMaxMb} ميجابايت).`,
+        `حجم الملف يتجاوز الحد المسموح (${effectiveMaxMb} ميجابايت).`,
       );
     }
 
