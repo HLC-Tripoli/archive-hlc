@@ -131,7 +131,7 @@
   var LEGACY_DOCUMENTS_KEY = "hl_archive_data_v1";
   var LEGACY_DEPARTMENTS_KEY = "hl_archive_departments_v1";
 
-  var CURRENT_APP_VERSION = "1.0.50";
+  var CURRENT_APP_VERSION = "1.0.51";
 
   /* ========================================================================
      الحالة العامة
@@ -190,7 +190,9 @@
     documentType: "incoming",
     pendingFiles: [],
     pendingCounter: 0,
-    uploadingAttachments: false
+    uploadingAttachments: false,
+    createTicketAttachment: null,
+    replyTicketAttachment: null
   };
 
   function el(id) {
@@ -2978,6 +2980,22 @@
     }
   }
 
+  function clearCreateTicketAttachment() {
+    state.createTicketAttachment = null;
+    var input = el("createTicketImageInput");
+    if (input) input.value = "";
+    var preview = el("createTicketAttachmentPreview");
+    if (preview) preview.classList.add("is-hidden");
+  }
+
+  function clearReplyAttachment() {
+    state.replyTicketAttachment = null;
+    var input = el("ticketReplyImageInput");
+    if (input) input.value = "";
+    var preview = el("ticketReplyAttachmentPreview");
+    if (preview) preview.classList.add("is-hidden");
+  }
+
   function renderTicketMessages(messages) {
     var box = el("ticketMessagesContainer");
     if (!box) return;
@@ -2990,13 +3008,27 @@
       .map(function (m) {
         var isMine = m.senderId === currentUserId;
         var senderType = m.senderRole === "admin" ? "🛡️ الدعم الفني" : "👤 " + (m.senderUsername || "المستخدم");
+        var attachmentHtml = "";
+        if (m.hasAttachment) {
+          var attachUrl = api.url("/tickets/" + state.activeTicketId + "/messages/" + m.id + "/attachment");
+          attachmentHtml =
+            '<div class="chat-attachment-wrap">' +
+            '<a href="' + escapeHTML(attachUrl) + '" target="_blank" rel="noopener noreferrer" class="chat-attachment-link" title="' + escapeHTML(_t("view_image_full")) + '">' +
+            '<img src="' + escapeHTML(attachUrl) + '" alt="' + escapeHTML(m.attachmentName || _t("image_attached")) + '" class="chat-attachment-img" loading="lazy" />' +
+            '<div class="chat-attachment-caption">📎 ' + escapeHTML(m.attachmentName || _t("image_attached")) + (m.attachmentSizeBytes ? ' (' + formatBytes(m.attachmentSizeBytes) + ')' : '') + '</div>' +
+            '</a>' +
+            '</div>';
+        }
         return (
           '<div class="chat-bubble-row ' + (isMine ? "mine" : "theirs") + '">' +
           '<div class="chat-bubble-meta">' +
           '<span class="chat-sender-badge">' + escapeHTML(senderType) + '</span>' +
           '<span>' + escapeHTML(formatDateTime(m.createdAt)) + '</span>' +
           '</div>' +
-          '<div class="chat-bubble">' + escapeHTML(m.message) + '</div>' +
+          '<div class="chat-bubble">' +
+          escapeHTML(m.message) +
+          attachmentHtml +
+          '</div>' +
           '</div>'
         );
       })
@@ -3009,12 +3041,20 @@
     if (!state.activeTicketId) return;
     var textarea = el("ticketReplyMessage");
     var msg = (textarea.value || "").trim();
-    if (!msg) return;
+    if (!msg && !state.replyTicketAttachment) return;
     var btn = el("sendTicketReplyBtn");
     setBusy(btn, true, "جارٍ الإرسال…");
     try {
-      await api.post("/tickets/" + state.activeTicketId + "/messages", { message: msg });
+      if (state.replyTicketAttachment) {
+        var formData = new FormData();
+        formData.append("message", msg);
+        formData.append("image", state.replyTicketAttachment);
+        await api.postForm("/tickets/" + state.activeTicketId + "/messages", formData);
+      } else {
+        await api.post("/tickets/" + state.activeTicketId + "/messages", { message: msg });
+      }
       textarea.value = "";
+      clearReplyAttachment();
       toast(_t("ticket_reply_success"));
       var updated = await api.get("/tickets/" + state.activeTicketId);
       renderTicketMessages(updated.messages || []);
@@ -3047,9 +3087,18 @@
     var btn = el("submitCreateTicketBtn");
     setBusy(btn, true, "جارٍ الإرسال…");
     try {
-      await api.post("/tickets", { title: title, message: message });
+      if (state.createTicketAttachment) {
+        var formData = new FormData();
+        formData.append("title", title);
+        formData.append("message", message);
+        formData.append("image", state.createTicketAttachment);
+        await api.postForm("/tickets", formData);
+      } else {
+        await api.post("/tickets", { title: title, message: message });
+      }
       el("newTicketTitle").value = "";
       el("newTicketMessage").value = "";
+      clearCreateTicketAttachment();
       hideModal("createTicketModal");
       toast(_t("ticket_created_success"));
       loadSupportTickets();
@@ -4436,18 +4485,48 @@
     var closeTicketBtn = el("closeCreateTicketModal");
     if (closeTicketBtn) {
       closeTicketBtn.addEventListener("click", function () {
+        clearCreateTicketAttachment();
         hideModal("createTicketModal");
       });
     }
     var closeTicketBtn2 = el("closeCreateTicketModalBtn");
     if (closeTicketBtn2) {
       closeTicketBtn2.addEventListener("click", function () {
+        clearCreateTicketAttachment();
         hideModal("createTicketModal");
       });
     }
     var createTicketForm = el("createTicketForm");
     if (createTicketForm) {
       createTicketForm.addEventListener("submit", submitCreateTicket);
+    }
+
+    var createAttachBtn = el("createTicketAttachBtn");
+    var createImageInput = el("createTicketImageInput");
+    var createRemoveAttachBtn = el("createTicketRemoveAttachmentBtn");
+    if (createAttachBtn && createImageInput) {
+      createAttachBtn.addEventListener("click", function () {
+        createImageInput.click();
+      });
+      createImageInput.addEventListener("change", function () {
+        var file = createImageInput.files && createImageInput.files[0];
+        if (!file) return;
+        if (!file.type.startsWith("image/")) {
+          toast("يُسمح برفع الصور فقط (PNG, JPG, WEBP, GIF).", "error");
+          createImageInput.value = "";
+          return;
+        }
+        state.createTicketAttachment = file;
+        var nameSpan = el("createTicketAttachmentName");
+        if (nameSpan) {
+          nameSpan.textContent = file.name + " (" + formatBytes(file.size) + ")";
+        }
+        var preview = el("createTicketAttachmentPreview");
+        if (preview) preview.classList.remove("is-hidden");
+      });
+    }
+    if (createRemoveAttachBtn) {
+      createRemoveAttachBtn.addEventListener("click", clearCreateTicketAttachment);
     }
 
     var closeEditTicketBtn = el("closeEditTicketModal");
@@ -4466,12 +4545,41 @@
     var closeChatBtn = el("closeTicketChatModal");
     if (closeChatBtn) {
       closeChatBtn.addEventListener("click", function () {
+        clearReplyAttachment();
         hideModal("ticketChatModal");
       });
     }
     var ticketReplyForm = el("ticketReplyForm");
     if (ticketReplyForm) {
       ticketReplyForm.addEventListener("submit", submitTicketReply);
+    }
+
+    var replyAttachBtn = el("ticketReplyAttachBtn");
+    var replyImageInput = el("ticketReplyImageInput");
+    var replyRemoveAttachBtn = el("ticketReplyRemoveAttachmentBtn");
+    if (replyAttachBtn && replyImageInput) {
+      replyAttachBtn.addEventListener("click", function () {
+        replyImageInput.click();
+      });
+      replyImageInput.addEventListener("change", function () {
+        var file = replyImageInput.files && replyImageInput.files[0];
+        if (!file) return;
+        if (!file.type.startsWith("image/")) {
+          toast("يُسمح برفع الصور فقط (PNG, JPG, WEBP, GIF).", "error");
+          replyImageInput.value = "";
+          return;
+        }
+        state.replyTicketAttachment = file;
+        var nameSpan = el("ticketReplyAttachmentName");
+        if (nameSpan) {
+          nameSpan.textContent = file.name + " (" + formatBytes(file.size) + ")";
+        }
+        var preview = el("ticketReplyAttachmentPreview");
+        if (preview) preview.classList.remove("is-hidden");
+      });
+    }
+    if (replyRemoveAttachBtn) {
+      replyRemoveAttachBtn.addEventListener("click", clearReplyAttachment);
     }
     var ticketStatusSelect = el("ticketStatusSelect");
     if (ticketStatusSelect) {

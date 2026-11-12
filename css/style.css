@@ -2688,6 +2688,136 @@ input.input-locked {
   padding: 0 20px;
 }
 
+/* مرفقات صور التذاكر والمحادثة */
+.ticket-attachment-section {
+  margin: 12px 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ticket-attach-button {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.ticket-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  max-width: fit-content;
+  color: var(--text-primary);
+}
+
+.ticket-file-chip-icon {
+  font-size: 1rem;
+}
+
+.ticket-file-chip-name {
+  font-weight: 500;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticket-file-chip-remove {
+  background: transparent;
+  border: none;
+  color: var(--danger, #ef4444);
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.ticket-file-chip-remove:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.ticket-reply-attach-btn {
+  height: 44px;
+  width: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+#ticketReplyAttachmentPreview {
+  margin-bottom: 8px;
+}
+
+/* صور ومرفقات داخل فقاعات المحادثة */
+.chat-attachment-wrap {
+  margin-top: 8px;
+}
+
+.chat-attachment-link {
+  display: block;
+  text-decoration: none;
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 320px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.1);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.chat-bubble-row.theirs .chat-attachment-link {
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.chat-attachment-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.chat-attachment-img {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  object-fit: cover;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.chat-bubble-row.theirs .chat-attachment-img {
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-attachment-caption {
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 
 
 

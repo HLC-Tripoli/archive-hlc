@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import { ApiError } from '../lib/errors.js';
+import type { StorageProvider } from './storage/types.js';
 
 export interface TicketSummary {
   id: string;
@@ -21,12 +22,23 @@ export interface TicketMessage {
   senderName: string;
   senderRole: string;
   message: string;
+  attachmentName?: string | null;
+  attachmentMimeType?: string | null;
+  attachmentSizeBytes?: number | null;
+  hasAttachment?: boolean;
   createdAt: Date;
 }
 
 export interface TicketDetails {
   ticket: TicketSummary;
   messages: TicketMessage[];
+}
+
+export interface TicketAttachmentInfo {
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  storageKey: string;
 }
 
 export async function listTickets(
@@ -93,6 +105,7 @@ export async function createTicket(
     departmentId: string | null;
     title: string;
     message: string;
+    attachment?: TicketAttachmentInfo;
   },
 ): Promise<string> {
   const client = await pool.connect();
@@ -107,9 +120,20 @@ export async function createTicket(
     const ticketId = rows[0]!.id;
 
     await client.query(
-      `INSERT INTO support_ticket_messages (ticket_id, sender_id, message)
-       VALUES ($1, $2, $3)`,
-      [ticketId, input.userId, input.message.trim()],
+      `INSERT INTO support_ticket_messages (
+         ticket_id, sender_id, message,
+         attachment_name, attachment_mime_type, attachment_size_bytes, attachment_storage_key
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        ticketId,
+        input.userId,
+        input.message.trim(),
+        input.attachment?.name ?? null,
+        input.attachment?.mimeType ?? null,
+        input.attachment?.sizeBytes ?? null,
+        input.attachment?.storageKey ?? null,
+      ],
     );
 
     await client.query('COMMIT');
@@ -164,9 +188,14 @@ export async function getTicketById(
     sender_name: string;
     sender_role: string;
     message: string;
+    attachment_name: string | null;
+    attachment_mime_type: string | null;
+    attachment_size_bytes: string | null;
+    attachment_storage_key: string | null;
     created_at: Date;
   }>(
     `SELECT m.id, m.ticket_id, m.sender_id, m.message, m.created_at,
+            m.attachment_name, m.attachment_mime_type, m.attachment_size_bytes, m.attachment_storage_key,
             u.display_name AS sender_name,
             u.role AS sender_role
        FROM support_ticket_messages m
@@ -196,6 +225,10 @@ export async function getTicketById(
       senderName: m.sender_name,
       senderRole: m.sender_role,
       message: m.message,
+      attachmentName: m.attachment_name,
+      attachmentMimeType: m.attachment_mime_type,
+      attachmentSizeBytes: m.attachment_size_bytes ? Number(m.attachment_size_bytes) : null,
+      hasAttachment: Boolean(m.attachment_storage_key),
       createdAt: m.created_at,
     })),
   };
@@ -208,6 +241,7 @@ export async function addTicketMessage(
     senderId: string;
     message: string;
     isAdmin: boolean;
+    attachment?: TicketAttachmentInfo;
   },
 ): Promise<TicketMessage> {
   const { rows: ticketRows } = await pool.query<{ user_id: string; status: string }>(
@@ -227,10 +261,21 @@ export async function addTicketMessage(
   try {
     await client.query('BEGIN');
     const { rows } = await client.query<{ id: string; created_at: Date }>(
-      `INSERT INTO support_ticket_messages (ticket_id, sender_id, message)
-       VALUES ($1, $2, $3)
+      `INSERT INTO support_ticket_messages (
+         ticket_id, sender_id, message,
+         attachment_name, attachment_mime_type, attachment_size_bytes, attachment_storage_key
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, created_at`,
-      [ticketId, input.senderId, input.message.trim()],
+      [
+        ticketId,
+        input.senderId,
+        input.message.trim(),
+        input.attachment?.name ?? null,
+        input.attachment?.mimeType ?? null,
+        input.attachment?.sizeBytes ?? null,
+        input.attachment?.storageKey ?? null,
+      ],
     );
 
     // إذا كان الرد من موظف وكانت مغلقة، يُعاد فتحها؛ وإذا كان الرد من مدير وتذكرة مفتوحة، يمكن أن تصبح قيد المعالجة
@@ -255,6 +300,10 @@ export async function addTicketMessage(
       senderName: senderRows[0]?.display_name || '—',
       senderRole: senderRows[0]?.role || 'employee',
       message: input.message.trim(),
+      attachmentName: input.attachment?.name ?? null,
+      attachmentMimeType: input.attachment?.mimeType ?? null,
+      attachmentSizeBytes: input.attachment?.sizeBytes ?? null,
+      hasAttachment: Boolean(input.attachment?.storageKey),
       createdAt: rows[0]!.created_at,
     };
   } catch (err) {
@@ -263,6 +312,48 @@ export async function addTicketMessage(
   } finally {
     client.release();
   }
+}
+
+export async function getTicketMessageAttachment(
+  pool: Pool,
+  ticketId: string,
+  messageId: string,
+  options: { userId: string; isAdmin: boolean },
+): Promise<{
+  storageKey: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+}> {
+  const { rows } = await pool.query<{
+    user_id: string;
+    attachment_name: string | null;
+    attachment_mime_type: string | null;
+    attachment_size_bytes: string | null;
+    attachment_storage_key: string | null;
+  }>(
+    `SELECT t.user_id, m.attachment_name, m.attachment_mime_type, m.attachment_size_bytes, m.attachment_storage_key
+       FROM support_ticket_messages m
+       JOIN support_tickets t ON t.id = m.ticket_id
+      WHERE t.id = $1 AND m.id = $2`,
+    [ticketId, messageId],
+  );
+
+  const row = rows[0];
+  if (!row || !row.attachment_storage_key) {
+    throw ApiError.notFound('المرفق غير موجود.');
+  }
+
+  if (!options.isAdmin && row.user_id !== options.userId) {
+    throw ApiError.forbidden('ليس لديك صلاحية الوصول إلى هذا المرفق.');
+  }
+
+  return {
+    storageKey: row.attachment_storage_key,
+    name: row.attachment_name || 'image',
+    mimeType: row.attachment_mime_type || 'application/octet-stream',
+    sizeBytes: Number(row.attachment_size_bytes) || 0,
+  };
 }
 
 export async function updateTicketStatus(
@@ -298,7 +389,16 @@ export async function updateTicketStatus(
   );
 }
 
-export async function deleteTicket(pool: Pool, ticketId: string): Promise<{ title: string }> {
+export async function deleteTicket(
+  pool: Pool,
+  ticketId: string,
+  storage?: StorageProvider,
+): Promise<{ title: string }> {
+  const { rows: files } = await pool.query<{ attachment_storage_key: string | null }>(
+    'SELECT attachment_storage_key FROM support_ticket_messages WHERE ticket_id = $1 AND attachment_storage_key IS NOT NULL',
+    [ticketId],
+  );
+
   const { rows } = await pool.query<{ title: string }>(
     'DELETE FROM support_tickets WHERE id = $1 RETURNING title',
     [ticketId],
@@ -306,6 +406,19 @@ export async function deleteTicket(pool: Pool, ticketId: string): Promise<{ titl
   if (!rows[0]) {
     throw ApiError.notFound('تذكرة الدعم غير موجودة.');
   }
+
+  if (storage && files.length > 0) {
+    for (const f of files) {
+      if (f.attachment_storage_key) {
+        try {
+          await storage.deleteObject(f.attachment_storage_key);
+        } catch {
+          /* ignore deletion error */
+        }
+      }
+    }
+  }
+
   return rows[0];
 }
 
