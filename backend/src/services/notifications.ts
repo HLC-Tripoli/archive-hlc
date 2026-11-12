@@ -121,7 +121,7 @@ export async function listUserNotifications(
   const offset = Math.max(0, options.offset ?? 0);
 
   const unreadRes = await pool.query<{ count: string }>(
-    `SELECT COUNT(*)::text as count FROM notifications WHERE user_id = $1 AND is_read = false`,
+    `SELECT COUNT(*)::text as count FROM notifications WHERE user_id = $1 AND is_read = false AND type = 'ticket'`,
     [userId],
   );
   const unreadCount = parseInt(unreadRes.rows[0]?.count || '0', 10);
@@ -131,7 +131,7 @@ export async function listUserNotifications(
            u.display_name AS actor_name
     FROM notifications n
     LEFT JOIN users u ON u.id = n.actor_user_id
-    WHERE n.user_id = $1
+    WHERE n.user_id = $1 AND n.type = 'ticket'
   `;
   const params: unknown[] = [userId];
 
@@ -175,7 +175,7 @@ export async function listUserNotifications(
 
 export async function getUnreadCount(pool: Pool, userId: string): Promise<number> {
   const res = await pool.query<{ count: string }>(
-    `SELECT COUNT(*)::text as count FROM notifications WHERE user_id = $1 AND is_read = false`,
+    `SELECT COUNT(*)::text as count FROM notifications WHERE user_id = $1 AND is_read = false AND type = 'ticket'`,
     [userId],
   );
   return parseInt(res.rows[0]?.count || '0', 10);
@@ -198,7 +198,7 @@ export async function markAllNotificationsRead(
   userId: string,
 ): Promise<number> {
   const res = await pool.query(
-    `UPDATE notifications SET is_read = true WHERE user_id = $1 AND is_read = false`,
+    `UPDATE notifications SET is_read = true WHERE user_id = $1 AND is_read = false AND type = 'ticket'`,
     [userId],
   );
   return res.rowCount ?? 0;
@@ -221,7 +221,7 @@ export async function clearAllNotifications(
   userId: string,
 ): Promise<number> {
   const res = await pool.query(
-    `DELETE FROM notifications WHERE user_id = $1`,
+    `DELETE FROM notifications WHERE user_id = $1 AND type = 'ticket'`,
     [userId],
   );
   return res.rowCount ?? 0;
