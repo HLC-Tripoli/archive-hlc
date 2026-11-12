@@ -49,6 +49,7 @@ test('Notifications workflow: list, unread-count, read, read-all, and triggers',
   // 1b. Creating a document does NOT generate any notification
   const docRes = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
     payload: {
+      reference: 'REF-NOTIF-001',
       type: 'incoming',
       title: 'معاملة تجريبية لا تصدر إشعار',
       status: 'active',

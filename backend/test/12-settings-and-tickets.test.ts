@@ -42,8 +42,8 @@ test('GET /version returns current application version and header', async () => 
   const res = await apiRequest(context.app, employeeClient, 'GET', '/version');
   assert.equal(res.statusCode, 200);
   const body = res.json() as { version: string };
-  assert.equal(body.version, '1.0.51');
-  assert.equal(res.headers['x-app-version'], '1.0.51');
+  assert.equal(body.version, '1.0.52');
+  assert.equal(res.headers['x-app-version'], '1.0.52');
 });
 
 test('GET /settings returns default uploadMaxMb', async () => {
