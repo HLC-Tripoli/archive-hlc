@@ -182,7 +182,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   await app.register(
     async (instance) => {
-      instance.get('/version', async () => ({ version: '1.0.50' }));
+      instance.get('/version', async () => ({ version: '1.0.51' }));
       registerHealthRoutes(instance, { pool, storage });
       registerAuthRoutes(instance, { pool, config, guards });
       registerUserRoutes(instance, { pool, config, guards });
