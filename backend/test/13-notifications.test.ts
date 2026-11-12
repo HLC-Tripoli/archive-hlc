@@ -47,7 +47,7 @@ test('Notifications workflow: list, unread-count, read, read-all, and triggers',
   assert.equal(initialBody.unreadCount, 0);
 
   // 1b. Creating a document does NOT generate any notification
-  const docRes = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
+  const docRes = await apiRequest(context.app, adminClient, 'POST', '/documents', {
     payload: {
       reference: 'REF-NOTIF-001',
       type: 'incoming',
@@ -57,8 +57,10 @@ test('Notifications workflow: list, unread-count, read, read-all, and triggers',
     },
   });
   assert.equal(docRes.statusCode, 201);
-  const afterDocNotifs = await apiRequest(context.app, adminClient, 'GET', '/notifications');
-  assert.equal((afterDocNotifs.json() as { items: unknown[] }).items.length, 0);
+  const afterDocEmpNotifs = await apiRequest(context.app, employeeClient, 'GET', '/notifications');
+  assert.equal((afterDocEmpNotifs.json() as { items: unknown[] }).items.length, 0);
+  const afterDocAdminNotifs = await apiRequest(context.app, adminClient, 'GET', '/notifications');
+  assert.equal((afterDocAdminNotifs.json() as { items: unknown[] }).items.length, 0);
 
   // 2. Employee creates a ticket -> triggers notification for admin
   const ticketRes = await apiRequest(context.app, employeeClient, 'POST', '/tickets', {
