@@ -135,7 +135,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   app.addHook('onSend', async (_request, reply) => {
-    reply.header('X-App-Version', '1.0.50');
+    reply.header('X-App-Version', '1.0.51');
   });
 
   const guards = buildAuthGuards({ pool, config });
@@ -191,7 +191,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       registerFileRoutes(instance, { pool, guards, storage, config, optimizer });
       registerFileTypeRoutes(instance, { pool, guards });
       registerSettingsRoutes(instance, { pool, guards, defaultUploadMaxMb: config.uploadMaxMb });
-      registerTicketRoutes(instance, { pool, guards });
+      registerTicketRoutes(instance, { pool, guards, storage, config });
       registerNotificationRoutes(instance, { pool, guards });
       registerStatsRoutes(instance, { pool, guards });
       registerAuditRoutes(instance, { pool, guards });
