@@ -52,7 +52,6 @@ test('Notifications workflow: list, unread-count, read, read-all, and triggers',
       reference: 'REF-NOTIF-001',
       type: 'incoming',
       title: 'معاملة تجريبية لا تصدر إشعار',
-      status: 'active',
       date: '2026-01-01',
     },
   });
