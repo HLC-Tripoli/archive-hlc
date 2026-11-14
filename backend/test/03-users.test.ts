@@ -577,6 +577,38 @@ test('admin can manage granular user permissions, and admin always has full perm
     ['view', 'create', 'edit'],
   );
 
+  // Revoking all permissions to an empty array must persist and not fallback to full permissions
+  const revoked = await apiRequest(context.app, adminClient, 'PATCH', `/users/${user.id}`, {
+    payload: { permissions: [] },
+  });
+  assert.equal(revoked.statusCode, 200);
+  assert.deepEqual(
+    (revoked.json() as { user: { permissions: string[] } }).user.permissions,
+    [],
+  );
+
+  const permClient = await loginClient(context.app, 'permuser');
+  assert.deepEqual(permClient.user.permissions, []);
+
+  // Creating an employee with permissions: [] must retain empty permissions
+  const createdEmpty = await apiRequest(context.app, adminClient, 'POST', '/users', {
+    payload: {
+      username: 'emptyperms',
+      displayName: 'موظف بلا صلاحيات',
+      role: 'employee',
+      departmentId,
+      permissions: [],
+      password: 'password-123',
+    },
+  });
+  assert.equal(createdEmpty.statusCode, 201);
+  assert.deepEqual(
+    (createdEmpty.json() as { user: { permissions: string[] } }).user.permissions,
+    [],
+  );
+  const emptyClient = await loginClient(context.app, 'emptyperms');
+  assert.deepEqual(emptyClient.user.permissions, []);
+
   const createdAdmin = await apiRequest(context.app, adminClient, 'POST', '/users', {
     payload: {
       username: 'permadmin',

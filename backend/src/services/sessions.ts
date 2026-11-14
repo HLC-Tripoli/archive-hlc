@@ -110,7 +110,7 @@ export async function findSessionWithUser(pool: Pool, token: string): Promise<Se
       permissions:
         row.role === 'admin'
           ? [...VALID_PERMISSIONS]
-          : Array.isArray(row.permissions) && row.permissions.length > 0
+          : Array.isArray(row.permissions)
             ? row.permissions
             : [...VALID_PERMISSIONS],
     },
@@ -122,16 +122,16 @@ export async function destroySession(pool: Pool, token: string): Promise<void> {
 }
 
 export async function destroyUserSessions(
-  pool: Pool,
+  db: Queryable,
   userId: string,
   options: { exceptToken?: string } = {},
 ): Promise<number> {
   const result = options.exceptToken
-    ? await pool.query('DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2', [
+    ? await db.query('DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2', [
         userId,
         sha256Hex(options.exceptToken),
       ])
-    : await pool.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+    : await db.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
   return result.rowCount ?? 0;
 }
 

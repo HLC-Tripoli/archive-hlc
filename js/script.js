@@ -131,7 +131,10 @@
   var LEGACY_DOCUMENTS_KEY = "hl_archive_data_v1";
   var LEGACY_DEPARTMENTS_KEY = "hl_archive_departments_v1";
 
-  var CURRENT_APP_VERSION = "1.0.52";
+  var CURRENT_APP_VERSION = "1.0.53";
+
+  var notificationPollTimer = null;
+  var updateCheckTimer = null;
 
   /* ========================================================================
      الحالة العامة
@@ -647,7 +650,22 @@
     } catch (error) {
       /* حتى لو فشل الخروج، نعيد الواجهة إلى شاشة الدخول. */
     }
+    if (notificationPollTimer) {
+      clearInterval(notificationPollTimer);
+      notificationPollTimer = null;
+    }
+    if (updateCheckTimer) {
+      clearInterval(updateCheckTimer);
+      updateCheckTimer = null;
+    }
     state.user = null;
+    state.notifications = [];
+    state.seenNotificationIds = new Set();
+    state.tickets = [];
+    state.views = {};
+    state.departments = [];
+    state.fileTypes = [];
+    state.pendingFiles = [];
     api.setCsrfToken(null);
     el("loginPassword").value = "";
     el("loginUsername").value = "";
@@ -1523,6 +1541,7 @@
       var iframe = document.createElement("iframe");
       iframe.className = "preview-frame";
       iframe.title = title || "معاينة المستند";
+      iframe.setAttribute("sandbox", "allow-downloads");
       iframe.src = url;
       body.appendChild(iframe);
     }
@@ -3905,7 +3924,10 @@
     }
 
     // Polling setup: every 25 seconds
-    setInterval(fetchNotifications, 25000);
+    if (notificationPollTimer) clearInterval(notificationPollTimer);
+    notificationPollTimer = setInterval(function () {
+      if (state.user) fetchNotifications();
+    }, 25000);
     document.addEventListener("visibilitychange", function () {
       if (!document.hidden) fetchNotifications();
     });
@@ -4588,7 +4610,10 @@
       });
     }
 
-    setInterval(checkForUpdates, 60000);
+    if (updateCheckTimer) clearInterval(updateCheckTimer);
+    updateCheckTimer = setInterval(function () {
+      if (state.user) checkForUpdates();
+    }, 60000);
     document.addEventListener("visibilitychange", function () {
       if (!document.hidden) checkForUpdates();
     });

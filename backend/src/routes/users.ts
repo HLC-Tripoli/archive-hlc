@@ -164,7 +164,7 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
       const passwordHash = await hashPassword(body.password);
       const permissions = body.role === 'admin'
         ? [...VALID_PERMISSIONS]
-        : (Array.isArray(body.permissions) && body.permissions.length > 0 ? body.permissions : [...VALID_PERMISSIONS]);
+        : (Array.isArray(body.permissions) ? body.permissions : [...VALID_PERMISSIONS]);
       const auditContext: AuditContext = {
         ip: request.ip,
         userAgent: (request.headers['user-agent'] ?? '') || null,
@@ -312,7 +312,7 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
 
         let revokedSessions = 0;
         if (body.isActive === false || body.role !== undefined || body.permissions !== undefined) {
-          revokedSessions = await destroyUserSessions(pool, id);
+          revokedSessions = await destroyUserSessions(client, id);
         }
         await writeAudit(
           client,
@@ -407,7 +407,7 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
       };
 
       await withTransaction(pool, async (client) => {
-        await destroyUserSessions(pool, id);
+        await destroyUserSessions(client, id);
         const deleted = await deleteUser(client, id);
         if (!deleted) throw ApiError.notFound('المستخدم غير موجود.');
 

@@ -11,6 +11,7 @@
 
   /* النصوص */
   --text: #000000;
+  --text-primary: #000000;
   --text-secondary: #000000;
   --muted: #000000;
   --placeholder: #757575;
@@ -24,6 +25,7 @@
   --login-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
 
   /* اللون الأساسي (هوية هاتف ليبيا) */
+  --primary: #b5121b;
   --accent: #b5121b;
   --accent-hover: #850b12;
   --accent-soft: #fff0f1;
@@ -99,6 +101,7 @@
   --surface-alt: #1d2530;
 
   --text: #ffffff;
+  --text-primary: #ffffff;
   --text-secondary: #ffffff;
   --muted: #ffffff;
   --placeholder: #8b95a4;
@@ -110,6 +113,7 @@
   --shadow: 0 5px 22px rgba(0, 0, 0, 0.35);
   --login-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
 
+  --primary: #c11721;
   --accent: #c11721;
   --accent-hover: #d4252e;
   --accent-soft: #341a1e;
@@ -2453,11 +2457,11 @@ input.input-locked {
 }
 
 .chat-bubble-row.mine {
-  align-self: flex-start;
+  align-self: flex-end;
 }
 
 .chat-bubble-row.theirs {
-  align-self: flex-end;
+  align-self: flex-start;
 }
 
 .chat-bubble {
@@ -2470,16 +2474,16 @@ input.input-locked {
 }
 
 .chat-bubble-row.mine .chat-bubble {
-  background: var(--primary);
+  background: var(--accent);
   color: #fff;
-  border-bottom-right-radius: 2px;
+  border-bottom-left-radius: 2px;
 }
 
 .chat-bubble-row.theirs .chat-bubble {
   background: var(--surface-alt);
-  color: var(--text-primary);
+  color: var(--text);
   border: 1px solid var(--border);
-  border-bottom-left-radius: 2px;
+  border-bottom-right-radius: 2px;
 }
 
 .chat-bubble-meta {
@@ -2492,11 +2496,11 @@ input.input-locked {
 }
 
 .chat-bubble-row.mine .chat-bubble-meta {
-  justify-content: flex-start;
+  justify-content: flex-end;
 }
 
 .chat-bubble-row.theirs .chat-bubble-meta {
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .chat-sender-badge {

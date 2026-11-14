@@ -218,7 +218,7 @@ export async function createUser(
 ): Promise<UserRecord> {
   const permissions = input.role === 'admin'
     ? [...VALID_PERMISSIONS]
-    : (input.permissions && input.permissions.length > 0 ? input.permissions : [...VALID_PERMISSIONS]);
+    : (Array.isArray(input.permissions) ? input.permissions : [...VALID_PERMISSIONS]);
 
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO users (username, display_name, employee_number, department_id, role, permissions, password_hash)

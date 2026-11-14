@@ -41,8 +41,8 @@ WORKDIR /app
 # النسخ مثبّتة على إصدارات Debian bookworm المستخدمة في الصورة الأساسية.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      qpdf=11.3.0-1+deb12u1 \
-      libjpeg-turbo-progs=1:2.1.5-2 \
+      qpdf \
+      libjpeg-turbo-progs \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /tmp/archive-hlc \
     && chmod 700 /tmp/archive-hlc \

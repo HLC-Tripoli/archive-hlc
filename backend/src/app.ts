@@ -106,7 +106,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         censor: '[redacted]',
       },
     },
-    trustProxy: config.trustProxy,
+    trustProxy: config.trustProxy ? (_addr: string, hop: number) => hop <= 1 : false,
     bodyLimit: 10 * 1024 * 1024,
     // إبقاء removeAdditional معطّلاً: أي حقل غير معروف في مخططات JSON يجب أن يُرفض بـ 400
     // بدلاً من حذفه بصمت (حماية من تمرير حقول غير مقصودة كحقن بيانات).
@@ -135,7 +135,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   app.addHook('onSend', async (_request, reply) => {
-    reply.header('X-App-Version', '1.0.52');
+    reply.header('X-App-Version', '1.0.53');
   });
 
   const guards = buildAuthGuards({ pool, config });
@@ -182,7 +182,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   await app.register(
     async (instance) => {
-      instance.get('/version', async () => ({ version: '1.0.52' }));
+      instance.get('/version', async () => ({ version: '1.0.53' }));
       registerHealthRoutes(instance, { pool, storage });
       registerAuthRoutes(instance, { pool, config, guards });
       registerUserRoutes(instance, { pool, config, guards });

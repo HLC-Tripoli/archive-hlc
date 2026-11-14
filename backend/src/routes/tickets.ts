@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
+import sharp from 'sharp';
 import type { AppConfig } from '../config.js';
 import { ApiError } from '../lib/errors.js';
 import { isUuid } from '../lib/validation.js';
@@ -56,6 +57,35 @@ function resolveImageExtension(mime: string, filename: string): string {
   return 'jpg';
 }
 
+async function readLimitedBuffer(
+  fileStream: NodeJS.ReadableStream,
+  maxBytes: number,
+): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+  for await (const chunk of fileStream) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buf.length;
+    if (totalBytes > maxBytes) {
+      throw ApiError.badRequest('file_too_large', 'حجم الصورة المرفقة يتجاوز الحد الأقصى المسموح.');
+    }
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks, totalBytes);
+}
+
+async function validateTicketImage(buffer: Buffer): Promise<void> {
+  try {
+    const meta = await sharp(buffer, { limitInputPixels: 268402689, failOn: 'error' }).metadata();
+    if (!meta.format || !['jpeg', 'png', 'webp', 'gif'].includes(meta.format)) {
+      throw ApiError.badRequest('invalid_file_type', 'نوع الصورة غير مدعوم أو تالف.');
+    }
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    throw ApiError.badRequest('invalid_file_type', 'ملف الصورة غير صالح أو تالف.');
+  }
+}
+
 export function registerTicketRoutes(app: FastifyInstance, deps: TicketRoutesDeps): void {
   const { pool, guards, storage, config } = deps;
 
@@ -94,9 +124,10 @@ export function registerTicketRoutes(app: FastifyInstance, deps: TicketRoutesDep
             if (part.fieldname === 'image' || part.fieldname === 'file') {
               imageName = part.filename;
               imageMime = part.mimetype;
-              imageBuffer = await part.toBuffer();
+              const maxBytes = Math.min(config.uploadMaxMb, 20) * 1024 * 1024;
+              imageBuffer = await readLimitedBuffer(part.file, maxBytes);
             } else {
-              await part.toBuffer();
+              part.file.resume();
             }
           } else if (part.type === 'field') {
             if (part.fieldname === 'title') {
@@ -130,10 +161,7 @@ export function registerTicketRoutes(app: FastifyInstance, deps: TicketRoutesDep
             'نوع الصورة غير مدعوم. يُسمح بالصور من نوع PNG أو JPG أو WEBP أو GIF فقط.',
           );
         }
-        const maxBytes = Math.min(config.uploadMaxMb, 20) * 1024 * 1024;
-        if (imageBuffer.length > maxBytes) {
-          throw ApiError.badRequest('file_too_large', 'حجم الصورة المرفقة يتجاوز الحد الأقصى المسموح.');
-        }
+        await validateTicketImage(imageBuffer);
 
         const ext = resolveImageExtension(imageMime, imageName);
         const fileId = randomUUID();
@@ -232,9 +260,10 @@ export function registerTicketRoutes(app: FastifyInstance, deps: TicketRoutesDep
             if (part.fieldname === 'image' || part.fieldname === 'file') {
               imageName = part.filename;
               imageMime = part.mimetype;
-              imageBuffer = await part.toBuffer();
+              const maxBytes = Math.min(config.uploadMaxMb, 20) * 1024 * 1024;
+              imageBuffer = await readLimitedBuffer(part.file, maxBytes);
             } else {
-              await part.toBuffer();
+              part.file.resume();
             }
           } else if (part.type === 'field') {
             if (part.fieldname === 'message') {
@@ -264,10 +293,7 @@ export function registerTicketRoutes(app: FastifyInstance, deps: TicketRoutesDep
             'نوع الصورة غير مدعوم. يُسمح بالصور من نوع PNG أو JPG أو WEBP أو GIF فقط.',
           );
         }
-        const maxBytes = Math.min(config.uploadMaxMb, 20) * 1024 * 1024;
-        if (imageBuffer.length > maxBytes) {
-          throw ApiError.badRequest('file_too_large', 'حجم الصورة المرفقة يتجاوز الحد الأقصى المسموح.');
-        }
+        await validateTicketImage(imageBuffer);
 
         const ext = resolveImageExtension(imageMime, imageName);
         const fileId = randomUUID();
@@ -349,6 +375,7 @@ export function registerTicketRoutes(app: FastifyInstance, deps: TicketRoutesDep
 
       const obj = await storage.getObject(attachment.storageKey);
       reply.header('Content-Type', attachment.mimeType);
+      reply.header('X-Content-Type-Options', 'nosniff');
       reply.header('Cache-Control', 'private, max-age=86400');
       reply.header(
         'Content-Disposition',
