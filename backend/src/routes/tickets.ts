@@ -67,6 +67,9 @@ async function readLimitedBuffer(
     const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     totalBytes += buf.length;
     if (totalBytes > maxBytes) {
+      if (typeof (fileStream as any).resume === 'function') {
+        (fileStream as any).resume();
+      }
       throw ApiError.badRequest('file_too_large', 'حجم الصورة المرفقة يتجاوز الحد الأقصى المسموح.');
     }
     chunks.push(buf);
@@ -179,13 +182,21 @@ export function registerTicketRoutes(app: FastifyInstance, deps: TicketRoutesDep
         };
       }
 
-      const ticketId = await createTicket(pool, {
-        userId: user.id,
-        departmentId: user.departmentId,
-        title,
-        message,
-        attachment,
-      });
+      let ticketId: string;
+      try {
+        ticketId = await createTicket(pool, {
+          userId: user.id,
+          departmentId: user.departmentId,
+          title,
+          message,
+          attachment,
+        });
+      } catch (err) {
+        if (attachment) {
+          await storage.deleteObject(attachment.storageKey).catch(() => {});
+        }
+        throw err;
+      }
 
       await writeAudit(
         pool,
@@ -311,12 +322,20 @@ export function registerTicketRoutes(app: FastifyInstance, deps: TicketRoutesDep
         };
       }
 
-      const msg = await addTicketMessage(pool, id, {
-        senderId: user.id,
-        message,
-        isAdmin: user.role === 'admin',
-        attachment,
-      });
+      let msg: Awaited<ReturnType<typeof addTicketMessage>>;
+      try {
+        msg = await addTicketMessage(pool, id, {
+          senderId: user.id,
+          message,
+          isAdmin: user.role === 'admin',
+          attachment,
+        });
+      } catch (err) {
+        if (attachment) {
+          await storage.deleteObject(attachment.storageKey).catch(() => {});
+        }
+        throw err;
+      }
 
       try {
         const details = await getTicketById(pool, id, {

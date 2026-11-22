@@ -244,3 +244,27 @@ test('a department referenced by a user cannot be deleted until the user is reas
   const removed = await apiRequest(context.app, adminClient, 'DELETE', `/departments/${departmentId}`);
   assert.equal(removed.statusCode, 200);
 });
+
+test('a department referenced by support tickets cannot be deleted', async () => {
+  const created = await apiRequest(context.app, adminClient, 'POST', '/departments', {
+    payload: { name: 'إدارة مرتبطة بتذكرة' },
+  });
+  const departmentId = (created.json() as { department: { id: string } }).department.id;
+
+  const employee = await context.pool.query<{ id: string }>(
+    "SELECT id FROM users WHERE username = 'employee'",
+  );
+  await context.pool.query(
+    'INSERT INTO support_tickets (user_id, department_id, title, status) VALUES ($1, $2, $3, $4)',
+    [employee.rows[0]!.id, departmentId, 'تذكرة فنية اختبارية', 'open'],
+  );
+
+  const blocked = await apiRequest(context.app, adminClient, 'DELETE', `/departments/${departmentId}`);
+  assert.equal(blocked.statusCode, 409);
+  assert.equal((blocked.json() as { error: { code: string } }).error.code, 'department_has_tickets');
+
+  await context.pool.query('DELETE FROM support_tickets WHERE department_id = $1', [departmentId]);
+
+  const removed = await apiRequest(context.app, adminClient, 'DELETE', `/departments/${departmentId}`);
+  assert.equal(removed.statusCode, 200);
+});

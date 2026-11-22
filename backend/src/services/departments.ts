@@ -135,3 +135,11 @@ export async function countActiveEmployeesInDepartment(db: Queryable, id: string
   );
   return rows[0]?.count ?? 0;
 }
+
+export async function countTicketsInDepartment(db: Queryable, id: string): Promise<number> {
+  const { rows } = await db.query<{ count: number }>(
+    'SELECT count(*)::int AS count FROM support_tickets WHERE department_id = $1',
+    [id],
+  );
+  return rows[0]?.count ?? 0;
+}

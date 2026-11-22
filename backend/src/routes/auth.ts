@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import type { AppConfig } from '../config.js';
+import { withTransaction } from '../db/pool.js';
 import { ApiError } from '../lib/errors.js';
 import {
   hashPassword,
@@ -185,9 +186,11 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
         throw ApiError.badRequest('invalid_current_password', 'كلمة المرور الحالية غير صحيحة.');
       }
       const passwordHash = await hashPassword(body.newPassword);
-      await setUserPassword(pool, user.id, passwordHash);
-      const revoked = await destroyUserSessions(pool, user.id, {
-        exceptToken: request.cookies[SESSION_COOKIE_NAME],
+      const revoked = await withTransaction(pool, async (client) => {
+        await setUserPassword(client, user.id, passwordHash);
+        return await destroyUserSessions(client, user.id, {
+          exceptToken: request.cookies[SESSION_COOKIE_NAME],
+        });
       });
       await writeAudit(
         pool,

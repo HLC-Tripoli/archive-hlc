@@ -175,11 +175,11 @@ export async function listDocuments(
     conditions.push('doc.deleted_at IS NULL');
   }
   if (filters.q) {
-    const pattern = addParam(containsPattern(filters.q));
+    const pattern = addParam(containsPattern(filters.q.toLowerCase()));
     conditions.push(
-      `(doc.reference ILIKE ${pattern} ESCAPE '\\' OR doc.sequence_number ILIKE ${pattern} ESCAPE '\\' ` +
-        `OR doc.title ILIKE ${pattern} ESCAPE '\\' ` +
-        `OR doc.sender ILIKE ${pattern} ESCAPE '\\' OR doc.recipient ILIKE ${pattern} ESCAPE '\\' ` +
+      `(lower(doc.reference) LIKE ${pattern} ESCAPE '\\' OR lower(doc.sequence_number) LIKE ${pattern} ESCAPE '\\' ` +
+        `OR lower(doc.title) LIKE ${pattern} ESCAPE '\\' ` +
+        `OR lower(doc.sender) LIKE ${pattern} ESCAPE '\\' OR lower(doc.recipient) LIKE ${pattern} ESCAPE '\\' ` +
         `OR doc.notes ILIKE ${pattern} ESCAPE '\\' ` +
         `OR dep.name ILIKE ${pattern} ESCAPE '\\')`,
     );

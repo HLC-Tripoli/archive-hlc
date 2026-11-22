@@ -7,6 +7,7 @@ import { writeAudit, type AuditContext } from '../services/audit.js';
 import {
   countActiveEmployeesInDepartment,
   countDocumentsInDepartment,
+  countTicketsInDepartment,
   countUsersInDepartment,
   createDepartment,
   deleteDepartment,
@@ -189,6 +190,13 @@ export function registerDepartmentRoutes(app: FastifyInstance, deps: DepartmentR
         throw ApiError.conflict(
           'department_has_users',
           'لا يمكن حذف الإدارة لأنها مرتبطة بحسابات مستخدمين. أعد تعيين الحسابات إلى إدارة أخرى أولاً.',
+        );
+      }
+      const ticketsCount = await countTicketsInDepartment(pool, id);
+      if (ticketsCount > 0) {
+        throw ApiError.conflict(
+          'department_has_tickets',
+          'لا يمكن حذف الإدارة لأنها مرتبطة بتذاكر دعم فني مسجلة. يمكنك تعطيلها بدلاً من ذلك.',
         );
       }
       await deleteDepartment(pool, id);

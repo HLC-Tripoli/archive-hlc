@@ -131,10 +131,22 @@
   var LEGACY_DOCUMENTS_KEY = "hl_archive_data_v1";
   var LEGACY_DEPARTMENTS_KEY = "hl_archive_departments_v1";
 
-  var CURRENT_APP_VERSION = "1.0.53";
+  var CURRENT_APP_VERSION = "1.0.54";
 
   var notificationPollTimer = null;
   var updateCheckTimer = null;
+
+  function startBackgroundPollers() {
+    if (notificationPollTimer) clearInterval(notificationPollTimer);
+    notificationPollTimer = setInterval(function () {
+      if (state.user) fetchNotifications();
+    }, 25000);
+
+    if (updateCheckTimer) clearInterval(updateCheckTimer);
+    updateCheckTimer = setInterval(function () {
+      if (state.user) checkForUpdates();
+    }, 60000);
+  }
 
   /* ========================================================================
      الحالة العامة
@@ -636,6 +648,8 @@
       loadActiveFileTypes();
       loadSystemSettings();
       checkForUpdates();
+      fetchNotifications();
+      startBackgroundPollers();
       toast("مرحباً " + result.user.displayName + "، تم تسجيل الدخول.");
     } catch (error) {
       message.textContent = errorMessage(error);
@@ -3923,16 +3937,19 @@
       }
     }
 
-    // Polling setup: every 25 seconds
-    if (notificationPollTimer) clearInterval(notificationPollTimer);
-    notificationPollTimer = setInterval(function () {
-      if (state.user) fetchNotifications();
-    }, 25000);
+    // Polling setup: notifications & app updates
+    startBackgroundPollers();
     document.addEventListener("visibilitychange", function () {
-      if (!document.hidden) fetchNotifications();
+      if (!document.hidden && state.user) {
+        fetchNotifications();
+        checkForUpdates();
+      }
     });
     window.addEventListener("focus", function () {
-      fetchNotifications();
+      if (state.user) {
+        fetchNotifications();
+        checkForUpdates();
+      }
     });
   }
 
@@ -4294,6 +4311,10 @@
       hideModal("detailModal");
       hideModal("editAttachmentModal");
       hideModal("userModal");
+      hideModal("ticketChatModal");
+      hideModal("createTicketModal");
+      hideModal("editTicketModal");
+      hideModal("fileTypeModal");
       if (promptResolver) resolvePrompt(null);
       if (confirmResolver) resolveConfirm(false);
     });
@@ -4609,17 +4630,6 @@
         updateTicketStatus(ticketStatusSelect.value);
       });
     }
-
-    if (updateCheckTimer) clearInterval(updateCheckTimer);
-    updateCheckTimer = setInterval(function () {
-      if (state.user) checkForUpdates();
-    }, 60000);
-    document.addEventListener("visibilitychange", function () {
-      if (!document.hidden) checkForUpdates();
-    });
-    window.addEventListener("focus", function () {
-      checkForUpdates();
-    });
   }
 
   async function exportDocumentsCsv(fromReports) {

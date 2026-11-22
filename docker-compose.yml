@@ -30,6 +30,7 @@ services:
   db:
     image: postgres:18
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-hlc}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?يجب ضبط POSTGRES_PASSWORD في ملف .env}
@@ -73,6 +74,7 @@ services:
   api:
     image: ${ARCHIVE_API_IMAGE:-ghcr.io/hlc-tripoli/archive-hlc:api-latest}
     restart: unless-stopped
+    mem_limit: 1g
     env_file:
       - .env
     volumes:
@@ -92,7 +94,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/v1/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 5s

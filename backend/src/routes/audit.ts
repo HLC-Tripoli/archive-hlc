@@ -21,7 +21,7 @@ interface AuditRow {
   ip: string | null;
   user_agent: string | null;
   created_at: Date;
-  total_count: number;
+  total_count?: number;
 }
 
 interface AuditQuery {
@@ -84,20 +84,26 @@ export function registerAuditRoutes(app: FastifyInstance, deps: AuditRoutesDeps)
       if (query.dateFrom) conditions.push(`created_at >= ${addParam(query.dateFrom)}::date`);
       if (query.dateTo) conditions.push(`created_at < (${addParam(query.dateTo)}::date + interval '1 day')`);
 
+      const whereParams = params.slice();
       const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
       const limit = addParam(query.pageSize);
       const offset = addParam((query.page - 1) * query.pageSize);
 
-      const { rows } = await pool.query<AuditRow>(
-        `SELECT id, actor_user_id, actor_username, action, entity_type, entity_id,
-                details, ip, user_agent, created_at,
-                count(*) OVER()::int AS total_count
-           FROM audit_log
-           ${where}
-          ORDER BY created_at DESC, id DESC
-          LIMIT ${limit} OFFSET ${offset}`,
-        params,
-      );
+      const [countResult, rowsResult] = await Promise.all([
+        pool.query<{ total: number }>(`SELECT count(*)::int AS total FROM audit_log ${where}`, whereParams),
+        pool.query<AuditRow>(
+          `SELECT id, actor_user_id, actor_username, action, entity_type, entity_id,
+                  details, ip, user_agent, created_at
+             FROM audit_log
+             ${where}
+            ORDER BY created_at DESC, id DESC
+            LIMIT ${limit} OFFSET ${offset}`,
+          params,
+        ),
+      ]);
+
+      const rows = rowsResult.rows;
+      const total = countResult.rows[0]?.total ?? 0;
 
       return {
         items: rows.map((row) => ({
@@ -112,7 +118,7 @@ export function registerAuditRoutes(app: FastifyInstance, deps: AuditRoutesDeps)
           userAgent: row.user_agent,
           createdAt: row.created_at,
         })),
-        total: rows[0]?.total_count ?? 0,
+        total,
         page: query.page,
         pageSize: query.pageSize,
       };

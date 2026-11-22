@@ -355,8 +355,10 @@ export function registerUserRoutes(app: FastifyInstance, deps: UserRoutesDeps): 
       const target = await getUserById(pool, id);
       if (!target) throw ApiError.notFound('المستخدم غير موجود.');
       const passwordHash = await hashPassword(body.password);
-      await setUserPassword(pool, id, passwordHash);
-      const revoked = await destroyUserSessions(pool, id);
+      const revoked = await withTransaction(pool, async (client) => {
+        await setUserPassword(client, id, passwordHash);
+        return await destroyUserSessions(client, id);
+      });
       await writeAudit(
         pool,
         {
