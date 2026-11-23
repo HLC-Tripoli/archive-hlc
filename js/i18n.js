@@ -244,6 +244,8 @@
       no_report_data: "لا توجد بيانات.",
 
       // Users page
+      users_stat_total: "إجمالي المستخدمين",
+      users_stat_total_sub: "مستخدمين مسجلين في المنظومة",
       users_title: "إدارة المستخدمين",
       users_desc: "إنشاء الحسابات وتعديل الأدوار والتعطيل وإعادة تعيين كلمات المرور.",
       add_user: "+ إضافة مستخدم",
@@ -752,6 +754,8 @@
       no_report_data: "No data available.",
 
       // Users page
+      users_stat_total: "Total Users",
+      users_stat_total_sub: "Registered users in the system",
       users_title: "User Management",
       users_desc: "Add and update user accounts, roles, and assigned departments.",
       add_user: "+ Add User",

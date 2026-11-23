@@ -131,7 +131,7 @@
   var LEGACY_DOCUMENTS_KEY = "hl_archive_data_v1";
   var LEGACY_DEPARTMENTS_KEY = "hl_archive_departments_v1";
 
-  var CURRENT_APP_VERSION = "1.0.54";
+  var CURRENT_APP_VERSION = "1.0.55";
 
   var notificationPollTimer = null;
   var updateCheckTimer = null;
@@ -2217,6 +2217,13 @@
       });
       view.total = data.total;
       view.page = data.page;
+      if (!view.q && !view.role && (view.isActive === "" || view.isActive === undefined)) {
+        state.totalUsersCount = data.total;
+      }
+      var totalCountEl = el("usersTotalCount");
+      if (totalCountEl) {
+        totalCountEl.textContent = String(state.totalUsersCount !== undefined ? state.totalUsersCount : data.total);
+      }
       renderUsersTable(table, data.items);
       renderPager(el("usersPager"), view, function (delta) {
         view.page = Math.max(1, view.page + delta);
