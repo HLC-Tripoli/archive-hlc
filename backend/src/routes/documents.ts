@@ -227,11 +227,14 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
         body.type === 'proposal' ||
         body.type === 'report' ||
         body.type === 'other_attachments';
-      if (!title) {
-        throw ApiError.badRequest('missing_title', 'عنوان الموضوع مطلوب.');
-      }
-      if (!isOtherGroup && !reference) {
-        throw ApiError.badRequest('missing_fields', 'الرقم الاشاري وموضوع الرسالة مطلوبان.');
+      if (!isOtherGroup) {
+        if (!reference || !title) {
+          throw ApiError.badRequest('missing_fields', 'الرقم الاشاري وموضوع الرسالة مطلوبان.');
+        }
+      } else {
+        if (!title) {
+          throw ApiError.badRequest('missing_title', 'عنوان الموضوع مطلوب.');
+        }
       }
       if (sequenceNumber && sequenceNumber.length > SEQUENCE_NUMBER_MAX_LENGTH) {
         throw ApiError.badRequest(

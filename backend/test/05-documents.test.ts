@@ -511,24 +511,36 @@ test('restoring a deleted document conflicts while an active document uses the s
 });
 
 test('additional document types (other, minutes, proposal, report) allow optional fields and partial saves', async () => {
-  // إنشاء مراسلة أخرى بحقول جزئية فقط
+  // عنوان الموضوع إلزامي لجميع المعاملات
+  const missingTitle = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
+    payload: {
+      type: 'other',
+      notes: 'مراسلة أخرى بدون موضوع',
+    },
+  });
+  assert.equal(missingTitle.statusCode, 400);
+  assert.equal((missingTitle.json() as { error: { code: string } }).error.code, 'missing_title');
+
+  // إنشاء مراسلة أخرى بحقول جزئية مع عنوان موضوع فقط
   const otherRes = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
     payload: {
       type: 'other',
-      notes: 'مراسلة أخرى بدون رقم إشاري وبدون موضوع',
+      title: 'مراسلة أخرى بدون رقم إشاري وبموضوع إلزامي',
+      notes: 'مراسلة أخرى بدون رقم إشاري',
     },
   });
   assert.equal(otherRes.statusCode, 201);
   const otherDoc = (otherRes.json() as { document: { id: string; type: string; reference: string | null; title: string | null } }).document;
   assert.equal(otherDoc.type, 'other');
   assert.equal(otherDoc.reference, null);
-  assert.equal(otherDoc.title, null);
+  assert.equal(otherDoc.title, 'مراسلة أخرى بدون رقم إشاري وبموضوع إلزامي');
 
-  // إنشاء محضر اجتماع ومقترح وتقرير بحقول جزئية أو كاملة
+  // إنشاء محضر اجتماع ومقترح وتقرير بحقول جزئية مع عنوان موضوع فقط
   for (const t of ['minutes', 'proposal', 'report'] as const) {
     const res = await apiRequest(context.app, employeeClient, 'POST', '/documents', {
       payload: {
         type: t,
+        title: `مستند ${t} بحقول جزئية`,
         notes: `مستند ${t} بحقول جزئية`,
       },
     });
