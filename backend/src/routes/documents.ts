@@ -20,15 +20,36 @@ import {
   SEQUENCE_NUMBER_MAX_LENGTH,
   softDeleteDocument,
   updateDocument,
+  purgeDeletedDocument,
+  purgeAllDeletedDocuments,
+  batchSoftDeleteDocuments,
+  batchRestoreDocuments,
+  batchPurgeDocuments,
   type DocumentInput,
   type DocumentPatch,
   type DocumentTypeDb,
 } from '../services/documents.js';
+import type { StorageProvider } from '../services/storage/types.js';
 
 export interface DocumentRoutesDeps {
   pool: Pool;
   guards: AuthGuards;
+  storage: StorageProvider;
 }
+
+const BATCH_IDS_SCHEMA = {
+  type: 'object',
+  required: ['ids'],
+  additionalProperties: false,
+  properties: {
+    ids: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 100,
+      items: { type: 'string', maxLength: 64 },
+    },
+  },
+} as const;
 
 const BODY_PROPERTIES = {
   reference: { type: ['string', 'null'], maxLength: 200 },
@@ -104,7 +125,7 @@ function auditContextOf(request: {
 }
 
 export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoutesDeps): void {
-  const { pool, guards } = deps;
+  const { pool, guards, storage } = deps;
 
   app.get(
     '/documents',
@@ -206,7 +227,10 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
         body.type === 'proposal' ||
         body.type === 'report' ||
         body.type === 'other_attachments';
-      if (!isOtherGroup && (!reference || !title)) {
+      if (!title) {
+        throw ApiError.badRequest('missing_title', 'عنوان الموضوع مطلوب.');
+      }
+      if (!isOtherGroup && !reference) {
         throw ApiError.badRequest('missing_fields', 'الرقم الاشاري وموضوع الرسالة مطلوبان.');
       }
       if (sequenceNumber && sequenceNumber.length > SEQUENCE_NUMBER_MAX_LENGTH) {
@@ -340,13 +364,11 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
         targetType === 'proposal' ||
         targetType === 'report' ||
         targetType === 'other_attachments';
-      if (!isOtherGroup) {
-        if (patch.reference !== undefined && !patch.reference) {
-          throw ApiError.badRequest('invalid_reference', 'الرقم الاشاري مطلوب.');
-        }
-        if (patch.title !== undefined && !patch.title) {
-          throw ApiError.badRequest('invalid_title', 'موضوع الرسالة مطلوب.');
-        }
+      if (patch.title !== undefined && !patch.title) {
+        throw ApiError.badRequest('invalid_title', 'موضوع الرسالة مطلوب.');
+      }
+      if (!isOtherGroup && patch.reference !== undefined && !patch.reference) {
+        throw ApiError.badRequest('invalid_reference', 'الرقم الاشاري مطلوب.');
       }
 
       const userId = request.authUser!.id;
@@ -448,6 +470,145 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
       });
       const document = await getDocumentById(pool, id, access);
       return { document, outcome };
+    },
+  );
+
+  app.delete(
+    '/documents/:id/permanent',
+    { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
+    async (request) => {
+      assertPermission(request.authUser!, 'delete');
+      const { id } = request.params as { id: string };
+      if (!isUuid(id)) throw ApiError.notFound('المعاملة غير موجودة.');
+      const access = resolveDocumentAccessScope(request.authUser!);
+      const res = await purgeDeletedDocument(pool, storage, id, access);
+      if (res.status === 'not_found') throw ApiError.notFound('المعاملة غير موجودة.');
+      if (res.status === 'not_deleted') throw ApiError.conflict('not_deleted', 'المعاملة ليست في سلة المحذوفات.');
+      if (res.status === 'forbidden') {
+        throw new ApiError(403, 'forbidden', 'لا يمكنك حذف هذه المعاملة لأنها تابعة لإدارة أخرى.');
+      }
+      await writeAudit(
+        pool,
+        {
+          actorUserId: request.authUser!.id,
+          actorUsername: request.authUser!.username,
+          action: 'document.purged',
+          entityType: 'document',
+          entityId: id,
+          details: { reference: res.reference, title: res.title },
+        },
+        auditContextOf(request),
+      );
+      return { ok: true, id };
+    },
+  );
+
+  app.post(
+    '/documents/purge-all',
+    { preHandler: guards.requireAuth },
+    async (request) => {
+      assertPermission(request.authUser!, 'delete');
+      const access = resolveDocumentAccessScope(request.authUser!);
+      const { purgedCount } = await purgeAllDeletedDocuments(pool, storage, access);
+      await writeAudit(
+        pool,
+        {
+          actorUserId: request.authUser!.id,
+          actorUsername: request.authUser!.username,
+          action: 'document.purged_all',
+          entityType: 'document',
+          entityId: null,
+          details: { purgedCount },
+        },
+        auditContextOf(request),
+      );
+      return { ok: true, purgedCount };
+    },
+  );
+
+  app.post(
+    '/documents/batch-delete',
+    {
+      preHandler: guards.requireAuth,
+      schema: { body: BATCH_IDS_SCHEMA },
+    },
+    async (request) => {
+      assertPermission(request.authUser!, 'delete');
+      const { ids } = request.body as { ids: string[] };
+      const validIds = ids.filter(isUuid);
+      if (validIds.length === 0) throw ApiError.badRequest('invalid_ids', 'معرفات المعاملات غير صالحة.');
+      const access = resolveDocumentAccessScope(request.authUser!);
+      const { deletedCount } = await batchSoftDeleteDocuments(pool, validIds, request.authUser!.id, access);
+      await writeAudit(
+        pool,
+        {
+          actorUserId: request.authUser!.id,
+          actorUsername: request.authUser!.username,
+          action: 'document.batch_deleted',
+          entityType: 'document',
+          entityId: null,
+          details: { requestedCount: validIds.length, deletedCount },
+        },
+        auditContextOf(request),
+      );
+      return { ok: true, deletedCount };
+    },
+  );
+
+  app.post(
+    '/documents/batch-restore',
+    {
+      preHandler: guards.requireAdmin,
+      schema: { body: BATCH_IDS_SCHEMA },
+    },
+    async (request) => {
+      const { ids } = request.body as { ids: string[] };
+      const validIds = ids.filter(isUuid);
+      if (validIds.length === 0) throw ApiError.badRequest('invalid_ids', 'معرفات المعاملات غير صالحة.');
+      const access = resolveDocumentAccessScope(request.authUser!);
+      const { restoredCount } = await batchRestoreDocuments(pool, validIds, request.authUser!.id, access);
+      await writeAudit(
+        pool,
+        {
+          actorUserId: request.authUser!.id,
+          actorUsername: request.authUser!.username,
+          action: 'document.batch_restored',
+          entityType: 'document',
+          entityId: null,
+          details: { requestedCount: validIds.length, restoredCount },
+        },
+        auditContextOf(request),
+      );
+      return { ok: true, restoredCount };
+    },
+  );
+
+  app.post(
+    '/documents/batch-purge',
+    {
+      preHandler: guards.requireAuth,
+      schema: { body: BATCH_IDS_SCHEMA },
+    },
+    async (request) => {
+      assertPermission(request.authUser!, 'delete');
+      const { ids } = request.body as { ids: string[] };
+      const validIds = ids.filter(isUuid);
+      if (validIds.length === 0) throw ApiError.badRequest('invalid_ids', 'معرفات المعاملات غير صالحة.');
+      const access = resolveDocumentAccessScope(request.authUser!);
+      const { purgedCount } = await batchPurgeDocuments(pool, storage, validIds, access);
+      await writeAudit(
+        pool,
+        {
+          actorUserId: request.authUser!.id,
+          actorUsername: request.authUser!.username,
+          action: 'document.batch_purged',
+          entityType: 'document',
+          entityId: null,
+          details: { requestedCount: validIds.length, purgedCount },
+        },
+        auditContextOf(request),
+      );
+      return { ok: true, purgedCount };
     },
   );
 }

@@ -131,7 +131,7 @@
   var LEGACY_DOCUMENTS_KEY = "hl_archive_data_v1";
   var LEGACY_DEPARTMENTS_KEY = "hl_archive_departments_v1";
 
-  var CURRENT_APP_VERSION = "1.0.55";
+  var CURRENT_APP_VERSION = "1.0.56";
 
   var notificationPollTimer = null;
   var updateCheckTimer = null;
@@ -155,6 +155,7 @@
     user: null,
     currentPage: "dashboard",
     uploadMaxMb: 25,
+    selectedDocIds: new Set(),
     activeTicketId: null,
     tickets: [],
     notifications: [],
@@ -894,8 +895,10 @@
      الجداول والتقارير
      ======================================================================== */
   function getDocColumns(isOtherAttachments) {
+    var selectHeader = '<input type="checkbox" id="selectAllDocs" class="table-select-all" title="' + escapeHTML(_t("select_all") || "تحديد الكل") + '" aria-label="' + escapeHTML(_t("select_all") || "تحديد الكل") + '" />';
     if (isOtherAttachments) {
       return [
+        selectHeader,
         _t("col_attachment_name") || "اسم المرفق / المستند",
         _t("field_created_at") || "تاريخ الإضافة",
         _t("col_added_by") || "أُضيف بواسطة",
@@ -906,6 +909,7 @@
       ];
     }
     return [
+      selectHeader,
       _t("col_ref"),
       _t("col_seq"),
       _t("col_title"),
@@ -916,9 +920,62 @@
     ];
   }
 
+  function updateBatchActionBar() {
+    var bar = el("batchActionBar");
+    if (!bar) return;
+    var countEl = el("batchSelectedCount");
+    var deleteBtn = el("batchDeleteBtn");
+    var restoreBtn = el("batchRestoreBtn");
+    var purgeBtn = el("batchPurgeBtn");
+    var selectAll = el("selectAllDocs");
+
+    var count = state.selectedDocIds ? state.selectedDocIds.size : 0;
+    if (countEl) countEl.textContent = count;
+
+    if (count > 0) {
+      bar.classList.remove("is-hidden");
+      var isShowingDeleted = Boolean(state.views.archive && state.views.archive.includeDeleted);
+      if (isAdmin() && isShowingDeleted) {
+        if (restoreBtn) restoreBtn.classList.remove("is-hidden");
+        if (purgeBtn) purgeBtn.classList.remove("is-hidden");
+        if (deleteBtn) deleteBtn.classList.add("is-hidden");
+      } else {
+        if (restoreBtn) restoreBtn.classList.add("is-hidden");
+        if (purgeBtn) purgeBtn.classList.add("is-hidden");
+        if (deleteBtn) deleteBtn.classList.remove("is-hidden");
+      }
+    } else {
+      bar.classList.add("is-hidden");
+    }
+
+    if (selectAll) {
+      var checkboxes = document.querySelectorAll(".doc-select-checkbox");
+      if (checkboxes.length === 0) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+      } else {
+        var checkedCount = 0;
+        checkboxes.forEach(function (cb) {
+          if (cb.checked) checkedCount++;
+        });
+        if (checkedCount === checkboxes.length) {
+          selectAll.checked = true;
+          selectAll.indeterminate = false;
+        } else if (checkedCount > 0) {
+          selectAll.checked = false;
+          selectAll.indeterminate = true;
+        } else {
+          selectAll.checked = false;
+          selectAll.indeterminate = false;
+        }
+      }
+    }
+  }
+
   function renderDocuments(container, items, viewName) {
     if (!items.length) {
       renderEmpty(container, _t("no_documents"));
+      updateBatchActionBar();
       return;
     }
     var admin = isAdmin();
@@ -965,6 +1022,12 @@
                 escapeHTML(document.id) +
                 '">' + escapeHTML(_t("restore")) + '</button>'
             );
+            actions.push(
+              '<button type="button" class="small-button delete-button" data-doc-action="purge" data-id="' +
+                escapeHTML(document.id) +
+                '" title="' + escapeHTML(_t("permanent_delete") || "حذف نهائي") + '">' +
+                '🗑️ ' + escapeHTML(_t("permanent_delete") || "حذف نهائي") + '</button>'
+            );
           } else if (!deleted && (admin || hasPermission("delete"))) {
             actions.push(
               '<button type="button" class="small-button delete-button" data-doc-action="delete" data-id="' +
@@ -972,10 +1035,14 @@
                 '">' + escapeHTML(_t("delete")) + '</button>'
             );
           }
+          var isChecked = Boolean(state.selectedDocIds && state.selectedDocIds.has(document.id));
+          var selectTd = '<td class="col-select"><input type="checkbox" class="doc-select-checkbox" data-id="' + escapeHTML(document.id) + '"' + (isChecked ? ' checked' : '') + ' aria-label="' + escapeHTML(_t("select_row") || "تحديد") + '" /></td>';
           return (
             "<tr" +
             (deleted ? ' class="row-deleted"' : "") +
-            "><td><strong>" +
+            ">" +
+            selectTd +
+            "<td><strong>" +
             escapeHTML(document.title || "—") +
             "</strong>" +
             (deleted ? ' <span class="badge badge-deleted">' + escapeHTML(_t("deleted_badge")) + '</span>' : "") +
@@ -1020,6 +1087,12 @@
               escapeHTML(document.id) +
               '">' + escapeHTML(_t("restore")) + '</button>'
           );
+          actions.push(
+            '<button type="button" class="small-button delete-button" data-doc-action="purge" data-id="' +
+              escapeHTML(document.id) +
+              '" title="' + escapeHTML(_t("permanent_delete") || "حذف نهائي") + '">' +
+              '🗑️ ' + escapeHTML(_t("permanent_delete") || "حذف نهائي") + '</button>'
+          );
         } else if (!deleted && (admin || hasPermission("delete"))) {
           actions.push(
             '<button type="button" class="small-button delete-button" data-doc-action="delete" data-id="' +
@@ -1027,10 +1100,14 @@
               '">' + escapeHTML(_t("delete")) + '</button>'
           );
         }
+        var isChecked = Boolean(state.selectedDocIds && state.selectedDocIds.has(document.id));
+        var selectTd = '<td class="col-select"><input type="checkbox" class="doc-select-checkbox" data-id="' + escapeHTML(document.id) + '"' + (isChecked ? ' checked' : '') + ' aria-label="' + escapeHTML(_t("select_row") || "تحديد") + '" /></td>';
         return (
           "<tr" +
           (deleted ? ' class="row-deleted"' : "") +
-          "><td>" +
+          ">" +
+          selectTd +
+          "<td>" +
           escapeHTML(document.reference || "—") +
           "</td><td>" +
           escapeHTML(document.sequenceNumber || "—") +
@@ -1051,12 +1128,14 @@
       .join("");
     container.innerHTML =
       '<div class="table-wrap"><table><thead><tr>' +
-      getDocColumns(isOtherAttachments).map(function (column) {
-        return "<th>" + column + "</th>";
+      getDocColumns(isOtherAttachments).map(function (column, idx) {
+        var cls = idx === 0 ? ' class="col-select"' : '';
+        return '<th' + cls + '>' + column + '</th>';
       }).join("") +
       "</tr></thead><tbody>" +
       rows +
       "</tbody></table></div>";
+    updateBatchActionBar();
   }
 
   function documentQuery(viewName) {
@@ -1142,6 +1221,16 @@
           loadDocumentsView(viewName);
         });
       }
+      if (viewName === "archive") {
+        var emptyTrashBtn = el("emptyTrashButton");
+        if (emptyTrashBtn) {
+          if (isAdmin() && view.includeDeleted) {
+            emptyTrashBtn.classList.remove("is-hidden");
+          } else {
+            emptyTrashBtn.classList.add("is-hidden");
+          }
+        }
+      }
     } catch (error) {
       renderError(table, errorMessage(error));
     }
@@ -1226,12 +1315,17 @@
     } else if (type === "other_attachments") {
       select.innerHTML = '<option value="other_attachments">' + escapeHTML(_t("type_other_attachments")) + '</option>';
     } else {
-      select.innerHTML =
-        '<option value="other">' + escapeHTML(_t("type_other")) + '</option>' +
-        '<option value="other_attachments">' + escapeHTML(_t("type_other_attachments")) + '</option>' +
-        '<option value="minutes">' + escapeHTML(_t("type_minutes")) + '</option>' +
-        '<option value="proposal">' + escapeHTML(_t("type_proposal")) + '</option>' +
-        '<option value="report">' + escapeHTML(_t("type_report")) + '</option>';
+      var opts = [
+        '<option value="minutes">' + escapeHTML(_t("type_minutes")) + '</option>',
+        '<option value="proposal">' + escapeHTML(_t("type_proposal")) + '</option>',
+        '<option value="report">' + escapeHTML(_t("type_report")) + '</option>'
+      ];
+      if (type === "other") {
+        opts.unshift('<option value="other">' + escapeHTML(_t("type_other")) + '</option>');
+      } else if (type === "other_attachments") {
+        opts.unshift('<option value="other_attachments">' + escapeHTML(_t("type_other_attachments")) + '</option>');
+      }
+      select.innerHTML = opts.join("");
     }
     select.value = type;
   }
@@ -1269,7 +1363,7 @@
     var titleLabel = document.querySelector('label[for="title"]');
 
     if (isOtherGroup) {
-      // نزع النجمات وجعل الحقول اختيارية في معاملات مراسلات أخرى وما يتبعها
+      // الحقول اختيارية في معاملات مراسلات أخرى ما عدا عنوان الموضوع
       if (dateLabel) dateLabel.textContent = _t("doc_date_label_optional");
       el("date").removeAttribute("required");
 
@@ -1277,9 +1371,9 @@
       el("reference").removeAttribute("required");
       el("reference").placeholder = _t("doc_ref_placeholder_optional");
 
-      if (titleLabel) titleLabel.textContent = _t("doc_title_label_optional");
-      el("title").removeAttribute("required");
-      el("title").placeholder = _t("doc_title_placeholder_optional");
+      if (titleLabel) titleLabel.textContent = _t("doc_title_label");
+      el("title").setAttribute("required", "required");
+      el("title").placeholder = _t("doc_title_placeholder");
     } else {
       if (dateLabel) dateLabel.textContent = _t("doc_date_label");
       el("date").setAttribute("required", "required");
@@ -1361,7 +1455,11 @@
       }
     }
     state.editingDocumentId = doc ? doc.id : null;
-    state.documentType = doc ? doc.type : (defaultType || "incoming");
+    var defType = defaultType || "incoming";
+    if (!doc && (defType === "other" || defType === "other_attachments")) {
+      defType = "minutes";
+    }
+    state.documentType = doc ? doc.type : defType;
     state.pendingFiles = [];
     state.pendingCounter = 0;
     state.uploadingAttachments = false;
@@ -2119,6 +2217,9 @@
         actions.push(
           '<button type="button" class="button" id="detailRestoreButton">' + escapeHTML(_t("restore")) + '</button>'
         );
+        actions.push(
+          '<button type="button" class="button danger-button" id="detailPurgeButton">' + '🗑️ ' + escapeHTML(_t("permanent_delete") || "حذف نهائي") + '</button>'
+        );
       } else if (!deleted && (isAdmin() || hasPermission("delete"))) {
         actions.push(
           '<button type="button" class="button danger-button" id="detailDeleteButton">' + escapeHTML(_t("delete")) + '</button>'
@@ -2160,6 +2261,13 @@
           hideModal("detailModal");
         });
       }
+      var purgeButton = el("detailPurgeButton");
+      if (purgeButton) {
+        purgeButton.addEventListener("click", async function () {
+          var performed = await performDocumentAction("purge", documentId);
+          if (performed) hideModal("detailModal");
+        });
+      }
       el("detailCloseButton").addEventListener("click", function () {
         hideModal("detailModal");
       });
@@ -2183,6 +2291,14 @@
       if (action === "restore") {
         await api.post("/documents/" + documentId + "/restore");
         toast("تمت استعادة المعاملة.");
+      }
+      if (action === "purge") {
+        var confirmed = await confirmDialog(_t("confirm_permanent_delete") || "هل تريد حذف هذا المستند وملفاته نهائياً من القرص وقاعدة البيانات؟ لا يمكن التراجع عن هذا الإجراء.");
+        if (!confirmed) return false;
+        await api.del("/documents/" + documentId + "/permanent");
+        toast(_t("document_purged_success") || "تم حذف المستند وجميع مرفقاته نهائياً.");
+        if (state.selectedDocIds) state.selectedDocIds.delete(documentId);
+        updateBatchActionBar();
       }
       refreshDocumentsAndStats();
       return true;
@@ -2756,15 +2872,26 @@
   async function submitChangePassword(event) {
     event.preventDefault();
     showFormError("changePasswordError", "");
+    var cur = el("currentPassword").value;
+    var nw = el("newPassword").value;
+    var confirm = el("confirmNewPassword") ? el("confirmNewPassword").value : "";
+
+    if (confirm && nw !== confirm) {
+      showFormError("changePasswordError", _t("passwords_do_not_match") || "كلمة المرور الجديدة وتأكيدها غير متطابقين.");
+      return;
+    }
+
     var button = event.submitter || event.target.querySelector("button[type=submit]");
     setBusy(button, true, "جارٍ التغيير…");
     try {
       await api.post("/auth/password", {
-        currentPassword: el("currentPassword").value,
-        newPassword: el("newPassword").value
+        currentPassword: cur,
+        newPassword: nw,
+        confirmPassword: confirm
       });
       el("currentPassword").value = "";
       el("newPassword").value = "";
+      if (el("confirmNewPassword")) el("confirmNewPassword").value = "";
       toast("تم تغيير كلمة المرور وإنهاء الجلسات الأخرى.");
     } catch (error) {
       showFormError("changePasswordError", errorMessage(error));
@@ -3444,6 +3571,10 @@
      التنقل بين الصفحات
      ======================================================================== */
   async function showPage(pageId) {
+    if (state.selectedDocIds) {
+      state.selectedDocIds.clear();
+      updateBatchActionBar();
+    }
     // حالة الدور/الإدارة تُقرأ من الخادم عند كل تنقّل، فلا تُبقي جلسة قائمة
     // واجهة إدارية قديمة بعد تغيير الدور أو تعطيل الحساب أو نقل الإدارة.
     if (state.user) await refreshSession();
@@ -4074,7 +4205,7 @@
     });
     if (el("addOtherButton")) {
       el("addOtherButton").addEventListener("click", function () {
-        openDocumentForm("create", null, "other");
+        openDocumentForm("create", null, "minutes");
       });
     }
     if (el("editAttachmentForm")) {
@@ -4339,6 +4470,7 @@
         if (action === "edit-attachment") openEditAttachmentModal(id);
         if (action === "delete") performDocumentAction("delete", id);
         if (action === "restore") performDocumentAction("restore", id);
+        if (action === "purge") performDocumentAction("purge", id);
         return;
       }
       var pendingButton = event.target.closest("[data-pending-action]");
@@ -4432,6 +4564,8 @@
     el("includeDeletedFilter").addEventListener("change", function () {
       state.views.archive.includeDeleted = el("includeDeletedFilter").checked;
       state.views.archive.page = 1;
+      if (state.selectedDocIds) state.selectedDocIds.clear();
+      updateBatchActionBar();
       loadDocumentsView("archive");
     });
 
@@ -4451,6 +4585,9 @@
       el("dateToFilter").value = "";
       el("sortFilter").value = "date:desc";
       el("includeDeletedFilter").checked = false;
+      if (el("emptyTrashButton")) el("emptyTrashButton").classList.add("is-hidden");
+      if (state.selectedDocIds) state.selectedDocIds.clear();
+      updateBatchActionBar();
       state.views.archive = {
         page: 1,
         pageSize: 10,
@@ -4466,6 +4603,121 @@
       };
       loadDocumentsView("archive");
     });
+
+    document.addEventListener("change", function (event) {
+      if (event.target && event.target.id === "selectAllDocs") {
+        var isChecked = event.target.checked;
+        var checkboxes = document.querySelectorAll(".doc-select-checkbox");
+        checkboxes.forEach(function (cb) {
+          cb.checked = isChecked;
+          var docId = cb.dataset.id;
+          if (docId) {
+            if (isChecked) {
+              state.selectedDocIds.add(docId);
+            } else {
+              state.selectedDocIds.delete(docId);
+            }
+          }
+        });
+        updateBatchActionBar();
+      } else if (event.target && event.target.classList.contains("doc-select-checkbox")) {
+        var docId = event.target.dataset.id;
+        if (docId) {
+          if (event.target.checked) {
+            state.selectedDocIds.add(docId);
+          } else {
+            state.selectedDocIds.delete(docId);
+          }
+        }
+        updateBatchActionBar();
+      }
+    });
+
+    if (el("batchClearBtn")) {
+      el("batchClearBtn").addEventListener("click", function () {
+        if (state.selectedDocIds) state.selectedDocIds.clear();
+        document.querySelectorAll(".doc-select-checkbox").forEach(function (cb) {
+          cb.checked = false;
+        });
+        updateBatchActionBar();
+      });
+    }
+
+    if (el("batchDeleteBtn")) {
+      el("batchDeleteBtn").addEventListener("click", async function () {
+        if (!state.selectedDocIds || state.selectedDocIds.size === 0) return;
+        var msg = (_t("confirm_batch_delete") || "هل تريد نقل المعاملات المحددة ({count}) إلى المحذوفات؟")
+          .replace("{count}", state.selectedDocIds.size);
+        var confirmed = await confirmDialog(msg);
+        if (!confirmed) return;
+        try {
+          var ids = Array.from(state.selectedDocIds);
+          await api.post("/documents/batch-delete", { ids: ids });
+          toast(_t("batch_delete_success") || "تم نقل المعاملات المحددة إلى المحذوفات.");
+          state.selectedDocIds.clear();
+          updateBatchActionBar();
+          refreshDocumentsAndStats();
+        } catch (err) {
+          toast(errorMessage(err), "error");
+        }
+      });
+    }
+
+    if (el("batchRestoreBtn")) {
+      el("batchRestoreBtn").addEventListener("click", async function () {
+        if (!state.selectedDocIds || state.selectedDocIds.size === 0) return;
+        var msg = (_t("confirm_batch_restore") || "هل تريد استعادة المعاملات المحددة ({count})؟")
+          .replace("{count}", state.selectedDocIds.size);
+        var confirmed = await confirmDialog(msg);
+        if (!confirmed) return;
+        try {
+          var ids = Array.from(state.selectedDocIds);
+          await api.post("/documents/batch-restore", { ids: ids });
+          toast(_t("batch_restore_success") || "تمت استعادة المعاملات المحددة بنجاح.");
+          state.selectedDocIds.clear();
+          updateBatchActionBar();
+          refreshDocumentsAndStats();
+        } catch (err) {
+          toast(errorMessage(err), "error");
+        }
+      });
+    }
+
+    if (el("batchPurgeBtn")) {
+      el("batchPurgeBtn").addEventListener("click", async function () {
+        if (!state.selectedDocIds || state.selectedDocIds.size === 0) return;
+        var msg = (_t("confirm_batch_purge") || "تحذير: هل أنت متأكد من حذف المعاملات المحددة ({count}) وجميع ملفاتها نهائياً؟")
+          .replace("{count}", state.selectedDocIds.size);
+        var confirmed = await confirmDialog(msg);
+        if (!confirmed) return;
+        try {
+          var ids = Array.from(state.selectedDocIds);
+          await api.post("/documents/batch-purge", { ids: ids });
+          toast(_t("batch_purge_success") || "تم حذف المعاملات المحددة نهائياً.");
+          state.selectedDocIds.clear();
+          updateBatchActionBar();
+          refreshDocumentsAndStats();
+        } catch (err) {
+          toast(errorMessage(err), "error");
+        }
+      });
+    }
+
+    if (el("emptyTrashButton")) {
+      el("emptyTrashButton").addEventListener("click", async function () {
+        var confirmed = await confirmDialog(_t("confirm_empty_trash") || "هل تريد بالتأكيد إفراغ سلة المحذوفات وحذف كافة المعاملات المحذوفة نهائياً من القرص وقاعدة البيانات؟ هذا الإجراء لا يمكن التراجع عنه.");
+        if (!confirmed) return;
+        try {
+          await api.post("/documents/purge-all");
+          toast(_t("trash_emptied_success") || "تم إفراغ سلة المحذوفات وحذف جميع الملفات بنجاح.");
+          if (state.selectedDocIds) state.selectedDocIds.clear();
+          updateBatchActionBar();
+          refreshDocumentsAndStats();
+        } catch (err) {
+          toast(errorMessage(err), "error");
+        }
+      });
+    }
 
     el("exportArchiveCsvButton").addEventListener("click", function () {
       exportDocumentsCsv(false);

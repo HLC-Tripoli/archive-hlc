@@ -564,3 +564,62 @@ test('additional document types (other, minutes, proposal, report) allow optiona
   const searchItems = (searchRes.json() as { items: Array<{ id: string }> }).items;
   assert.ok(searchItems.some((i) => i.id === otherDoc.id));
 });
+
+test('batch actions, permanent deletion, and purge-all work properly', async () => {
+  const doc1 = await createDocument({
+    reference: 'REF-BATCH-1',
+    title: 'وثيقة مجمعة 1',
+    type: 'incoming',
+    date: '2026-11-20',
+  });
+  const doc2 = await createDocument({
+    reference: 'REF-BATCH-2',
+    title: 'وثيقة مجمعة 2',
+    type: 'incoming',
+    date: '2026-11-20',
+  });
+  const doc3 = await createDocument({
+    reference: 'REF-BATCH-3',
+    title: 'وثيقة مجمعة 3',
+    type: 'incoming',
+    date: '2026-11-20',
+  });
+
+  // 1. Batch soft-delete
+  const batchDelRes = await apiRequest(context.app, adminClient, 'POST', '/documents/batch-delete', {
+    payload: { ids: [doc1.id, doc2.id] },
+  });
+  assert.equal(batchDelRes.statusCode, 200);
+  assert.equal((batchDelRes.json() as { deletedCount: number }).deletedCount, 2);
+
+  // Verify employee cannot see doc1 or doc2
+  const listAfterDel = await apiRequest(context.app, employeeClient, 'GET', '/documents');
+  const items = (listAfterDel.json() as { items: Array<{ id: string }> }).items;
+  assert.ok(!items.some((i) => i.id === doc1.id));
+  assert.ok(!items.some((i) => i.id === doc2.id));
+  assert.ok(items.some((i) => i.id === doc3.id));
+
+  // 2. Batch restore doc1
+  const batchRestRes = await apiRequest(context.app, adminClient, 'POST', '/documents/batch-restore', {
+    payload: { ids: [doc1.id] },
+  });
+  assert.equal(batchRestRes.statusCode, 200);
+  assert.equal((batchRestRes.json() as { restoredCount: number }).restoredCount, 1);
+
+  // 3. Single permanent delete doc2
+  const permDelRes = await apiRequest(context.app, adminClient, 'DELETE', `/documents/${doc2.id}/permanent`);
+  assert.equal(permDelRes.statusCode, 200);
+
+  // Verify doc2 is completely gone from DB
+  const checkDoc2 = await context.pool.query('SELECT id FROM documents WHERE id = $1', [doc2.id]);
+  assert.equal(checkDoc2.rows.length, 0);
+
+  // 4. Soft-delete doc3 then purge-all
+  await apiRequest(context.app, adminClient, 'DELETE', `/documents/${doc3.id}`);
+  const purgeAllRes = await apiRequest(context.app, adminClient, 'POST', '/documents/purge-all');
+  assert.equal(purgeAllRes.statusCode, 200);
+  assert.equal((purgeAllRes.json() as { purgedCount: number }).purgedCount, 1);
+
+  const checkDoc3 = await context.pool.query('SELECT id FROM documents WHERE id = $1', [doc3.id]);
+  assert.equal(checkDoc3.rows.length, 0);
+});

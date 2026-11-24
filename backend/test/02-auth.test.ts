@@ -441,6 +441,30 @@ test('password change verifies the current password and revokes the other sessio
   assert.ok(((audit.rows[0]!.details as { revokedSessions: number }).revokedSessions) >= 1);
 });
 
+test('password change validates confirmPassword matching', async () => {
+  const client = await loginClient(context.app, 'admin');
+
+  // Mismatch
+  const mismatchRes = await apiRequest(context.app, client, 'POST', '/auth/password', {
+    payload: {
+      currentPassword: 'admin',
+      newPassword: 'new-password-123',
+      confirmPassword: 'different-password-123',
+    },
+  });
+  assert.equal(mismatchRes.statusCode, 400);
+
+  // Matching
+  const matchRes = await apiRequest(context.app, client, 'POST', '/auth/password', {
+    payload: {
+      currentPassword: 'admin',
+      newPassword: 'new-password-123',
+      confirmPassword: 'new-password-123',
+    },
+  });
+  assert.equal(matchRes.statusCode, 200);
+});
+
 test('login attempts are rate limited', async () => {
   const limited = await createTestContext({
     rateLimits: { loginMax: 3, sensitiveMax: 50, globalMax: 100000 },

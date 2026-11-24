@@ -172,12 +172,16 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
           properties: {
             currentPassword: { type: 'string', minLength: 1, maxLength: 200 },
             newPassword: { type: 'string', minLength: 8, maxLength: 200 },
+            confirmPassword: { type: 'string', minLength: 8, maxLength: 200 },
           },
         },
       },
     },
     async (request, reply) => {
-      const body = request.body as { currentPassword: string; newPassword: string };
+      const body = request.body as { currentPassword: string; newPassword: string; confirmPassword?: string };
+      if (body.confirmPassword !== undefined && body.newPassword !== body.confirmPassword) {
+        throw ApiError.badRequest('password_mismatch', 'كلمتا المرور الجديدتان غير متطابقتين.');
+      }
       validatePassword(body.newPassword);
       const user = await getUserById(pool, request.authUser!.id);
       if (!user) throw ApiError.unauthorized();

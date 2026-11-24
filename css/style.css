@@ -3114,3 +3114,95 @@ input.input-locked {
   background: rgba(239, 68, 68, 0.12);
   color: #ef4444;
 }
+
+/* ==========================================================================
+   Multi-select Checkboxes & Batch Action Bar
+   ========================================================================== */
+.col-select {
+  width: 44px;
+  min-width: 44px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.col-select input[type="checkbox"],
+.table-select-all {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary);
+  vertical-align: middle;
+  margin: 0;
+}
+
+.batch-action-bar {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 10px 35px rgba(0, 0, 0, 0.22);
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  z-index: 1050;
+  animation: batchSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes batchSlideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 15px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.batch-action-info {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.batch-action-info #batchSelectedCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 12px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.batch-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Support section wide scaling */
+.custom-support-section {
+  width: 100%;
+}
+
+.custom-support-section #ticketsListContainer {
+  width: 100%;
+}
+
+.custom-support-section #ticketsListContainer .table-wrap {
+  width: 100%;
+}

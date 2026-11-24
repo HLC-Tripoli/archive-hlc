@@ -3,6 +3,7 @@ import type { Queryable } from '../db/pool.js';
 import type { DocumentAccessScope } from '../lib/access.js';
 import { containsPattern } from '../lib/sql.js';
 import { listFilesForDocument, type FileRecordPublic } from './files.js';
+import type { StorageProvider } from './storage/types.js';
 
 export type DocumentTypeDb =
   | 'incoming'
@@ -450,4 +451,129 @@ export async function restoreDocument(
     [id, userId],
   );
   return 'restored';
+}
+
+export async function purgeDeletedDocument(
+  pool: Pool,
+  storage: StorageProvider,
+  id: string,
+  access: DocumentAccessScope,
+): Promise<{ status: 'purged' | 'not_found' | 'not_deleted' | 'forbidden'; reference?: string; title?: string }> {
+  const { rows } = await pool.query<{ id: string; reference: string; title: string; deleted_at: Date | null; department_id: string | null }>(
+    'SELECT id, reference, title, deleted_at, department_id FROM documents WHERE id = $1',
+    [id],
+  );
+  const doc = rows[0];
+  if (!doc) return { status: 'not_found' };
+  if (!doc.deleted_at) return { status: 'not_deleted' };
+  if (!access.isAdmin && doc.department_id !== access.departmentId) {
+    return { status: 'forbidden' };
+  }
+
+  const files = await pool.query<{ storage_key: string }>(
+    'SELECT storage_key FROM document_files WHERE document_id = $1',
+    [id],
+  );
+  for (const f of files.rows) {
+    await storage.deleteObject(f.storage_key).catch(() => {});
+  }
+
+  await pool.query('DELETE FROM documents WHERE id = $1', [id]);
+  return { status: 'purged', reference: doc.reference, title: doc.title };
+}
+
+export async function purgeAllDeletedDocuments(
+  pool: Pool,
+  storage: StorageProvider,
+  access: DocumentAccessScope,
+): Promise<{ purgedCount: number }> {
+  let query = 'SELECT id FROM documents WHERE deleted_at IS NOT NULL';
+  const params: unknown[] = [];
+  if (!access.isAdmin) {
+    params.push(access.departmentId);
+    query += ` AND department_id = $${params.length}`;
+  }
+  const { rows } = await pool.query<{ id: string }>(query, params);
+  let purgedCount = 0;
+  for (const row of rows) {
+    const res = await purgeDeletedDocument(pool, storage, row.id, access);
+    if (res.status === 'purged') purgedCount++;
+  }
+  return { purgedCount };
+}
+
+export async function purgeExpiredDeletedDocuments(
+  pool: Pool,
+  storage: StorageProvider,
+  days = 7,
+): Promise<number> {
+  const { rows } = await pool.query<{ id: string }>(
+    `SELECT id FROM documents WHERE deleted_at IS NOT NULL AND deleted_at < now() - make_interval(days => $1)`,
+    [days],
+  );
+  let count = 0;
+  for (const row of rows) {
+    const files = await pool.query<{ storage_key: string }>(
+      'SELECT storage_key FROM document_files WHERE document_id = $1',
+      [row.id],
+    );
+    for (const f of files.rows) {
+      await storage.deleteObject(f.storage_key).catch(() => {});
+    }
+    await pool.query('DELETE FROM documents WHERE id = $1', [row.id]);
+    count++;
+  }
+  return count;
+}
+
+export async function batchSoftDeleteDocuments(
+  pool: Pool,
+  ids: string[],
+  userId: string,
+  access: DocumentAccessScope,
+): Promise<{ deletedCount: number }> {
+  let query = `UPDATE documents
+      SET deleted_at = now(), deleted_by = $1, updated_at = now(), updated_by = $1
+    WHERE id = ANY($2::uuid[]) AND deleted_at IS NULL`;
+  const params: unknown[] = [userId, ids];
+  if (!access.isAdmin) {
+    params.push(access.departmentId);
+    query += ` AND department_id = $3`;
+  }
+  const res = await pool.query(query, params);
+  return { deletedCount: res.rowCount ?? 0 };
+}
+
+export async function batchRestoreDocuments(
+  pool: Pool,
+  ids: string[],
+  userId: string,
+  access: DocumentAccessScope,
+): Promise<{ restoredCount: number }> {
+  let count = 0;
+  for (const id of ids) {
+    const { rows } = await pool.query<{ department_id: string | null }>(
+      'SELECT department_id FROM documents WHERE id = $1',
+      [id],
+    );
+    if (rows[0] && (access.isAdmin || rows[0].department_id === access.departmentId)) {
+      const res = await restoreDocument(pool, id, userId);
+      if (res === 'restored') count++;
+    }
+  }
+  return { restoredCount: count };
+}
+
+export async function batchPurgeDocuments(
+  pool: Pool,
+  storage: StorageProvider,
+  ids: string[],
+  access: DocumentAccessScope,
+): Promise<{ purgedCount: number }> {
+  let count = 0;
+  for (const id of ids) {
+    const res = await purgeDeletedDocument(pool, storage, id, access);
+    if (res.status === 'purged') count++;
+  }
+  return { purgedCount: count };
 }

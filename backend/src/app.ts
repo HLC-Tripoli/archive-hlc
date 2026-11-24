@@ -20,6 +20,7 @@ import { registerSettingsRoutes } from './routes/settings.js';
 import { registerStatsRoutes } from './routes/stats.js';
 import { registerTicketRoutes } from './routes/tickets.js';
 import { registerUserRoutes } from './routes/users.js';
+import { purgeExpiredDeletedDocuments } from './services/documents.js';
 import { refreshFileTypesCache } from './services/fileTypes.js';
 import {
   createAttachmentOptimizer,
@@ -135,7 +136,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   app.addHook('onSend', async (_request, reply) => {
-    reply.header('X-App-Version', '1.0.55');
+    reply.header('X-App-Version', '1.0.56');
   });
 
   const guards = buildAuthGuards({ pool, config });
@@ -182,12 +183,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   await app.register(
     async (instance) => {
-      instance.get('/version', async () => ({ version: '1.0.55' }));
+      instance.get('/version', async () => ({ version: '1.0.56' }));
       registerHealthRoutes(instance, { pool, storage });
       registerAuthRoutes(instance, { pool, config, guards });
       registerUserRoutes(instance, { pool, config, guards });
       registerDepartmentRoutes(instance, { pool, guards });
-      registerDocumentRoutes(instance, { pool, guards });
+      registerDocumentRoutes(instance, { pool, guards, storage });
       registerFileRoutes(instance, { pool, guards, storage, config, optimizer });
       registerFileTypeRoutes(instance, { pool, guards });
       registerSettingsRoutes(instance, { pool, guards, defaultUploadMaxMb: config.uploadMaxMb });
@@ -199,6 +200,21 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     },
     { prefix: '/api/v1' },
   );
+
+  // Automatic 7-day purge of expired soft-deleted documents & files
+  const runAutoPurge = async () => {
+    try {
+      const purged = await purgeExpiredDeletedDocuments(pool, storage, 7);
+      if (purged > 0) {
+        app.log.info({ purgedCount: purged }, 'auto-purged expired soft-deleted documents');
+      }
+    } catch (err) {
+      app.log.warn({ err }, 'auto-purge expired documents failed');
+    }
+  };
+  runAutoPurge().catch(() => {});
+  const purgeTimer = setInterval(runAutoPurge, 3600000);
+  purgeTimer.unref();
 
   return app;
 }

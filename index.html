@@ -6,7 +6,7 @@
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
     <script src="./js/theme-pre.js"></script>
-    <link rel="stylesheet" href="./css/style.css?v=1.0.55" />
+    <link rel="stylesheet" href="./css/style.css?v=1.0.56" />
     <link rel="icon" href="./img/logo.svg" />
     <meta name="referrer" content="same-origin" />
   </head>
@@ -317,6 +317,9 @@
                 <p data-i18n="archive_desc">جميع الوثائق المسجلة في المنظومة مع البحث والتصفية.</p>
               </div>
               <div class="panel-actions">
+                <button class="button danger-button is-hidden" id="emptyTrashButton" type="button" data-i18n="empty_trash">
+                  🗑️ إفراغ سلة المحذوفات
+                </button>
                 <button class="button secondary-button" id="exportArchiveCsvButton" data-requires-department type="button" data-i18n="export_csv">
                   استخراج اكسل
                 </button>
@@ -523,6 +526,8 @@
               <input id="currentPassword" type="password" autocomplete="current-password" required data-i18n-placeholder="current_password_placeholder" placeholder="أدخل كلمة المرور الحالية" />
               <label for="newPassword" data-i18n="new_password_label">كلمة المرور الجديدة</label>
               <input id="newPassword" type="password" autocomplete="new-password" minlength="8" required data-i18n-placeholder="new_password_placeholder" placeholder="8 أحرف على الأقل" />
+              <label for="confirmNewPassword" data-i18n="confirm_new_password_label">تأكيد كلمة المرور الجديدة *</label>
+              <input id="confirmNewPassword" type="password" autocomplete="new-password" minlength="8" required data-i18n-placeholder="confirm_new_password_placeholder" placeholder="أعد إدخال كلمة المرور الجديدة" />
               <div id="changePasswordError" class="alert alert-error" hidden></div>
               <div class="form-actions">
                 <button class="button" type="submit" data-i18n="update_password_btn">تغيير كلمة المرور</button>
@@ -660,24 +665,22 @@
                 </div>
               </article>
             </div>
+          </div>
 
-            <!-- قسم الدعم الفني والمساعدة والتذاكر -->
-            <div class="custom-support-section" style="margin-top: 48px; border-top: 1px solid var(--border); padding-top: 36px;">
-              <div class="custom-section-head" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
-                <div>
-                  <h2 class="custom-section-title" data-i18n="support_section_title">الدعم الفني والمساعدة</h2>
-                  <p class="custom-section-desc" data-i18n="support_section_desc">يمكنك فتح تذكرة دعم لمتابعة استفسارك أو مشكلتك الفنية والتواصل مباشرة مع الدعم الفني.</p>
-                </div>
-                <div>
-                  <button type="button" class="button" id="openCreateTicketBtn" data-i18n="create_ticket_btn">
-                    + فتح تذكرة جديدة
-                  </button>
-                </div>
+          <!-- قسم الدعم الفني والمساعدة والتذاكر -->
+          <div class="panel custom-support-section" style="margin-top: 32px;">
+            <div class="panel-heading">
+              <div>
+                <h2 data-i18n="support_section_title">الدعم الفني والمساعدة</h2>
+                <p data-i18n="support_section_desc">يمكنك فتح تذكرة دعم لمتابعة استفسارك أو مشكلتك الفنية والتواصل مباشرة مع الدعم الفني.</p>
               </div>
+              <button type="button" class="button" id="openCreateTicketBtn" data-i18n="create_ticket_btn">
+                + فتح تذكرة جديدة
+              </button>
+            </div>
 
-              <div id="ticketsListContainer" style="margin-top: 20px;">
-                <!-- جدول أو قائمة التذاكر ستُعرض هنا عبر script.js -->
-              </div>
+            <div id="ticketsListContainer" style="margin-top: 20px;">
+              <!-- جدول أو قائمة التذاكر ستُعرض هنا عبر script.js -->
             </div>
           </div>
         </section>
@@ -1187,9 +1190,23 @@
       </div>
     </div>
 
+    <!-- شريط الإجراءات الجماعية (المعاملات المحددة) -->
+    <div id="batchActionBar" class="batch-action-bar is-hidden">
+      <div class="batch-action-info">
+        <span id="batchSelectedCount">0</span>
+        <span data-i18n="batch_selected_label">معاملة محددة</span>
+      </div>
+      <div class="batch-action-buttons">
+        <button type="button" class="button small-button is-hidden" id="batchRestoreBtn" data-i18n="batch_restore">استعادة المحدد</button>
+        <button type="button" class="button small-button danger-button is-hidden" id="batchDeleteBtn" data-i18n="batch_delete">حذف المحدد</button>
+        <button type="button" class="button small-button danger-button is-hidden" id="batchPurgeBtn" data-i18n="batch_purge">حذف نهائي للمحدد</button>
+        <button type="button" class="button small-button secondary-button" id="batchClearBtn" data-i18n="batch_cancel">إلغاء التحديد</button>
+      </div>
+    </div>
+
     <script src="./js/theme.js"></script>
-    <script src="./js/api.js?v=1.0.55"></script>
-    <script src="./js/i18n.js?v=1.0.55"></script>
-    <script src="./js/script.js?v=1.0.55"></script>
+    <script src="./js/api.js?v=1.0.56"></script>
+    <script src="./js/i18n.js?v=1.0.56"></script>
+    <script src="./js/script.js?v=1.0.56"></script>
   </body>
 </html>
