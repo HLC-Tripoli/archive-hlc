@@ -447,7 +447,7 @@ test('password change validates confirmPassword matching', async () => {
   // Mismatch
   const mismatchRes = await apiRequest(context.app, client, 'POST', '/auth/password', {
     payload: {
-      currentPassword: 'admin',
+      currentPassword: 'password-123',
       newPassword: 'new-password-123',
       confirmPassword: 'different-password-123',
     },
@@ -457,7 +457,7 @@ test('password change validates confirmPassword matching', async () => {
   // Matching
   const matchRes = await apiRequest(context.app, client, 'POST', '/auth/password', {
     payload: {
-      currentPassword: 'admin',
+      currentPassword: 'password-123',
       newPassword: 'new-password-123',
       confirmPassword: 'new-password-123',
     },
