@@ -131,7 +131,7 @@
   var LEGACY_DOCUMENTS_KEY = "hl_archive_data_v1";
   var LEGACY_DEPARTMENTS_KEY = "hl_archive_departments_v1";
 
-  var CURRENT_APP_VERSION = "1.0.56";
+  var CURRENT_APP_VERSION = "1.0.57";
 
   var notificationPollTimer = null;
   var updateCheckTimer = null;
@@ -1316,15 +1316,11 @@
       select.innerHTML = '<option value="other_attachments">' + escapeHTML(_t("type_other_attachments")) + '</option>';
     } else {
       var opts = [
+        '<option value="other">' + escapeHTML(_t("type_other")) + '</option>',
         '<option value="minutes">' + escapeHTML(_t("type_minutes")) + '</option>',
         '<option value="proposal">' + escapeHTML(_t("type_proposal")) + '</option>',
         '<option value="report">' + escapeHTML(_t("type_report")) + '</option>'
       ];
-      if (type === "other") {
-        opts.unshift('<option value="other">' + escapeHTML(_t("type_other")) + '</option>');
-      } else if (type === "other_attachments") {
-        opts.unshift('<option value="other_attachments">' + escapeHTML(_t("type_other_attachments")) + '</option>');
-      }
       select.innerHTML = opts.join("");
     }
     select.value = type;
@@ -1362,31 +1358,23 @@
     var refLabel = document.querySelector('label[for="reference"]');
     var titleLabel = document.querySelector('label[for="title"]');
 
-    if (isOtherGroup) {
-      // الحقول اختيارية في معاملات مراسلات أخرى ما عدا عنوان الموضوع
-      if (dateLabel) dateLabel.textContent = _t("doc_date_label_optional");
-      el("date").removeAttribute("required");
+    if (dateLabel) dateLabel.textContent = _t("doc_date_label");
+    el("date").setAttribute("required", "required");
 
+    if (titleLabel) titleLabel.textContent = _t("doc_title_label");
+    el("title").setAttribute("required", "required");
+    el("title").placeholder = _t("doc_title_placeholder");
+
+    if (isOtherGroup) {
       if (refLabel) refLabel.textContent = _t("doc_ref_label_optional");
       el("reference").removeAttribute("required");
       el("reference").placeholder = _t("doc_ref_placeholder_optional");
-
-      if (titleLabel) titleLabel.textContent = _t("doc_title_label");
-      el("title").setAttribute("required", "required");
-      el("title").placeholder = _t("doc_title_placeholder");
     } else {
-      if (dateLabel) dateLabel.textContent = _t("doc_date_label");
-      el("date").setAttribute("required", "required");
-
       if (refLabel) refLabel.textContent = _t("doc_ref_label");
       el("reference").setAttribute("required", "required");
       el("reference").placeholder = isOutgoing
         ? (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. 2026/OUT/001" : "مثال: 2026/ص/001")
         : (window.I18N && window.I18N.getLanguage() === "en" ? "e.g. 2026/IN/001" : "مثال: 2026/و/001");
-
-      if (titleLabel) titleLabel.textContent = _t("doc_title_label");
-      el("title").setAttribute("required", "required");
-      el("title").placeholder = _t("doc_title_placeholder");
     }
 
     el("sender").placeholder = isOutgoing
@@ -1456,8 +1444,8 @@
     }
     state.editingDocumentId = doc ? doc.id : null;
     var defType = defaultType || "incoming";
-    if (!doc && (defType === "other" || defType === "other_attachments")) {
-      defType = "minutes";
+    if (!doc && defType === "other_attachments") {
+      defType = "other";
     }
     state.documentType = doc ? doc.type : defType;
     state.pendingFiles = [];
@@ -3636,6 +3624,37 @@
     var picker = wrapper ? wrapper.querySelector(".date-native-picker") : null;
     var pickerBtn = wrapper ? wrapper.querySelector(".date-picker-btn") : null;
 
+    input.readOnly = true;
+    input.style.cursor = "pointer";
+
+    var openCalendar = function () {
+      if (!picker) return;
+      if (typeof picker.showPicker === "function") {
+        try {
+          picker.showPicker();
+        } catch (e) {
+          picker.click();
+        }
+      } else {
+        picker.click();
+      }
+    };
+
+    input.addEventListener("click", openCalendar);
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+        e.preventDefault();
+        openCalendar();
+      } else if (!input.hasAttribute("required") && (e.key === "Backspace" || e.key === "Delete")) {
+        e.preventDefault();
+        input.value = "";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      } else if (e.key !== "Tab" && e.key !== "Escape") {
+        e.preventDefault();
+      }
+    });
+
     var _isoValue = "";
     var protoDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
 
@@ -3706,19 +3725,11 @@
       }
     });
 
-    if (pickerBtn && picker) {
-      pickerBtn.addEventListener("click", function () {
-        if (typeof picker.showPicker === "function") {
-          try {
-            picker.showPicker();
-          } catch (e) {
-            picker.click();
-          }
-        } else {
-          picker.click();
-        }
-      });
+    if (pickerBtn) {
+      pickerBtn.addEventListener("click", openCalendar);
+    }
 
+    if (picker) {
       picker.addEventListener("change", function () {
         if (picker.value) {
           input.value = picker.value;
@@ -4205,7 +4216,7 @@
     });
     if (el("addOtherButton")) {
       el("addOtherButton").addEventListener("click", function () {
-        openDocumentForm("create", null, "minutes");
+        openDocumentForm("create", null, "other");
       });
     }
     if (el("editAttachmentForm")) {
@@ -4719,9 +4730,11 @@
       });
     }
 
-    el("exportArchiveCsvButton").addEventListener("click", function () {
-      exportDocumentsCsv(false);
-    });
+    if (el("exportArchiveCsvButton")) {
+      el("exportArchiveCsvButton").addEventListener("click", function () {
+        exportDocumentsCsv(false);
+      });
+    }
 
     el("departmentForm").addEventListener("submit", async function (event) {
       event.preventDefault();

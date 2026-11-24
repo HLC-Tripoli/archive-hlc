@@ -699,6 +699,11 @@ textarea:focus {
 .date-field input.date-input {
   width: 100%;
   padding-inline-end: 38px;
+  cursor: pointer;
+}
+.date-field input.date-input[readonly] {
+  cursor: pointer;
+  user-select: none;
 }
 .date-field .date-picker-btn {
   position: absolute;
