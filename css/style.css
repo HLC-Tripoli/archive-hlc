@@ -3205,4 +3205,60 @@ input.input-locked {
 
 .custom-support-section #ticketsListContainer .table-wrap {
   width: 100%;
+  overflow-x: auto;
+}
+
+.custom-support-section #ticketsListContainer table {
+  width: 100%;
+  min-width: 100%;
+  table-layout: auto;
+  white-space: normal;
+}
+
+.custom-support-section #ticketsListContainer th,
+.custom-support-section #ticketsListContainer td {
+  padding: 12px 10px;
+  white-space: normal;
+  vertical-align: middle;
+}
+
+.custom-support-section #ticketsListContainer th:first-child,
+.custom-support-section #ticketsListContainer td:first-child {
+  white-space: nowrap;
+  width: 60px;
+  text-align: center;
+}
+
+.custom-support-section #ticketsListContainer th:nth-child(5),
+.custom-support-section #ticketsListContainer td:nth-child(5) {
+  white-space: nowrap;
+  text-align: center;
+}
+
+.custom-support-section #ticketsListContainer th:nth-child(6),
+.custom-support-section #ticketsListContainer td:nth-child(6) {
+  white-space: nowrap;
+  text-align: center;
+  font-size: 12px;
+}
+
+.custom-support-section #ticketsListContainer th:last-child,
+.custom-support-section #ticketsListContainer td:last-child {
+  white-space: nowrap;
+  text-align: center;
+  width: 180px;
+}
+
+.custom-support-section #ticketsListContainer .table-actions {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.custom-support-section #ticketsListContainer .table-actions .button {
+  padding: 5px 8px;
+  font-size: 11.5px;
+  white-space: nowrap;
 }
