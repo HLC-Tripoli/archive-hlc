@@ -283,6 +283,20 @@ test('sequence number is optional text and survives create/edit/read/search/sort
     ['SEQ-010', 'SEQ-001', 'SEQ-002'],
   );
 
+  const sortedDesc = await apiRequest(
+    context.app,
+    employeeClient,
+    'GET',
+    '/documents?sort=sequenceNumber&order=desc',
+  );
+  const sortedDescBody = sortedDesc.json() as {
+    items: Array<{ reference: string; sequenceNumber: string | null }>;
+  };
+  assert.deepEqual(
+    sortedDescBody.items.map((item) => item.reference),
+    ['SEQ-001', 'SEQ-010', 'SEQ-002'],
+  );
+
   const cleared = await apiRequest(context.app, employeeClient, 'PATCH', `/documents/${padded.id}`, {
     payload: { sequenceNumber: '   ' },
   });

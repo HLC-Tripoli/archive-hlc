@@ -6,7 +6,7 @@
     <title>أرشيف هاتف ليبيا الإلكتروني</title>
     <meta name="theme-color" content="#f4f6f9" />
     <script src="./js/theme-pre.js"></script>
-    <link rel="stylesheet" href="./css/style.css?v=1.0.57" />
+    <link rel="stylesheet" href="./css/style.css?v=1.0.58" />
     <link rel="icon" href="./img/logo.svg" />
     <meta name="referrer" content="same-origin" />
   </head>
@@ -241,6 +241,16 @@
                 placeholder="ابحث بالرقم الإشاري أو الموضوع أو رقم التسلسل أو الجهة..."
                 type="search"
               />
+              <select id="incomingSortFilter" class="view-sort-select" aria-label="ترتيب النتائج">
+                <option value="date:desc" data-i18n="sort_date_desc" selected>التاريخ (الأحدث أولاً)</option>
+                <option value="date:asc" data-i18n="sort_date_asc">التاريخ (الأقدم أولاً)</option>
+                <option value="createdAt:desc" data-i18n="sort_created_desc">تاريخ التسجيل (الأحدث)</option>
+                <option value="updatedAt:desc" data-i18n="sort_updated_desc">آخر تعديل</option>
+                <option value="reference:asc" data-i18n="sort_ref_asc">الرقم الاشاري</option>
+                <option value="sequenceNumber:asc" data-i18n="sort_seq_asc">رقم التسلسل (من A إلى Z)</option>
+                <option value="sequenceNumber:desc" data-i18n="sort_seq_desc">رقم التسلسل (من Z إلى A)</option>
+                <option value="title:asc" data-i18n="sort_title_asc">موضوع الرسالة</option>
+              </select>
             </div>
             <div id="incomingTable"></div>
             <div class="pager" id="incomingPager"></div>
@@ -267,6 +277,16 @@
                 placeholder="ابحث بالرقم الإشاري أو الموضوع أو رقم التسلسل أو الجهة..."
                 type="search"
               />
+              <select id="outgoingSortFilter" class="view-sort-select" aria-label="ترتيب النتائج">
+                <option value="date:desc" data-i18n="sort_date_desc" selected>التاريخ (الأحدث أولاً)</option>
+                <option value="date:asc" data-i18n="sort_date_asc">التاريخ (الأقدم أولاً)</option>
+                <option value="createdAt:desc" data-i18n="sort_created_desc">تاريخ التسجيل (الأحدث)</option>
+                <option value="updatedAt:desc" data-i18n="sort_updated_desc">آخر تعديل</option>
+                <option value="reference:asc" data-i18n="sort_ref_asc">الرقم الاشاري</option>
+                <option value="sequenceNumber:asc" data-i18n="sort_seq_asc">رقم التسلسل (من A إلى Z)</option>
+                <option value="sequenceNumber:desc" data-i18n="sort_seq_desc">رقم التسلسل (من Z إلى A)</option>
+                <option value="title:asc" data-i18n="sort_title_asc">موضوع الرسالة</option>
+              </select>
             </div>
             <div id="outgoingTable"></div>
             <div class="pager" id="outgoingPager"></div>
@@ -300,6 +320,16 @@
                 <option value="minutes" data-i18n="type_minutes">محاضر اجتماعات</option>
                 <option value="proposal" data-i18n="type_proposal">مقترحات</option>
                 <option value="report" data-i18n="type_report">تقارير</option>
+              </select>
+              <select id="otherSortFilter" class="view-sort-select" aria-label="ترتيب النتائج">
+                <option value="date:desc" data-i18n="sort_date_desc" selected>التاريخ (الأحدث أولاً)</option>
+                <option value="date:asc" data-i18n="sort_date_asc">التاريخ (الأقدم أولاً)</option>
+                <option value="createdAt:desc" data-i18n="sort_created_desc">تاريخ التسجيل (الأحدث)</option>
+                <option value="updatedAt:desc" data-i18n="sort_updated_desc">آخر تعديل</option>
+                <option value="reference:asc" data-i18n="sort_ref_asc">الرقم الاشاري</option>
+                <option value="sequenceNumber:asc" data-i18n="sort_seq_asc">رقم التسلسل (من A إلى Z)</option>
+                <option value="sequenceNumber:desc" data-i18n="sort_seq_desc">رقم التسلسل (من Z إلى A)</option>
+                <option value="title:asc" data-i18n="sort_title_asc">موضوع الرسالة</option>
               </select>
             </div>
             <div id="otherTable"></div>
@@ -379,7 +409,8 @@
                 <option value="date:asc" data-i18n="sort_date_asc">التاريخ (الأقدم أولاً)</option>
                 <option value="updatedAt:desc" data-i18n="sort_updated_desc">آخر تعديل</option>
                 <option value="reference:asc" data-i18n="sort_ref_asc">الرقم الاشاري</option>
-                <option value="sequenceNumber:asc" data-i18n="sort_seq_asc">رقم التسلسل</option>
+                <option value="sequenceNumber:asc" data-i18n="sort_seq_asc">رقم التسلسل (من A إلى Z)</option>
+                <option value="sequenceNumber:desc" data-i18n="sort_seq_desc">رقم التسلسل (من Z إلى A)</option>
                 <option value="title:asc" data-i18n="sort_title_asc">موضوع الرسالة</option>
               </select>
               <label class="checkbox-field admin-only is-hidden" id="includeDeletedField">
@@ -745,7 +776,7 @@
 
           <div id="attachmentsSection" hidden>
             <hr />
-            <h3 data-i18n="doc_attachments_label">المرفقات</h3>
+            <h3 data-i18n="doc_attachments_label">المرفقات *</h3>
             <div class="attachment-upload">
               <input
                 type="file"
@@ -1206,8 +1237,8 @@
     </div>
 
     <script src="./js/theme.js"></script>
-    <script src="./js/api.js?v=1.0.57"></script>
-    <script src="./js/i18n.js?v=1.0.57"></script>
-    <script src="./js/script.js?v=1.0.57"></script>
+    <script src="./js/api.js?v=1.0.58"></script>
+    <script src="./js/i18n.js?v=1.0.58"></script>
+    <script src="./js/script.js?v=1.0.58"></script>
   </body>
 </html>

@@ -131,7 +131,7 @@
   var LEGACY_DOCUMENTS_KEY = "hl_archive_data_v1";
   var LEGACY_DEPARTMENTS_KEY = "hl_archive_departments_v1";
 
-  var CURRENT_APP_VERSION = "1.0.57";
+  var CURRENT_APP_VERSION = "1.0.58";
 
   var notificationPollTimer = null;
   var updateCheckTimer = null;
@@ -169,9 +169,9 @@
     fileTypesFilter: { q: "", category: "" },
     views: {
       dashboard: { page: 1, pageSize: 8, q: "", sort: "createdAt", order: "desc", total: 0 },
-      incoming: { page: 1, pageSize: 10, q: "", sort: "createdAt", order: "desc", total: 0 },
-      outgoing: { page: 1, pageSize: 10, q: "", sort: "createdAt", order: "desc", total: 0 },
-      other: { page: 1, pageSize: 10, q: "", type: "", sort: "createdAt", order: "desc", total: 0 },
+      incoming: { page: 1, pageSize: 10, q: "", sort: "date", order: "desc", total: 0 },
+      outgoing: { page: 1, pageSize: 10, q: "", sort: "date", order: "desc", total: 0 },
+      other: { page: 1, pageSize: 10, q: "", type: "", sort: "date", order: "desc", total: 0 },
       other_attachments: {
         page: 1,
         pageSize: 10,
@@ -204,6 +204,7 @@
     detailDocumentId: null,
     // نية الإنشاء تُحدَّد من الزر الذي فتح النافذة، لا من حقل نموذج.
     documentType: "incoming",
+    existingFilesCount: 0,
     pendingFiles: [],
     pendingCounter: 0,
     uploadingAttachments: false,
@@ -913,6 +914,7 @@
       _t("col_ref"),
       _t("col_seq"),
       _t("col_title"),
+      _t("col_user"),
       _t("col_type"),
       _t("col_date"),
       _t("col_party"),
@@ -1115,6 +1117,8 @@
           escapeHTML(document.title || "—") +
           (deleted ? ' <span class="badge badge-deleted">' + escapeHTML(_t("deleted_badge")) + '</span>' : "") +
           "</td><td>" +
+          escapeHTML(document.createdByName || "—") +
+          "</td><td>" +
           escapeHTML(getTypeLabel(document.type)) +
           "</td><td>" +
           escapeHTML(formatDate(document.date)) +
@@ -1144,8 +1148,8 @@
       return {
         q: view.q,
         type: viewName,
-        sort: "date",
-        order: "desc",
+        sort: view.sort || "date",
+        order: view.order || "desc",
         page: view.page,
         pageSize: view.pageSize
       };
@@ -1153,8 +1157,8 @@
     if (viewName === "other") {
       var otherQuery = {
         q: view.q,
-        sort: "date",
-        order: "desc",
+        sort: view.sort || "date",
+        order: view.order || "desc",
         page: view.page,
         pageSize: view.pageSize
       };
@@ -1448,6 +1452,9 @@
       defType = "other";
     }
     state.documentType = doc ? doc.type : defType;
+    state.existingFilesCount = doc
+      ? (Array.isArray(doc.files) ? doc.files.length : (doc.filesCount || 0))
+      : 0;
     state.pendingFiles = [];
     state.pendingCounter = 0;
     state.uploadingAttachments = false;
@@ -1507,7 +1514,9 @@
     renderLoading(container, "جارٍ تحميل المرفقات…");
     try {
       var data = await api.get("/documents/" + documentId);
-      renderAttachmentList(data.document.files || []);
+      var files = data.document.files || [];
+      state.existingFilesCount = files.length;
+      renderAttachmentList(files);
     } catch (error) {
       renderError(container, errorMessage(error));
     }
@@ -1641,7 +1650,6 @@
       var iframe = document.createElement("iframe");
       iframe.className = "preview-frame";
       iframe.title = title || "معاينة المستند";
-      iframe.setAttribute("sandbox", "allow-downloads");
       iframe.src = url;
       body.appendChild(iframe);
     }
@@ -1899,6 +1907,22 @@
       return;
     }
     var createMode = !state.editingDocumentId;
+    var canAttachUpload = isAdmin() || hasPermission("attach_upload");
+    var totalAttachments = (createMode ? 0 : (state.existingFilesCount || 0)) + state.pendingFiles.length;
+    if (totalAttachments === 0) {
+      var attachMsg = !canAttachUpload && createMode
+        ? _t("attachment_upload_permission_required")
+        : _t("attachment_required_error");
+      showFormError("documentFormError", attachMsg);
+      var attachSec = el("attachmentsSection");
+      if (attachSec && attachSec.scrollIntoView) {
+        attachSec.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      if (canAttachUpload && el("attachmentInput")) {
+        el("attachmentInput").focus();
+      }
+      return;
+    }
     var payload = {
       reference: refVal || null,
       sequenceNumber: el("sequenceNumber").value.trim() || null,
@@ -1973,10 +1997,15 @@
       toast("انتظر انتهاء رفع الملفات قبل حذف مرفق محفوظ.", "error");
       return;
     }
-    var confirmed = await confirmDialog("هل تريد حذف هذا المرفق نهائياً؟");
+    var lastAttachmentWarning =
+      state.editingDocumentId && (state.existingFilesCount || 0) <= 1 && state.pendingFiles.length === 0
+        ? " (تنبيه: هذا المرفق الوحيد، ويجب إرفاق ملف بديل قبل حفظ التعديلات)"
+        : "";
+    var confirmed = await confirmDialog("هل تريد حذف هذا المرفق نهائياً؟" + lastAttachmentWarning);
     if (!confirmed) return;
     try {
       await api.del("/files/" + fileId);
+      if (state.existingFilesCount > 0) state.existingFilesCount -= 1;
       toast("تم حذف المرفق.");
       if (state.editingDocumentId) await refreshAttachmentList(state.editingDocumentId);
       if (state.detailDocumentId && el("detailModal").classList.contains("show")) {
@@ -4572,6 +4601,22 @@
         loadDocumentsView("other");
       });
     }
+    [
+      ["incomingSortFilter", "incoming"],
+      ["outgoingSortFilter", "outgoing"],
+      ["otherSortFilter", "other"]
+    ].forEach(function (binding) {
+      var sortSelect = el(binding[0]);
+      if (!sortSelect) return;
+      sortSelect.addEventListener("change", function () {
+        var view = state.views[binding[1]];
+        var parts = sortSelect.value.split(":");
+        view.sort = parts[0] || "date";
+        view.order = parts[1] || "desc";
+        view.page = 1;
+        loadDocumentsView(binding[1]);
+      });
+    });
     el("includeDeletedFilter").addEventListener("change", function () {
       state.views.archive.includeDeleted = el("includeDeletedFilter").checked;
       state.views.archive.page = 1;
