@@ -560,7 +560,11 @@ export async function getDocumentHistory(
          FROM audit_log a
          LEFT JOIN users u ON u.id = a.actor_user_id
         WHERE (a.entity_type = 'document' AND a.entity_id = $1)
-           OR (a.entity_type = 'document_file' AND a.details->>'documentId' = $1)
+           OR (
+             a.entity_type = 'document_file'
+             AND a.details->>'documentId' = $1
+             AND a.action IN ('file.uploaded', 'file.replaced', 'file.archived', 'file.deleted', 'file.purged')
+           )
         ORDER BY a.created_at DESC, a.id DESC
         LIMIT 200`,
       [id],

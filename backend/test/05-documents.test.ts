@@ -754,6 +754,24 @@ test('PATCH /documents/:id records field diffs in audit_log and GET /documents/:
   assert.equal(adminHistory.statusCode, 200, adminHistory.body);
   assert.equal((adminHistory.json() as { events: unknown[] }).events.length, 2);
 
+  // أحداث عرض وتنزيل المرفقات لا تظهر في سجل المعاملة (تبقى في سجل التدقيق فقط)، بينما يظهر رفع المرفق
+  await context.pool.query(
+    `INSERT INTO audit_log (actor_username, action, entity_type, entity_id, details)
+     VALUES
+       ('employee', 'file.uploaded', 'document_file', '00000000-0000-4000-8000-000000000101', $1::jsonb),
+       ('employee', 'file.viewed', 'document_file', '00000000-0000-4000-8000-000000000101', $1::jsonb),
+       ('employee', 'file.downloaded', 'document_file', '00000000-0000-4000-8000-000000000101', $1::jsonb)`,
+    [JSON.stringify({ documentId: created.id, name: 'sample.pdf' })],
+  );
+  const afterViewHistory = await apiRequest(context.app, employeeClient, 'GET', `/documents/${created.id}/history`);
+  assert.equal(afterViewHistory.statusCode, 200, afterViewHistory.body);
+  const actionsAfterView = (afterViewHistory.json() as { events: Array<{ action: string }> }).events.map(
+    (e) => e.action,
+  );
+  assert.equal(actionsAfterView.includes('file.uploaded'), true);
+  assert.equal(actionsAfterView.includes('file.viewed'), false);
+  assert.equal(actionsAfterView.includes('file.downloaded'), false);
+
   // عزل الإدارات: موظف من إدارة أخرى يحصل على 404
   const otherDepartmentId = await createDepartment('إدارة معزولة للسجل');
   await createTestUser(context.pool, {

@@ -137,7 +137,7 @@
   var LEGACY_DOCUMENTS_KEY = "hl_archive_data_v1";
   var LEGACY_DEPARTMENTS_KEY = "hl_archive_departments_v1";
 
-  var CURRENT_APP_VERSION = "1.0.60";
+  var CURRENT_APP_VERSION = "1.0.61";
 
   var notificationPollTimer = null;
   var updateCheckTimer = null;
