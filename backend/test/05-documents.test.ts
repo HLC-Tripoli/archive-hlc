@@ -715,8 +715,8 @@ test('PATCH /documents/:id records field diffs in audit_log and GET /documents/:
   assert.equal(auditRows.rows.length, 1);
   const changes = auditRows.rows[0]!.details.changes;
   assert.deepEqual(changes, [
-    { field: 'sequenceNumber', before: '001', after: '002' },
     { field: 'title', before: 'عنوان أولي', after: 'عنوان محدث' },
+    { field: 'sequenceNumber', before: '001', after: '002' },
   ]);
 
   const empHistory = await apiRequest(context.app, employeeClient, 'GET', `/documents/${created.id}/history`);
@@ -746,8 +746,8 @@ test('PATCH /documents/:id records field diffs in audit_log and GET /documents/:
     assert.equal(Object.prototype.hasOwnProperty.call(event, 'userAgent'), false);
   }
   assert.deepEqual(empBody.events[0]!.details.changes, [
-    { field: 'sequenceNumber', before: '001', after: '002' },
     { field: 'title', before: 'عنوان أولي', after: 'عنوان محدث' },
+    { field: 'sequenceNumber', before: '001', after: '002' },
   ]);
 
   const adminHistory = await apiRequest(context.app, adminClient, 'GET', `/documents/${created.id}/history`);
