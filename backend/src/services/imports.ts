@@ -368,7 +368,7 @@ export async function buildBackupExport(pool: Pool): Promise<BackupExport> {
             doc.sender, doc.recipient, doc.notes, doc.legacy_id,
             doc.created_at, doc.updated_at,
             dep.name AS department_name,
-            (SELECT count(*)::int FROM document_files f WHERE f.document_id = doc.id) AS file_count
+            (SELECT count(*)::int FROM document_files f WHERE f.document_id = doc.id AND f.archived_at IS NULL) AS file_count
        FROM documents doc
        LEFT JOIN departments dep ON dep.id = doc.department_id
       WHERE doc.deleted_at IS NULL

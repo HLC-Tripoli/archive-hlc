@@ -13,6 +13,7 @@ import {
   DOCUMENT_STATUSES,
   DOCUMENT_TYPES,
   getDocumentById,
+  getDocumentHistory,
   insertDocument,
   listDocuments,
   normalizeSequenceNumber,
@@ -190,6 +191,20 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
       const document = await getDocumentById(pool, id, access);
       if (!document) throw ApiError.notFound('المعاملة غير موجودة.');
       return { document };
+    },
+  );
+
+  app.get(
+    '/documents/:id/history',
+    { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
+    async (request) => {
+      assertPermission(request.authUser!, 'view');
+      const access = resolveDocumentAccessScope(request.authUser!);
+      const { id } = request.params as { id: string };
+      if (!isUuid(id)) throw ApiError.notFound('المعاملة غير موجودة.');
+      const history = await getDocumentHistory(pool, id, access);
+      if (!history) throw ApiError.notFound('المعاملة غير موجودة.');
+      return history;
     },
   );
 
@@ -388,18 +403,23 @@ export function registerDocumentRoutes(app: FastifyInstance, deps: DocumentRoute
             'لا يمكنك نقل المعاملة إلى إدارة أخرى أو إزالتها من إدارتك.',
           );
         }
-        await writeAudit(
-          client,
-          {
-            actorUserId: userId,
-            actorUsername: request.authUser!.username,
-            action: 'document.updated',
-            entityType: 'document',
-            entityId: id,
-            details: { changedFields: updateResult.changedFields },
-          },
-          auditContextOf(request),
-        );
+        if (updateResult.changedFields.length > 0) {
+          await writeAudit(
+            client,
+            {
+              actorUserId: userId,
+              actorUsername: request.authUser!.username,
+              action: 'document.updated',
+              entityType: 'document',
+              entityId: id,
+              details: {
+                changedFields: updateResult.changedFields,
+                changes: updateResult.changes,
+              },
+            },
+            auditContextOf(request),
+          );
+        }
         return updateResult;
       });
 

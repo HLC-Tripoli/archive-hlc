@@ -681,3 +681,87 @@ test('batch actions, permanent deletion, and purge-all work properly', async () 
   const checkDoc3 = await context.pool.query('SELECT id FROM documents WHERE id = $1', [doc3.id]);
   assert.equal(checkDoc3.rows.length, 0);
 });
+
+test('PATCH /documents/:id records field diffs in audit_log and GET /documents/:id/history enforces isolation', async () => {
+  const created = await createDocument({
+    reference: 'HIST-001',
+    sequenceNumber: '001',
+    title: 'عنوان أولي',
+    type: 'incoming',
+    date: '2026-05-01',
+    notes: 'ملاحظة ثابتة',
+  });
+
+  const patchRes = await apiRequest(context.app, employeeClient, 'PATCH', `/documents/${created.id}`, {
+    payload: {
+      sequenceNumber: '002',
+      title: 'عنوان محدث',
+      notes: 'ملاحظة ثابتة',
+      type: 'incoming',
+    },
+  });
+  assert.equal(patchRes.statusCode, 200, patchRes.body);
+
+  const noOpPatch = await apiRequest(context.app, employeeClient, 'PATCH', `/documents/${created.id}`, {
+    payload: {
+      title: 'عنوان محدث',
+    },
+  });
+  assert.equal(noOpPatch.statusCode, 200, noOpPatch.body);
+
+  const auditRows = await context.pool.query<{
+    details: { changedFields: string[]; changes: Array<{ field: string; before: string | null; after: string | null }> };
+  }>("SELECT details FROM audit_log WHERE action = 'document.updated' AND entity_id = $1", [created.id]);
+  assert.equal(auditRows.rows.length, 1);
+  const changes = auditRows.rows[0]!.details.changes;
+  assert.deepEqual(changes, [
+    { field: 'sequenceNumber', before: '001', after: '002' },
+    { field: 'title', before: 'عنوان أولي', after: 'عنوان محدث' },
+  ]);
+
+  const empHistory = await apiRequest(context.app, employeeClient, 'GET', `/documents/${created.id}/history`);
+  assert.equal(empHistory.statusCode, 200, empHistory.body);
+  const empBody = empHistory.json() as {
+    events: Array<{
+      id: string | number;
+      action: string;
+      actorUsername: string | null;
+      actorDisplayName: string | null;
+      details: Record<string, unknown>;
+      createdAt: string;
+      ip?: unknown;
+      userAgent?: unknown;
+    }>;
+    archivedFiles: unknown[];
+  };
+  assert.equal(empBody.archivedFiles.length, 0);
+  assert.equal(empBody.events.length, 2);
+  assert.deepEqual(
+    empBody.events.map((e) => e.action),
+    ['document.updated', 'document.created'],
+  );
+  for (const event of empBody.events) {
+    assert.equal(event.actorDisplayName, 'employee');
+    assert.equal(Object.prototype.hasOwnProperty.call(event, 'ip'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(event, 'userAgent'), false);
+  }
+  assert.deepEqual(empBody.events[0]!.details.changes, [
+    { field: 'sequenceNumber', before: '001', after: '002' },
+    { field: 'title', before: 'عنوان أولي', after: 'عنوان محدث' },
+  ]);
+
+  const adminHistory = await apiRequest(context.app, adminClient, 'GET', `/documents/${created.id}/history`);
+  assert.equal(adminHistory.statusCode, 200, adminHistory.body);
+  assert.equal((adminHistory.json() as { events: unknown[] }).events.length, 2);
+
+  // عزل الإدارات: موظف من إدارة أخرى يحصل على 404
+  const otherDepartmentId = await createDepartment('إدارة معزولة للسجل');
+  await createTestUser(context.pool, {
+    username: 'other-emp',
+    role: 'employee',
+    departmentId: otherDepartmentId,
+  });
+  const otherClient = await loginClient(context.app, 'other-emp');
+  const forbiddenHistory = await apiRequest(context.app, otherClient, 'GET', `/documents/${created.id}/history`);
+  assert.equal(forbiddenHistory.statusCode, 404);
+});

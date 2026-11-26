@@ -2,7 +2,12 @@ import type { Pool } from 'pg';
 import type { Queryable } from '../db/pool.js';
 import type { DocumentAccessScope } from '../lib/access.js';
 import { containsPattern } from '../lib/sql.js';
-import { listFilesForDocument, type FileRecordPublic } from './files.js';
+import {
+  listArchivedFilesForDocument,
+  listFilesForDocument,
+  type ArchivedFileRecord,
+  type FileRecordPublic,
+} from './files.js';
 import type { StorageProvider } from './storage/types.js';
 
 export type DocumentTypeDb =
@@ -175,7 +180,7 @@ const LIST_SELECT = `
   SELECT doc.id, doc.reference, doc.sequence_number, doc.title, doc.doc_type,
          to_char(doc.transaction_date, 'YYYY-MM-DD') AS transaction_date,
          doc.sender, doc.recipient, doc.department_id, dep.name AS department_name,
-         (SELECT count(*)::int FROM document_files f WHERE f.document_id = doc.id) AS files_count,
+         (SELECT count(*)::int FROM document_files f WHERE f.document_id = doc.id AND f.archived_at IS NULL) AS files_count,
          creator.display_name AS created_by_name,
          updater.display_name AS updated_by_name,
          doc.created_at, doc.updated_at, doc.deleted_at
@@ -271,7 +276,7 @@ export async function getDocumentById(
             to_char(doc.transaction_date, 'YYYY-MM-DD') AS transaction_date,
             doc.sender, doc.recipient, doc.department_id, dep.name AS department_name,
             doc.notes,
-            (SELECT count(*)::int FROM document_files f WHERE f.document_id = doc.id) AS files_count,
+            (SELECT count(*)::int FROM document_files f WHERE f.document_id = doc.id AND f.archived_at IS NULL) AS files_count,
             creator.display_name AS created_by_name,
             updater.display_name AS updated_by_name,
             deleter.display_name AS deleted_by_name,
@@ -367,11 +372,22 @@ export async function insertDocument(
   return id;
 }
 
+export interface DocumentFieldChange {
+  field: string;
+  before: string | null;
+  after: string | null;
+}
+
 export type DocumentUpdateResult =
   | { status: 'not_found' }
   | { status: 'deleted' }
   | { status: 'department_forbidden' }
-  | { status: 'updated'; changedFields: string[] };
+  | { status: 'updated'; changedFields: string[]; changes: DocumentFieldChange[] };
+
+function normalizeDiffValue(val: string | null | undefined): string | null {
+  if (val === null || val === undefined) return null;
+  return val.length > 0 ? val : null;
+}
 
 export async function updateDocument(
   db: Queryable,
@@ -384,10 +400,28 @@ export async function updateDocument(
   let existingScope = '';
   if (!access.isAdmin) {
     existingParams.push(access.departmentId);
-    existingScope = ` AND department_id = $${existingParams.length}`;
+    existingScope = ` AND doc.department_id = $${existingParams.length}`;
   }
-  const existing = await db.query<{ deleted_at: Date | null }>(
-    `SELECT deleted_at FROM documents WHERE id = $1${existingScope}`,
+  const existing = await db.query<{
+    reference: string | null;
+    sequence_number: string | null;
+    title: string | null;
+    doc_type: DocumentTypeDb;
+    transaction_date: string;
+    sender: string;
+    recipient: string;
+    department_id: string | null;
+    department_name: string | null;
+    notes: string;
+    deleted_at: Date | null;
+  }>(
+    `SELECT doc.reference, doc.sequence_number, doc.title, doc.doc_type,
+            to_char(doc.transaction_date, 'YYYY-MM-DD') AS transaction_date,
+            doc.sender, doc.recipient, doc.department_id, dep.name AS department_name,
+            doc.notes, doc.deleted_at
+       FROM documents doc
+       LEFT JOIN departments dep ON dep.id = doc.department_id
+      WHERE doc.id = $1${existingScope}`,
     existingParams,
   );
   const existingRow = existing.rows[0];
@@ -406,15 +440,59 @@ export async function updateDocument(
   const sets: string[] = [];
   const params: unknown[] = [];
   const changedFields: string[] = [];
+  const changes: DocumentFieldChange[] = [];
+
   for (const key of Object.keys(patch) as (keyof DocumentInput)[]) {
     const value = key === 'departmentId' && !access.isAdmin ? access.departmentId : patch[key];
     if (value === undefined) continue;
+
+    let beforeNorm: string | null;
+    let afterNorm: string | null;
+    let isChanged = false;
+
+    if (key === 'departmentId') {
+      const currentId = existingRow.department_id ?? null;
+      const nextId = (value as string | null) ?? null;
+      isChanged = currentId !== nextId;
+      if (!isChanged) continue;
+      beforeNorm = existingRow.department_name ?? null;
+      if (nextId) {
+        const depRes = await db.query<{ name: string }>('SELECT name FROM departments WHERE id = $1', [nextId]);
+        afterNorm = depRes.rows[0]?.name ?? nextId;
+      } else {
+        afterNorm = null;
+      }
+    } else if (key === 'sender' || key === 'recipient' || key === 'notes') {
+      const currentRaw = existingRow[key] ?? '';
+      const nextRaw = String(value ?? '');
+      isChanged = currentRaw !== nextRaw;
+      if (!isChanged) continue;
+      beforeNorm = normalizeDiffValue(currentRaw);
+      afterNorm = normalizeDiffValue(nextRaw);
+    } else {
+      const columnToCurrent: Record<
+        'reference' | 'sequenceNumber' | 'title' | 'type' | 'date',
+        string | null
+      > = {
+        reference: existingRow.reference,
+        sequenceNumber: existingRow.sequence_number,
+        title: existingRow.title,
+        type: existingRow.doc_type,
+        date: existingRow.transaction_date,
+      };
+      beforeNorm = normalizeDiffValue(columnToCurrent[key]);
+      afterNorm = normalizeDiffValue(value as string | null);
+      isChanged = beforeNorm !== afterNorm;
+      if (!isChanged) continue;
+    }
+
     params.push(value);
     sets.push(`${PATCH_COLUMNS[key]} = $${params.length}`);
     changedFields.push(key);
+    changes.push({ field: key, before: beforeNorm, after: afterNorm });
   }
 
-  if (sets.length === 0) return { status: 'updated', changedFields };
+  if (sets.length === 0) return { status: 'updated', changedFields, changes };
 
   params.push(userId);
   sets.push(`updated_by = $${params.length}`);
@@ -433,7 +511,74 @@ export async function updateDocument(
     params,
   );
   if ((result.rowCount ?? 0) === 0) return { status: 'not_found' };
-  return { status: 'updated', changedFields };
+  return { status: 'updated', changedFields, changes };
+}
+
+export interface DocumentHistoryEvent {
+  id: string;
+  action: string;
+  actorUsername: string | null;
+  actorDisplayName: string | null;
+  details: unknown;
+  createdAt: Date;
+}
+
+export interface DocumentHistoryResult {
+  events: DocumentHistoryEvent[];
+  archivedFiles: ArchivedFileRecord[];
+}
+
+export async function getDocumentHistory(
+  db: Queryable,
+  id: string,
+  access: DocumentAccessScope,
+): Promise<DocumentHistoryResult | null> {
+  const params: unknown[] = [id];
+  const conditions = ['id = $1'];
+  if (!access.isAdmin) {
+    params.push(access.departmentId);
+    conditions.push(`department_id = $${params.length}`);
+    conditions.push('deleted_at IS NULL');
+  }
+  const docCheck = await db.query<{ id: string }>(
+    `SELECT id FROM documents WHERE ${conditions.join(' AND ')}`,
+    params,
+  );
+  if (!docCheck.rows[0]) return null;
+
+  const [eventsRes, archivedFiles] = await Promise.all([
+    db.query<{
+      id: string;
+      action: string;
+      actor_username: string | null;
+      actor_display_name: string | null;
+      details: unknown;
+      created_at: Date;
+    }>(
+      `SELECT a.id, a.action, a.actor_username, u.display_name AS actor_display_name,
+              a.details, a.created_at
+         FROM audit_log a
+         LEFT JOIN users u ON u.id = a.actor_user_id
+        WHERE (a.entity_type = 'document' AND a.entity_id = $1)
+           OR (a.entity_type = 'document_file' AND a.details->>'documentId' = $1)
+        ORDER BY a.created_at DESC, a.id DESC
+        LIMIT 200`,
+      [id],
+    ),
+    listArchivedFilesForDocument(db, id),
+  ]);
+
+  return {
+    events: eventsRes.rows.map((row) => ({
+      id: row.id,
+      action: row.action,
+      actorUsername: row.actor_username,
+      actorDisplayName: row.actor_display_name,
+      details: row.details,
+      createdAt: row.created_at,
+    })),
+    archivedFiles,
+  };
 }
 
 export async function softDeleteDocument(

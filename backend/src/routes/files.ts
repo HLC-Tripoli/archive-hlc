@@ -3,14 +3,16 @@ import type { Pool } from 'pg';
 import type { AppConfig } from '../config.js';
 import { resolveDocumentAccessScope } from '../lib/access.js';
 import { ApiError } from '../lib/errors.js';
-import { assertPermission } from '../lib/permissions.js';
+import { assertPermission, hasPermission } from '../lib/permissions.js';
 import { isUuid } from '../lib/validation.js';
 import type { AuthGuards } from '../plugins/auth.js';
 import { writeAudit } from '../services/audit.js';
 import type { AttachmentOptimizer } from '../services/optimization/optimizer.js';
 import {
+  archiveFileRow,
   attachmentContentDisposition,
   deleteFileRow,
+  findDuplicateFilesByChecksum,
   getFileWithDocument,
   inlineContentDisposition,
   isInlinePreviewable,
@@ -31,6 +33,15 @@ const ID_PARAMS_SCHEMA = {
   type: 'object',
   required: ['id'],
   properties: { id: { type: 'string', maxLength: 64 } },
+} as const;
+
+const CHECK_DUPLICATE_BODY_SCHEMA = {
+  type: 'object',
+  required: ['checksumSha256'],
+  additionalProperties: false,
+  properties: {
+    checksumSha256: { type: 'string', pattern: '^[0-9a-fA-F]{64}$' },
+  },
 } as const;
 
 /**
@@ -220,6 +231,100 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
     },
   );
 
+  app.post(
+    '/files/check-duplicate',
+    {
+      preHandler: guards.requireAuth,
+      schema: { body: CHECK_DUPLICATE_BODY_SCHEMA },
+    },
+    async (request) => {
+      assertPermission(request.authUser!, 'attach_upload');
+      const access = resolveDocumentAccessScope(request.authUser!);
+      const { checksumSha256 } = request.body as { checksumSha256: string };
+      const duplicates = await findDuplicateFilesByChecksum(pool, checksumSha256, access);
+      return { duplicates };
+    },
+  );
+
+  app.post(
+    '/files/:id/replace',
+    { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
+    async (request, reply) => {
+      const user = request.authUser!;
+      assertPermission(user, 'attach_upload');
+      if (user.role !== 'admin' && !hasPermission(user, 'attach_delete') && !hasPermission(user, 'edit')) {
+        throw new ApiError(403, 'permission_denied', 'ليس لديك صلاحية استبدال المرفق.');
+      }
+      const access = resolveDocumentAccessScope(user);
+      const { id } = request.params as { id: string };
+      if (!isUuid(id)) throw ApiError.notFound('الملف غير موجود.');
+
+      const found = await getFileWithDocument(pool, id, access);
+      if (!found || found.document.deletedAt || found.file.archivedAt) {
+        throw ApiError.notFound('الملف غير موجود.');
+      }
+
+      if (!request.isMultipart()) {
+        throw ApiError.badRequest('invalid_content_type', 'يجب إرسال الملف باستخدام multipart/form-data.');
+      }
+      const data = await request.file();
+      if (!data) {
+        throw ApiError.badRequest('missing_file', 'لم يتم إرسال أي ملف.');
+      }
+
+      const newRecord = await storeAttachment(
+        { pool, storage, config, optimizer, logger: request.log },
+        {
+          documentId: found.document.id,
+          userId: user.id,
+          access,
+          stream: data.file,
+          filename: data.filename,
+          declaredMimeType: data.mimetype,
+        },
+      );
+
+      const archived = await archiveFileRow(pool, id, user.id, 'replaced', newRecord.id);
+      if (!archived) {
+        await storage.deleteObject(newRecord.storageKey).catch(() => undefined);
+        await deleteFileRow(pool, newRecord.id).catch(() => undefined);
+        throw ApiError.notFound('الملف غير موجود.');
+      }
+
+      await writeAudit(
+        pool,
+        {
+          actorUserId: user.id,
+          actorUsername: user.username,
+          action: 'file.replaced',
+          entityType: 'document_file',
+          entityId: newRecord.id,
+          details: {
+            documentId: found.document.id,
+            oldFileId: id,
+            oldName: found.file.originalName,
+            newFileId: newRecord.id,
+            newName: newRecord.originalName,
+            size: newRecord.sizeBytes,
+          },
+        },
+        { ip: request.ip, userAgent: (request.headers['user-agent'] ?? '') || null },
+      );
+
+      reply.code(201);
+      return {
+        file: {
+          id: newRecord.id,
+          originalName: newRecord.originalName,
+          mimeType: newRecord.mimeType,
+          sizeBytes: newRecord.sizeBytes,
+          checksumSha256: newRecord.checksumSha256,
+          createdAt: newRecord.createdAt,
+        },
+      };
+    },
+  );
+
   app.delete(
     '/files/:id',
     { preHandler: guards.requireAuth, schema: { params: ID_PARAMS_SCHEMA } },
@@ -228,18 +333,49 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
       const { id } = request.params as { id: string };
       if (!isUuid(id)) throw ApiError.notFound('الملف غير موجود.');
 
-      // getFileWithDocument يقيّد الموظف بإدارته النشطة؛ المدير عام.
-      // الموظف لا يرى مرفقات مستند محذوف، ويبقى الحذف متاحاً للمدير فقط
-      // في سلة المحذوفات (سلوك إداري قائم).
       const found = await getFileWithDocument(pool, id, access);
-      if (!found) throw ApiError.notFound('الملف غير موجود.');
+      if (!found || found.file.archivedAt) throw ApiError.notFound('الملف غير موجود.');
       if (found.document.deletedAt && !access.isAdmin) {
         throw ApiError.notFound('الملف غير موجود.');
       }
       assertPermission(request.authUser!, 'attach_delete');
+
+      const archived = await archiveFileRow(pool, id, request.authUser!.id, 'removed');
+      if (!archived) throw ApiError.notFound('الملف غير موجود.');
+
+      await writeAudit(
+        pool,
+        {
+          actorUserId: request.authUser!.id,
+          actorUsername: request.authUser!.username,
+          action: 'file.archived',
+          entityType: 'document_file',
+          entityId: id,
+          details: {
+            documentId: found.document.id,
+            name: found.file.originalName,
+            size: found.file.sizeBytes,
+            mimeType: found.file.mimeType,
+          },
+        },
+        { ip: request.ip, userAgent: (request.headers['user-agent'] ?? '') || null },
+      );
+      return { ok: true };
+    },
+  );
+
+  app.delete(
+    '/files/:id/permanent',
+    { preHandler: guards.requireAdmin, schema: { params: ID_PARAMS_SCHEMA } },
+    async (request) => {
+      const access = resolveDocumentAccessScope(request.authUser!);
+      const { id } = request.params as { id: string };
+      if (!isUuid(id)) throw ApiError.notFound('الملف غير موجود.');
+
+      const found = await getFileWithDocument(pool, id, access);
+      if (!found) throw ApiError.notFound('الملف غير موجود.');
       assertSupportedProvider(request, found.file, storage);
 
-      // نحذف الكائن من التخزين أولاً؛ إذا فشل الحذف نُبقي السجل كي لا يبقى الكائن يتيماً.
       await storage.deleteObject(found.file.storageKey);
       const deleted = await deleteFileRow(pool, id);
       if (!deleted) throw ApiError.notFound('الملف غير موجود.');
@@ -249,7 +385,7 @@ export function registerFileRoutes(app: FastifyInstance, deps: FileRoutesDeps): 
         {
           actorUserId: request.authUser!.id,
           actorUsername: request.authUser!.username,
-          action: 'file.deleted',
+          action: 'file.purged',
           entityType: 'document_file',
           entityId: id,
           details: {

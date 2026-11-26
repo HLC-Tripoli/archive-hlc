@@ -192,7 +192,7 @@ export async function collectDocumentsForCsv(
             doc.sender, doc.recipient,
             COALESCE(dep.name, 'غير محددة') AS department,
             doc.notes,
-            (SELECT count(*)::int FROM document_files f WHERE f.document_id = doc.id) AS files_count,
+            (SELECT count(*)::int FROM document_files f WHERE f.document_id = doc.id AND f.archived_at IS NULL) AS files_count,
             doc.created_at
        FROM documents doc
        LEFT JOIN departments dep ON dep.id = doc.department_id

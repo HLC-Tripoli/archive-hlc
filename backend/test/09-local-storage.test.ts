@@ -377,18 +377,22 @@ test('api stores uploads on disk, serves them after a restart, and removes them 
   assert.deepEqual(ready.json(), { status: 'ready', database: true, storage: true });
 
   const admin2 = await loginClient(secondApp, 'admin');
-  const deleted = await apiRequest(secondApp, admin2, 'DELETE', `/files/${uploadedFile.id}`);
+  const archived = await apiRequest(secondApp, admin2, 'DELETE', `/files/${uploadedFile.id}`);
+  assert.equal(archived.statusCode, 200);
+  assert.equal(existsSync(onDiskPath), true);
+
+  const deleted = await apiRequest(secondApp, admin2, 'DELETE', `/files/${uploadedFile.id}/permanent`);
   assert.equal(deleted.statusCode, 200);
   assert.equal(existsSync(onDiskPath), false);
   const remaining = await pool.query('SELECT 1 FROM document_files WHERE id = $1', [uploadedFile.id]);
   assert.equal(remaining.rows.length, 0);
 
   const audit = await pool.query<{ action: string }>(
-    "SELECT action FROM audit_log WHERE action IN ('file.uploaded','file.downloaded','file.deleted') ORDER BY id ASC",
+    "SELECT action FROM audit_log WHERE action IN ('file.uploaded','file.downloaded','file.archived','file.purged') ORDER BY id ASC",
   );
   assert.deepEqual(
     audit.rows.map((entry) => entry.action),
-    ['file.uploaded', 'file.downloaded', 'file.downloaded', 'file.deleted'],
+    ['file.uploaded', 'file.downloaded', 'file.downloaded', 'file.archived', 'file.purged'],
   );
   await secondApp.close();
 });
@@ -420,7 +424,7 @@ test('api refuses downloads and deletions for rows from another storage provider
   assert.equal(download.statusCode, 409);
   assert.equal((download.json() as { error: { code: string } }).error.code, 'unsupported_storage_provider');
 
-  const deleted = await apiRequest(app, admin, 'DELETE', `/files/${legacyFileId}`);
+  const deleted = await apiRequest(app, admin, 'DELETE', `/files/${legacyFileId}/permanent`);
   assert.equal(deleted.statusCode, 409);
   assert.equal((deleted.json() as { error: { code: string } }).error.code, 'unsupported_storage_provider');
 

@@ -83,6 +83,9 @@
     "file.downloaded": "action_file_downloaded",
     "file.viewed": "action_file_viewed",
     "file.deleted": "action_file_deleted",
+    "file.archived": "action_file_archived",
+    "file.replaced": "action_file_replaced",
+    "file.purged": "action_file_purged",
     "user.created": "action_user_created",
     "user.updated": "action_user_updated",
     "user.password_reset": "action_user_password_reset",
@@ -106,6 +109,9 @@
     "file.downloaded": "تنزيل مرفق",
     "file.viewed": "عرض مرفق",
     "file.deleted": "حذف مرفق",
+    "file.archived": "أرشفة مرفق",
+    "file.replaced": "استبدال مرفق",
+    "file.purged": "حذف مرفق نهائياً",
     "user.created": "إنشاء مستخدم",
     "user.updated": "تعديل مستخدم",
     "user.password_reset": "إعادة تعيين كلمة مرور",
@@ -131,7 +137,7 @@
   var LEGACY_DOCUMENTS_KEY = "hl_archive_data_v1";
   var LEGACY_DEPARTMENTS_KEY = "hl_archive_departments_v1";
 
-  var CURRENT_APP_VERSION = "1.0.59";
+  var CURRENT_APP_VERSION = "1.0.60";
 
   var notificationPollTimer = null;
   var updateCheckTimer = null;
@@ -208,6 +214,7 @@
     pendingFiles: [],
     pendingCounter: 0,
     uploadingAttachments: false,
+    replacingFileId: null,
     createTicketAttachment: null,
     replyTicketAttachment: null
   };
@@ -1266,7 +1273,16 @@
     return Boolean(isAdmin() || (hasPermission("attach_delete") && !isDepartmentBlocked()));
   }
 
-  function attachmentActions(file) {
+  function canReplaceAttachments() {
+    return Boolean(
+      !isDepartmentBlocked() &&
+        (isAdmin() ||
+          (hasPermission("attach_upload") &&
+            (hasPermission("attach_delete") || hasPermission("edit"))))
+    );
+  }
+
+  function attachmentActions(file, options) {
     var actions = [];
     var canView = isAdmin() || hasPermission("attach_view");
     if (canView) {
@@ -1285,6 +1301,15 @@
         '<button type="button" class="small-button" data-file-action="download" data-id="' +
           escapeHTML(file.id) +
           '">' + escapeHTML(_t("download")) + '</button>'
+      );
+    }
+    if (options && options.inEditModal && state.editingDocumentId && canReplaceAttachments()) {
+      actions.push(
+        '<button type="button" class="small-button secondary-button" data-file-action="replace" data-id="' +
+          escapeHTML(file.id) +
+          '"' +
+          (state.uploadingAttachments ? " disabled" : "") +
+          '>' + escapeHTML(_t("replace_file")) + '</button>'
       );
     }
     if (canDeleteAttachments()) {
@@ -1543,7 +1568,7 @@
             : "") +
           "</small></div>" +
           '<div class="action-buttons">' +
-          attachmentActions(file) +
+          attachmentActions(file, { inEditModal: Boolean(state.editingDocumentId) }) +
           "</div></div>"
         );
       })
@@ -1764,9 +1789,62 @@
       .join("");
   }
 
-  function addPendingFiles(fileList) {
+  async function computeFileSha256(file) {
+    try {
+      if (
+        typeof crypto === "undefined" ||
+        !crypto.subtle ||
+        typeof crypto.subtle.digest !== "function"
+      ) {
+        return null;
+      }
+      var buf = await file.arrayBuffer();
+      var hashBuffer = await crypto.subtle.digest("SHA-256", buf);
+      var hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray
+        .map(function (b) {
+          return b.toString(16).padStart(2, "0");
+        })
+        .join("");
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async function checkDuplicateAttachment(file) {
+    var checksumSha256 = await computeFileSha256(file);
+    if (!checksumSha256) return true;
+    try {
+      var res = await api.post("/files/check-duplicate", {
+        checksumSha256: checksumSha256
+      });
+      var duplicates = res && Array.isArray(res.duplicates) ? res.duplicates : [];
+      if (!duplicates.length) return true;
+      var lines = duplicates.slice(0, 5).map(function (dup) {
+        return _t("duplicate_match_line", {
+          reference: dup.reference || "—",
+          title: dup.title || dup.fileName || "—"
+        });
+      });
+      if (duplicates.length > 5) {
+        lines.push("...");
+      }
+      var msg =
+        _t("duplicate_file_warning_header", { fileName: file.name }) +
+        "\n" +
+        lines.join("\n") +
+        "\n" +
+        _t("duplicate_file_warning_footer");
+      return await confirmDialog(msg);
+    } catch (error) {
+      return true;
+    }
+  }
+
+  async function addPendingFiles(fileList) {
     var disabledTypesFound = [];
     var oversizedFound = [];
+    var validFiles = [];
     var maxBytes = (state.uploadMaxMb || 25) * 1024 * 1024;
     Array.prototype.slice.call(fileList || []).forEach(function (file) {
       var ext = (file.name.split(".").pop() || "").toLowerCase();
@@ -1778,6 +1856,20 @@
         oversizedFound.push(file.name);
         return;
       }
+      validFiles.push(file);
+    });
+    // تصفير الحقل يسمح باختيار الملف نفسه مرة أخرى دون استبدال القائمة.
+    el("attachmentInput").value = "";
+    if (disabledTypesFound.length) {
+      toast(_t("file_type_disabled_alert", { ext: disabledTypesFound.join(", .") }), "error");
+    }
+    if (oversizedFound.length) {
+      toast("تجاوزت بعض الملفات الحد الأقصى المسموح به (" + (state.uploadMaxMb || 25) + " م.ب): " + oversizedFound.join(", "), "error");
+    }
+    for (var i = 0; i < validFiles.length; i += 1) {
+      var file = validFiles[i];
+      var shouldAttach = await checkDuplicateAttachment(file);
+      if (!shouldAttach) continue;
       state.pendingCounter += 1;
       state.pendingFiles.push({
         key: state.pendingCounter,
@@ -1785,16 +1877,8 @@
         status: "queued",
         error: null
       });
-    });
-    if (disabledTypesFound.length) {
-      toast(_t("file_type_disabled_alert", { ext: disabledTypesFound.join(", .") }), "error");
+      renderPendingAttachments();
     }
-    if (oversizedFound.length) {
-      toast("تجاوزت بعض الملفات الحد الأقصى المسموح به (" + (state.uploadMaxMb || 25) + " م.ب): " + oversizedFound.join(", "), "error");
-    }
-    // تصفير الحقل يسمح باختيار الملف نفسه مرة أخرى دون استبدال القائمة.
-    el("attachmentInput").value = "";
-    renderPendingAttachments();
   }
 
   function removePendingFile(key) {
@@ -1864,11 +1948,11 @@
     }
   }
 
-  function handleAttachmentSelection() {
+  async function handleAttachmentSelection() {
     var input = el("attachmentInput");
     var files = Array.prototype.slice.call(input.files || []);
     if (!files.length) return;
-    addPendingFiles(files);
+    await addPendingFiles(files);
   }
 
   async function submitDocumentForm(event) {
@@ -2017,6 +2101,83 @@
     }
   }
 
+  function triggerReplaceFile(fileId) {
+    if (!state.editingDocumentId || !canReplaceAttachments()) return;
+    if (state.uploadingAttachments) {
+      toast("انتظر انتهاء رفع الملفات قبل استبدال مرفق.", "error");
+      return;
+    }
+    var replaceInput = el("replaceFileInput");
+    if (!replaceInput) return;
+    state.replacingFileId = fileId;
+    replaceInput.value = "";
+    replaceInput.click();
+  }
+
+  async function handleReplaceFileSelection() {
+    var input = el("replaceFileInput");
+    if (!input) return;
+    var file = input.files && input.files[0];
+    input.value = "";
+    var fileId = state.replacingFileId;
+    state.replacingFileId = null;
+    if (!file || !fileId) return;
+
+    var ext = (file.name.split(".").pop() || "").toLowerCase();
+    if (state.activeExtensions && state.activeExtensions.length && !state.activeExtensions.includes(ext)) {
+      toast(_t("file_type_disabled_alert", { ext: ext }), "error");
+      return;
+    }
+    var maxBytes = (state.uploadMaxMb || 25) * 1024 * 1024;
+    if (file.size > maxBytes) {
+      toast("تجاوز الملف الحد الأقصى المسموح به (" + (state.uploadMaxMb || 25) + " م.ب): " + file.name, "error");
+      return;
+    }
+
+    var shouldReplace = await checkDuplicateAttachment(file);
+    if (!shouldReplace) return;
+
+    state.uploadingAttachments = true;
+    if (el("attachmentInput")) el("attachmentInput").disabled = true;
+    var replaceBtn = document.querySelector('#attachmentList [data-file-action="replace"][data-id="' + CSS.escape(String(fileId)) + '"]');
+    if (replaceBtn) setBusy(replaceBtn, true, _t("replacing_file"));
+    try {
+      var formData = new FormData();
+      formData.append("file", file);
+      await api.postForm("/files/" + encodeURIComponent(fileId) + "/replace", formData);
+      toast(_t("file_replaced_success"));
+      if (state.editingDocumentId) await refreshAttachmentList(state.editingDocumentId);
+      if (state.detailDocumentId && el("detailModal").classList.contains("show")) {
+        await openDocumentDetail(state.detailDocumentId);
+      }
+      refreshDocumentsAndStats();
+    } catch (error) {
+      toast(errorMessage(error), "error");
+    } finally {
+      state.uploadingAttachments = false;
+      if (el("attachmentInput")) el("attachmentInput").disabled = !(isAdmin() || hasPermission("attach_upload"));
+      if (replaceBtn) setBusy(replaceBtn, false);
+    }
+  }
+
+  async function purgeArchivedFile(fileId, documentId) {
+    if (!isAdmin()) return;
+    var confirmed = await confirmDialog(_t("confirm_purge_file"));
+    if (!confirmed) return;
+    try {
+      await api.del("/files/" + encodeURIComponent(fileId) + "/permanent");
+      toast(_t("file_purged_success"));
+      var targetDocId = documentId || state.detailDocumentId;
+      var historyPanel = el("detailHistoryPanel");
+      if (historyPanel && targetDocId && state.detailDocumentId === targetDocId) {
+        await loadDocumentHistory(targetDocId, historyPanel, true);
+      }
+      refreshDocumentsAndStats();
+    } catch (error) {
+      toast(errorMessage(error), "error");
+    }
+  }
+
   async function openDirectDocumentPreview(docId) {
     if (!isAdmin() && !hasPermission("attach_view")) {
       toast(window.I18N && window.I18N.getLanguage() === "en" ? "You do not have permission to view attachments." : "ليس لديك صلاحية عرض المرفقات.", "error");
@@ -2135,6 +2296,192 @@
     }
   }
 
+  var HISTORY_FIELD_LABEL_MAP = {
+    reference: "field_ref",
+    sequenceNumber: "field_seq",
+    title: "field_subject",
+    type: "field_type",
+    date: "field_date",
+    sender: "field_sender",
+    recipient: "field_recipient",
+    departmentId: "field_dept",
+    notes: "field_notes"
+  };
+
+  function getHistoryFieldLabel(field) {
+    var key = HISTORY_FIELD_LABEL_MAP[field];
+    return key ? _t(key) : field;
+  }
+
+  function resolveDepartmentNameById(deptId) {
+    if (!deptId) return "—";
+    var list = (state.departments || []).concat(state.userFormDepartments || []);
+    for (var i = 0; i < list.length; i += 1) {
+      if (list[i] && list[i].id === deptId) return list[i].name;
+    }
+    return String(deptId);
+  }
+
+  function formatHistoryFieldValue(field, value) {
+    if (value === null || value === undefined || value === "") return "—";
+    if (field === "date") return formatDate(value);
+    if (field === "type") return getTypeLabel(value);
+    if (field === "departmentId") return resolveDepartmentNameById(value);
+    return String(value);
+  }
+
+  function renderHistoryEventDetails(ev) {
+    var details = ev && ev.details ? ev.details : null;
+    if (!details) return "";
+    if (ev.action === "document.updated" && Array.isArray(details.changes) && details.changes.length) {
+      var rows = details.changes
+        .map(function (change) {
+          var label = getHistoryFieldLabel(change.field);
+          var beforeVal = formatHistoryFieldValue(change.field, change.before);
+          var afterVal = formatHistoryFieldValue(change.field, change.after);
+          return (
+            '<div class="history-diff-row">' +
+            '<span class="history-diff-field">' + escapeHTML(label) + "</span>" +
+            '<div class="history-diff-values">' +
+            '<span class="history-diff-before">' + escapeHTML(beforeVal) + "</span>" +
+            '<span class="history-diff-arrow" aria-hidden="true">→</span>' +
+            '<span class="history-diff-after">' + escapeHTML(afterVal) + "</span>" +
+            "</div></div>"
+          );
+        })
+        .join("");
+      return '<div class="history-diff-list">' + rows + "</div>";
+    }
+    var fileNoteParts = [];
+    if (details.previousName && details.newName) {
+      fileNoteParts.push(details.previousName + " → " + details.newName);
+    } else if (details.originalName || details.filename) {
+      fileNoteParts.push(details.originalName || details.filename);
+    }
+    if (!fileNoteParts.length) return "";
+    return '<div class="history-event-note">' + escapeHTML(fileNoteParts.join(" — ")) + "</div>";
+  }
+
+  function renderArchivedFileActions(file, documentId) {
+    var actions = [];
+    var canView = isAdmin() || hasPermission("attach_view");
+    if (canView) {
+      if (PREVIEWABLE_MIME_TYPES[file.mimeType]) {
+        actions.push(
+          '<button type="button" class="small-button" data-file-action="view" data-id="' +
+            escapeHTML(file.id) +
+            '" data-name="' +
+            escapeHTML(file.originalName || "") +
+            '" data-mime="' +
+            escapeHTML(file.mimeType || "") +
+            '">' + escapeHTML(_t("view")) + "</button>"
+        );
+      }
+      actions.push(
+        '<button type="button" class="small-button" data-file-action="download" data-id="' +
+          escapeHTML(file.id) +
+          '">' + escapeHTML(_t("download")) + "</button>"
+      );
+    }
+    if (isAdmin()) {
+      actions.push(
+        '<button type="button" class="small-button delete-button" data-file-action="purge-file" data-id="' +
+          escapeHTML(file.id) +
+          '" data-doc-id="' +
+          escapeHTML(documentId) +
+          '">' + escapeHTML(_t("purge_file")) + "</button>"
+      );
+    }
+    return actions.join("");
+  }
+
+  function renderDocumentHistoryContent(panel, documentId, data) {
+    var events = data && Array.isArray(data.events) ? data.events : [];
+    var archivedFiles = data && Array.isArray(data.archivedFiles) ? data.archivedFiles : [];
+
+    var eventsHtml = events.length
+      ? '<div class="history-timeline">' +
+        events
+          .map(function (ev) {
+            var actor = ev.actorDisplayName || ev.actorUsername || "—";
+            return (
+              '<div class="history-event-card">' +
+              '<div class="history-event-header">' +
+              '<span class="history-event-action">' + escapeHTML(getActionLabel(ev.action)) + "</span>" +
+              '<span class="history-event-time">' + escapeHTML(formatDateTime(ev.createdAt)) + "</span>" +
+              "</div>" +
+              '<div class="history-event-meta"><span class="history-event-actor">' +
+              escapeHTML(actor) +
+              "</span></div>" +
+              renderHistoryEventDetails(ev) +
+              "</div>"
+            );
+          })
+          .join("") +
+        "</div>"
+      : '<div class="empty">' + escapeHTML(_t("history_events_empty")) + "</div>";
+
+    var archivedHtml = archivedFiles.length
+      ? '<div class="attachment-list">' +
+        archivedFiles
+          .map(function (file) {
+            var isReplaced = file.archivedReason === "replaced";
+            var reasonLabel = isReplaced ? _t("history_reason_replaced") : _t("history_reason_removed");
+            var reasonClass = isReplaced ? "is-replaced" : "is-removed";
+            var uploadedInfo = _t("history_uploaded_info", {
+              date: formatDateTime(file.createdAt),
+              user: file.uploadedByName || "—"
+            });
+            var archivedInfo = _t("history_archived_info", {
+              date: formatDateTime(file.archivedAt),
+              user: file.archivedByName || "—"
+            });
+            return (
+              '<div class="attachment-item history-archived-item">' +
+              '<div class="attachment-meta">' +
+              '<div class="history-archived-title-row">' +
+              "<strong>" + escapeHTML(file.originalName || "—") + "</strong>" +
+              '<span class="history-archived-badge ' + reasonClass + '">' + escapeHTML(reasonLabel) + "</span>" +
+              "</div>" +
+              "<small>" + escapeHTML(formatBytes(file.sizeBytes)) + " — " + escapeHTML(uploadedInfo) + "</small>" +
+              '<span class="history-archived-meta">' + escapeHTML(archivedInfo) + "</span>" +
+              "</div>" +
+              '<div class="action-buttons">' +
+              renderArchivedFileActions(file, documentId) +
+              "</div></div>"
+            );
+          })
+          .join("") +
+        "</div>"
+      : '<div class="empty">' + escapeHTML(_t("history_archived_files_empty")) + "</div>";
+
+    panel.innerHTML =
+      '<div class="history-section">' +
+      '<h3 class="detail-subtitle">' + escapeHTML(_t("history_events_title")) + "</h3>" +
+      eventsHtml +
+      "</div>" +
+      '<div class="history-section">' +
+      '<h3 class="detail-subtitle">' + escapeHTML(_t("history_archived_files_title")) + "</h3>" +
+      archivedHtml +
+      "</div>";
+  }
+
+  async function loadDocumentHistory(documentId, panel, forceReload) {
+    if (!panel) return;
+    if (!forceReload && panel.dataset.loadedFor === String(documentId)) return;
+    renderLoading(panel, _t("history_loading"));
+    try {
+      var data = await api.get("/documents/" + encodeURIComponent(documentId) + "/history");
+      if (state.detailDocumentId !== documentId) return;
+      panel.dataset.loadedFor = String(documentId);
+      renderDocumentHistoryContent(panel, documentId, data);
+    } catch (error) {
+      if (state.detailDocumentId !== documentId) return;
+      delete panel.dataset.loadedFor;
+      renderError(panel, errorMessage(error));
+    }
+  }
+
   async function openDocumentDetail(documentId) {
     var container = el("detailContent");
     state.detailDocumentId = documentId;
@@ -2206,18 +2553,47 @@
                 " — " +
                 escapeHTML(formatDateTime(file.createdAt)) +
                 '</small></div><div class="action-buttons">' +
-                attachmentActions(file) +
+                attachmentActions(file, { inEditModal: false }) +
                 "</div></div>"
               );
             })
             .join("")
         : '<div class="empty">' + escapeHTML(_t("no_attachments")) + '</div>';
       container.innerHTML =
+        '<div class="detail-tabs" role="tablist">' +
+        '<button type="button" class="detail-tab-btn active" role="tab" aria-selected="true" data-detail-tab="details">' +
+        escapeHTML(_t("detail_tab_details")) +
+        "</button>" +
+        '<button type="button" class="detail-tab-btn" role="tab" aria-selected="false" data-detail-tab="history">' +
+        escapeHTML(_t("detail_tab_history")) +
+        "</button>" +
+        "</div>" +
+        '<div id="detailTabPanelDetails" class="detail-tab-panel" role="tabpanel">' +
         '<div class="detail-grid">' +
         details +
         '</div><h3 class="detail-subtitle">' + escapeHTML(_t("attachments_section")) + '</h3><div class="attachment-list">' +
         attachments +
-        "</div>";
+        "</div></div>" +
+        '<div id="detailHistoryPanel" class="detail-tab-panel" role="tabpanel" hidden></div>';
+
+      var tabButtons = container.querySelectorAll("[data-detail-tab]");
+      var detailsPanel = el("detailTabPanelDetails");
+      var historyPanel = el("detailHistoryPanel");
+      tabButtons.forEach(function (tabBtn) {
+        tabBtn.addEventListener("click", function () {
+          var targetTab = tabBtn.dataset.detailTab;
+          tabButtons.forEach(function (btn) {
+            var active = btn.dataset.detailTab === targetTab;
+            btn.classList.toggle("active", active);
+            btn.setAttribute("aria-selected", active ? "true" : "false");
+          });
+          if (detailsPanel) detailsPanel.hidden = targetTab !== "details";
+          if (historyPanel) historyPanel.hidden = targetTab !== "history";
+          if (targetTab === "history") {
+            loadDocumentHistory(documentId, historyPanel, false);
+          }
+        });
+      });
 
       var actions = [];
       if (!deleted && (isAdmin() || hasPermission("share"))) {
@@ -3380,6 +3756,8 @@
       var acceptStr = data.acceptString || "";
       var attInput = el("attachmentInput");
       if (attInput) attInput.accept = acceptStr;
+      var repInput = el("replaceFileInput");
+      if (repInput) repInput.accept = acceptStr;
     } catch (e) {
       /* لا يعيق العمل إن لم يكن المستخدم مسجلاً بعد */
     }
@@ -4336,6 +4714,9 @@
     el("closeDocumentModal").addEventListener("click", closeDocumentModal);
     el("cancelDocumentButton").addEventListener("click", closeDocumentModal);
     el("attachmentInput").addEventListener("change", handleAttachmentSelection);
+    if (el("replaceFileInput")) {
+      el("replaceFileInput").addEventListener("change", handleReplaceFileSelection);
+    }
     el("documentModal").addEventListener("click", function (event) {
       if (event.target === el("documentModal")) closeDocumentModal();
     });
@@ -4534,6 +4915,10 @@
         }
         if (fileButton.dataset.fileAction === "download") downloadFile(fileButton.dataset.id);
         if (fileButton.dataset.fileAction === "delete") deleteFile(fileButton.dataset.id);
+        if (fileButton.dataset.fileAction === "replace") triggerReplaceFile(fileButton.dataset.id);
+        if (fileButton.dataset.fileAction === "purge-file") {
+          purgeArchivedFile(fileButton.dataset.id, fileButton.dataset.docId);
+        }
         return;
       }
       var departmentButton = event.target.closest("[data-dept-action]");

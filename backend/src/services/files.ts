@@ -161,14 +161,118 @@ export async function listFilesForDocument(db: Queryable, documentId: string): P
        FROM document_files f
        LEFT JOIN users uploader ON uploader.id = f.uploaded_by
       WHERE f.document_id = $1
+        AND f.archived_at IS NULL
       ORDER BY f.created_at ASC`,
     [documentId],
   );
   return rows.map(toFileRecord);
 }
 
+export interface ArchivedFileRecord {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: Date;
+  uploadedByName: string | null;
+  archivedAt: Date;
+  archivedByName: string | null;
+  archivedReason: string | null;
+  replacedByFileId: string | null;
+}
+
+export async function listArchivedFilesForDocument(
+  db: Queryable,
+  documentId: string,
+): Promise<ArchivedFileRecord[]> {
+  const { rows } = await db.query<{
+    id: string;
+    original_name: string;
+    mime_type: string;
+    size_bytes: string | number;
+    created_at: Date;
+    uploaded_by_name: string | null;
+    archived_at: Date;
+    archived_by_name: string | null;
+    archived_reason: string | null;
+    replaced_by_file_id: string | null;
+  }>(
+    `SELECT f.id, f.original_name, f.mime_type, f.size_bytes, f.created_at,
+            uploader.display_name AS uploaded_by_name,
+            f.archived_at,
+            archiver.display_name AS archived_by_name,
+            f.archived_reason,
+            f.replaced_by_file_id
+       FROM document_files f
+       LEFT JOIN users uploader ON uploader.id = f.uploaded_by
+       LEFT JOIN users archiver ON archiver.id = f.archived_by
+      WHERE f.document_id = $1
+        AND f.archived_at IS NOT NULL
+      ORDER BY f.archived_at DESC, f.created_at DESC`,
+    [documentId],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    originalName: row.original_name,
+    mimeType: row.mime_type,
+    sizeBytes: Number(row.size_bytes),
+    createdAt: row.created_at,
+    uploadedByName: row.uploaded_by_name,
+    archivedAt: row.archived_at,
+    archivedByName: row.archived_by_name,
+    archivedReason: row.archived_reason,
+    replacedByFileId: row.replaced_by_file_id,
+  }));
+}
+
+export interface DuplicateFileMatch {
+  documentId: string;
+  reference: string | null;
+  title: string | null;
+  type: string;
+  fileName: string;
+}
+
+export async function findDuplicateFilesByChecksum(
+  db: Queryable,
+  checksumSha256: string,
+  access: DocumentAccessScope,
+): Promise<DuplicateFileMatch[]> {
+  const { rows } = await db.query<{
+    document_id: string;
+    reference: string | null;
+    title: string | null;
+    type: string;
+    file_name: string;
+  }>(
+    `SELECT doc.id AS document_id, doc.reference, doc.title, doc.doc_type::text AS type,
+            f.original_name AS file_name
+       FROM document_files f
+       JOIN documents doc ON doc.id = f.document_id
+      WHERE f.archived_at IS NULL
+        AND doc.deleted_at IS NULL
+        AND ($2::boolean OR doc.department_id = $3)
+        AND (f.checksum_sha256 = $1 OR f.original_checksum_sha256 = $1)
+      ORDER BY f.created_at DESC
+      LIMIT 10`,
+    [checksumSha256.toLowerCase(), access.isAdmin, access.departmentId],
+  );
+  return rows.map((row) => ({
+    documentId: row.document_id,
+    reference: row.reference,
+    title: row.title,
+    type: row.type,
+    fileName: row.file_name,
+  }));
+}
+
 export interface StoredFileWithDocument {
-  file: FileRecordPublic & { storageKey: string; storageProvider: string; documentId: string };
+  file: FileRecordPublic & {
+    storageKey: string;
+    storageProvider: string;
+    documentId: string;
+    archivedAt: Date | null;
+  };
   document: { id: string; reference: string; deletedAt: Date | null };
 }
 
@@ -181,11 +285,12 @@ export async function getFileWithDocument(
     storage_key: string;
     storage_provider: string;
     document_id: string;
+    archived_at: Date | null;
     doc_reference: string;
     doc_deleted_at: Date | null;
   }>(
     `SELECT f.id, f.original_name, f.mime_type, f.size_bytes, f.checksum_sha256, f.created_at,
-            f.storage_key, f.storage_provider, f.document_id,
+            f.storage_key, f.storage_provider, f.document_id, f.archived_at,
             uploader.display_name AS uploaded_by_name,
             doc.reference AS doc_reference, doc.deleted_at AS doc_deleted_at
        FROM document_files f
@@ -203,9 +308,29 @@ export async function getFileWithDocument(
       storageKey: row.storage_key,
       storageProvider: row.storage_provider,
       documentId: row.document_id,
+      archivedAt: row.archived_at,
     },
     document: { id: row.document_id, reference: row.doc_reference, deletedAt: row.doc_deleted_at },
   };
+}
+
+export async function archiveFileRow(
+  db: Queryable,
+  fileId: string,
+  userId: string,
+  reason: 'removed' | 'replaced',
+  replacedByFileId: string | null = null,
+): Promise<boolean> {
+  const result = await db.query(
+    `UPDATE document_files
+        SET archived_at = now(),
+            archived_by = $2,
+            archived_reason = $3,
+            replaced_by_file_id = $4
+      WHERE id = $1 AND archived_at IS NULL`,
+    [fileId, userId, reason, replacedByFileId],
+  );
+  return (result.rowCount ?? 0) > 0;
 }
 
 export async function deleteFileRow(db: Queryable, fileId: string): Promise<boolean> {
@@ -290,6 +415,7 @@ export async function storeAttachment(
   const candidatePath = candidatePathFor(tempPath, extension);
   let selectedPath = tempPath;
   let optimized = false;
+  let originalChecksum: string | null = null;
   let size = 0;
 
   try {
@@ -354,6 +480,7 @@ export async function storeAttachment(
             deadline,
           });
           if (validation.valid) {
+            originalChecksum = await hashFile(tempPath);
             selectedPath = candidatePath;
             optimized = true;
             deps.logger?.debug(
@@ -381,6 +508,7 @@ export async function storeAttachment(
     }
     const finalSize = finalInfo.size;
     const checksum = await hashFile(selectedPath);
+    const resolvedOriginalChecksum = originalChecksum ?? checksum;
 
     await deps.storage.putObject(storageKey, createReadStream(selectedPath), {
       contentType: mimeType,
@@ -390,12 +518,13 @@ export async function storeAttachment(
     try {
       const { rows } = await deps.pool.query<{ id: string; created_at: Date }>(
         `INSERT INTO document_files
-           (document_id, original_name, mime_type, size_bytes, checksum_sha256, storage_provider, storage_key, uploaded_by, created_at)
-         SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9
+           (document_id, original_name, mime_type, size_bytes, checksum_sha256, original_checksum_sha256,
+            storage_provider, storage_key, uploaded_by, created_at)
+         SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
            FROM documents doc
           WHERE doc.id = $1
             AND doc.deleted_at IS NULL
-            AND ($10::boolean OR doc.department_id = $11)
+            AND ($11::boolean OR doc.department_id = $12)
          RETURNING id, created_at`,
         [
           input.documentId,
@@ -403,6 +532,7 @@ export async function storeAttachment(
           mimeType,
           finalSize,
           checksum,
+          resolvedOriginalChecksum,
           deps.storage.name,
           storageKey,
           input.userId,

@@ -63,6 +63,7 @@ test('schema is created from scratch, applied once, and migrations are idempoten
     '0011_system_settings_and_support_tickets.sql',
     '0012_notifications.sql',
     '0013_ticket_message_attachments.sql',
+    '0014_file_versions_and_history.sql',
   ]);
 
   const { rows } = await pool.query<{ table_name: string }>(
@@ -155,6 +156,7 @@ test('schema is created from scratch, applied once, and migrations are idempoten
     '0011_system_settings_and_support_tickets.sql',
     '0012_notifications.sql',
     '0013_ticket_message_attachments.sql',
+    '0014_file_versions_and_history.sql',
   ]);
 });
 
@@ -191,6 +193,7 @@ test('employee-number migration preserves existing users and leaves their number
       '0011_system_settings_and_support_tickets.sql',
       '0012_notifications.sql',
       '0013_ticket_message_attachments.sql',
+      '0014_file_versions_and_history.sql',
     ]);
 
     const preserved = await pool.query<{
@@ -289,6 +292,7 @@ test('department migration preserves existing departments, users, documents, and
       '0011_system_settings_and_support_tickets.sql',
       '0012_notifications.sql',
       '0013_ticket_message_attachments.sql',
+      '0014_file_versions_and_history.sql',
     ]);
 
     const preserved = await pool.query<{
@@ -386,6 +390,7 @@ test('sequence-number migration preserves existing documents and files and leave
       '0011_system_settings_and_support_tickets.sql',
       '0012_notifications.sql',
       '0013_ticket_message_attachments.sql',
+      '0014_file_versions_and_history.sql',
     ]);
 
     const preserved = await pool.query<{

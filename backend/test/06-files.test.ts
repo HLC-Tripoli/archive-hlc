@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test, { after, before, beforeEach } from 'node:test';
 import {
   apiRequest,
@@ -227,26 +228,72 @@ test('attachments cannot be added to deleted documents', async () => {
   assert.equal((response.json() as { error: { code: string } }).error.code, 'deleted_document');
 });
 
-test('employees may delete attachments on editable documents in their department; admins manage globally', async () => {
+test('DELETE /files/:id soft-archives attachments while DELETE /files/:id/permanent purges them (admin only)', async () => {
   const documentId = await createDocument('FILE-6');
   const first = await uploadFile(documentId, 'scan.png', 'image/png', PNG_BYTES);
   const firstId = (first.json() as { file: { id: string } }).file.id;
 
-  const employeeDelete = await apiRequest(context.app, employeeClient, 'DELETE', `/files/${firstId}`);
-  assert.equal(employeeDelete.statusCode, 200, employeeDelete.body);
+  const employeeArchive = await apiRequest(context.app, employeeClient, 'DELETE', `/files/${firstId}`);
+  assert.equal(employeeArchive.statusCode, 200, employeeArchive.body);
+  // Storage object and DB row are preserved in soft-archive
+  assert.equal(context.storage.objects.size, 1);
+
+  const archivedRow = await context.pool.query<{
+    archived_at: Date | null;
+    archived_reason: string | null;
+  }>('SELECT archived_at, archived_reason FROM document_files WHERE id = $1', [firstId]);
+  assert.equal(archivedRow.rows.length, 1);
+  assert.ok(archivedRow.rows[0]!.archived_at);
+  assert.equal(archivedRow.rows[0]!.archived_reason, 'removed');
+
+  // Active filesCount drops to 0
+  const detailAfterArchive = await apiRequest(context.app, employeeClient, 'GET', `/documents/${documentId}`);
+  assert.equal(detailAfterArchive.statusCode, 200);
+  const docBody = detailAfterArchive.json() as { document: { files: unknown[]; filesCount: number } };
+  assert.equal(docBody.document.filesCount, 0);
+  assert.equal(docBody.document.files.length, 0);
+
+  // Archived file remains downloadable and viewable, and appears in document history
+  const archivedDownload = await apiRequest(context.app, employeeClient, 'GET', `/files/${firstId}/download`);
+  assert.equal(archivedDownload.statusCode, 200);
+  assert.ok(archivedDownload.rawPayload.equals(PNG_BYTES));
+
+  const archivedView = await apiRequest(context.app, employeeClient, 'GET', `/files/${firstId}/view`);
+  assert.equal(archivedView.statusCode, 200);
+
+  const history = await apiRequest(context.app, employeeClient, 'GET', `/documents/${documentId}/history`);
+  assert.equal(history.statusCode, 200, history.body);
+  const historyBody = history.json() as {
+    archivedFiles: Array<{ id: string; archivedReason: string | null; originalName: string }>;
+  };
+  assert.equal(historyBody.archivedFiles.length, 1);
+  assert.equal(historyBody.archivedFiles[0]!.id, firstId);
+  assert.equal(historyBody.archivedFiles[0]!.archivedReason, 'removed');
+  assert.equal(historyBody.archivedFiles[0]!.originalName, 'scan.png');
+
+  // Re-archiving an already archived file returns 404
+  const doubleArchive = await apiRequest(context.app, adminClient, 'DELETE', `/files/${firstId}`);
+  assert.equal(doubleArchive.statusCode, 404);
+
+  // Employee cannot permanently delete
+  const empPermanent = await apiRequest(context.app, employeeClient, 'DELETE', `/files/${firstId}/permanent`);
+  assert.equal(empPermanent.statusCode, 403);
+
+  // Admin permanently purges the file
+  const adminPermanent = await apiRequest(context.app, adminClient, 'DELETE', `/files/${firstId}/permanent`);
+  assert.equal(adminPermanent.statusCode, 200, adminPermanent.body);
   assert.equal(context.storage.objects.size, 0);
 
-  const rows = await context.pool.query('SELECT 1 FROM document_files');
-  assert.equal(rows.rows.length, 0);
+  const rowsAfterPurge = await context.pool.query('SELECT 1 FROM document_files WHERE id = $1', [firstId]);
+  assert.equal(rowsAfterPurge.rows.length, 0);
 
-  const second = await uploadFile(documentId, 'second.png', 'image/png', PNG_BYTES);
-  const secondId = (second.json() as { file: { id: string } }).file.id;
-  const adminDelete = await apiRequest(context.app, adminClient, 'DELETE', `/files/${secondId}`);
-  assert.equal(adminDelete.statusCode, 200, adminDelete.body);
-  assert.equal(context.storage.objects.size, 0);
-
-  const audit = await context.pool.query("SELECT 1 FROM audit_log WHERE action = 'file.deleted'");
-  assert.equal(audit.rows.length, 2);
+  const audit = await context.pool.query<{ action: string }>(
+    "SELECT action FROM audit_log WHERE action IN ('file.archived', 'file.purged') ORDER BY id ASC",
+  );
+  assert.deepEqual(
+    audit.rows.map((row) => row.action),
+    ['file.archived', 'file.purged'],
+  );
 });
 
 test('anonymous users cannot download files; deleted documents hide files from employees only', async () => {
@@ -308,4 +355,128 @@ test('attachment permissions enforce granular view, upload, and delete checks', 
 
   const deniedDelete = await apiRequest(context.app, restrictedClient, 'DELETE', `/files/${fileId}`);
   assert.equal(deniedDelete.statusCode, 403);
+});
+
+test('POST /files/:id/replace replaces active attachment, archives old version, and logs file.replaced', async () => {
+  const documentId = await createDocument('FILE-REPLACE-1');
+  const original = await uploadFile(documentId, 'v1.png', 'image/png', PNG_BYTES);
+  assert.equal(original.statusCode, 201, original.body);
+  const oldFileId = (original.json() as { file: { id: string } }).file.id;
+
+  const pdfBytes = Buffer.from('%PDF-1.4\n%v2\n%%EOF\n');
+  const fixture = multipartFixture({
+    filename: 'v2.pdf',
+    contentType: 'application/pdf',
+    content: pdfBytes,
+  });
+  const replaced = await apiRequest(context.app, employeeClient, 'POST', `/files/${oldFileId}/replace`, {
+    payload: fixture.payload,
+    headers: fixture.headers,
+  });
+  assert.equal(replaced.statusCode, 201, replaced.body);
+  const newFile = (replaced.json() as { file: { id: string; originalName: string } }).file;
+  assert.equal(newFile.originalName, 'v2.pdf');
+  assert.notEqual(newFile.id, oldFileId);
+
+  // Both objects are stored; only the new file is active on the document
+  assert.equal(context.storage.objects.size, 2);
+  const detail = await apiRequest(context.app, employeeClient, 'GET', `/documents/${documentId}`);
+  assert.equal(detail.statusCode, 200);
+  const detailDoc = (detail.json() as {
+    document: { filesCount: number; files: Array<{ id: string; originalName: string }> };
+  }).document;
+  assert.equal(detailDoc.filesCount, 1);
+  assert.equal(detailDoc.files.length, 1);
+  assert.equal(detailDoc.files[0]!.id, newFile.id);
+  assert.equal(detailDoc.files[0]!.originalName, 'v2.pdf');
+
+  // Old file is archived with replacedByFileId & archivedReason = 'replaced'
+  const history = await apiRequest(context.app, employeeClient, 'GET', `/documents/${documentId}/history`);
+  assert.equal(history.statusCode, 200, history.body);
+  const archivedFiles = (history.json() as {
+    archivedFiles: Array<{
+      id: string;
+      originalName: string;
+      archivedReason: string | null;
+      replacedByFileId: string | null;
+    }>;
+  }).archivedFiles;
+  assert.equal(archivedFiles.length, 1);
+  assert.equal(archivedFiles[0]!.id, oldFileId);
+  assert.equal(archivedFiles[0]!.originalName, 'v1.png');
+  assert.equal(archivedFiles[0]!.archivedReason, 'replaced');
+  assert.equal(archivedFiles[0]!.replacedByFileId, newFile.id);
+
+  // Old file remains downloadable
+  const oldDownload = await apiRequest(context.app, employeeClient, 'GET', `/files/${oldFileId}/download`);
+  assert.equal(oldDownload.statusCode, 200);
+  assert.ok(oldDownload.rawPayload.equals(PNG_BYTES));
+
+  const audit = await context.pool.query("SELECT 1 FROM audit_log WHERE action = 'file.replaced'");
+  assert.equal(audit.rows.length, 1);
+});
+
+test('POST /files/check-duplicate detects active SHA-256 matches, enforces department isolation, and ignores archived/deleted', async () => {
+  const uniqueBytes = Buffer.from('%PDF-1.4\n%unique-dup-check\n%%EOF\n');
+  const sha256 = createHash('sha256').update(uniqueBytes).digest('hex');
+
+  const docId = await createDocument('FILE-DUP-1');
+  const uploaded = await uploadFile(docId, 'contract.pdf', 'application/pdf', uniqueBytes);
+  assert.equal(uploaded.statusCode, 201, uploaded.body);
+  const fileId = (uploaded.json() as { file: { id: string } }).file.id;
+
+  // Same department employee finds the duplicate
+  const sameDeptCheck = await apiRequest(context.app, employeeClient, 'POST', '/files/check-duplicate', {
+    payload: { checksumSha256: sha256 },
+  });
+  assert.equal(sameDeptCheck.statusCode, 200, sameDeptCheck.body);
+  const sameMatches = (sameDeptCheck.json() as {
+    duplicates: Array<{ documentId: string; reference: string; title: string; type: string; fileName: string }>;
+  }).duplicates;
+  assert.equal(sameMatches.length, 1);
+  assert.equal(sameMatches[0]!.documentId, docId);
+  assert.equal(sameMatches[0]!.reference, 'FILE-DUP-1');
+  assert.equal(sameMatches[0]!.fileName, 'contract.pdf');
+
+  // Other department employee does NOT see it; admin sees it globally
+  const otherDept = await apiRequest(context.app, adminClient, 'POST', '/departments', {
+    payload: { name: 'إدارة أخرى للفحص' },
+  });
+  assert.equal(otherDept.statusCode, 201, otherDept.body);
+  const otherDeptId = (otherDept.json() as { department: { id: string } }).department.id;
+  await createTestUser(context.pool, {
+    username: 'dup-other-emp',
+    role: 'employee',
+    departmentId: otherDeptId,
+    permissions: ['view', 'create', 'attach_upload'],
+  });
+  const otherEmpClient = await loginClient(context.app, 'dup-other-emp');
+  const otherCheck = await apiRequest(context.app, otherEmpClient, 'POST', '/files/check-duplicate', {
+    payload: { checksumSha256: sha256 },
+  });
+  assert.equal(otherCheck.statusCode, 200);
+  assert.equal((otherCheck.json() as { duplicates: unknown[] }).duplicates.length, 0);
+
+  const adminCheck = await apiRequest(context.app, adminClient, 'POST', '/files/check-duplicate', {
+    payload: { checksumSha256: sha256 },
+  });
+  assert.equal(adminCheck.statusCode, 200);
+  assert.equal((adminCheck.json() as { duplicates: unknown[] }).duplicates.length, 1);
+
+  // Soft-deleted document is ignored even for admin
+  await apiRequest(context.app, adminClient, 'DELETE', `/documents/${docId}`);
+  const deletedDocCheck = await apiRequest(context.app, adminClient, 'POST', '/files/check-duplicate', {
+    payload: { checksumSha256: sha256 },
+  });
+  assert.equal(deletedDocCheck.statusCode, 200);
+  assert.equal((deletedDocCheck.json() as { duplicates: unknown[] }).duplicates.length, 0);
+
+  // Restore document, then archive the file -> archived file is ignored
+  await apiRequest(context.app, adminClient, 'POST', `/documents/${docId}/restore`);
+  await apiRequest(context.app, employeeClient, 'DELETE', `/files/${fileId}`);
+  const archivedCheck = await apiRequest(context.app, employeeClient, 'POST', '/files/check-duplicate', {
+    payload: { checksumSha256: sha256 },
+  });
+  assert.equal(archivedCheck.statusCode, 200);
+  assert.equal((archivedCheck.json() as { duplicates: unknown[] }).duplicates.length, 0);
 });
