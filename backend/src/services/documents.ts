@@ -85,14 +85,43 @@ export interface DocumentListFilters {
   pageSize: number;
 }
 
-const SORT_EXPRESSIONS: Record<DocumentListFilters['sort'], string> = {
+const SORT_EXPRESSIONS: Record<Exclude<DocumentListFilters['sort'], 'sequenceNumber'>, string> = {
   date: 'doc.transaction_date',
   createdAt: 'doc.created_at',
   updatedAt: 'doc.updated_at',
   reference: 'lower(doc.reference)',
-  sequenceNumber: 'lower(doc.sequence_number)',
   title: 'lower(doc.title)',
 };
+
+function buildOrderBy(
+  sort: DocumentListFilters['sort'],
+  order: DocumentListFilters['order'],
+): string {
+  const direction = order === 'asc' ? 'ASC' : 'DESC';
+  if (sort === 'sequenceNumber') {
+    // فرز طبيعي لرقم التسلسل مع إبقاء القيم الفارغة في النهاية دائماً تصاعدياً وتنازلياً.
+    return [
+      'CASE WHEN doc.sequence_number IS NULL THEN 1 ELSE 0 END ASC',
+      `COALESCE(
+        (
+          SELECT string_agg(
+            CASE
+              WHEN m[1] IS NOT NULL THEN '0' || lpad(length(coalesce(nullif(ltrim(m[1], '0'), ''), '0'))::text, 4, '0') || coalesce(nullif(ltrim(m[1], '0'), ''), '0')
+              ELSE '1' || lower(m[2])
+            END,
+            ''
+          )
+          FROM regexp_matches(doc.sequence_number, '([0-9]+)|([^0-9]+)', 'g') AS m
+        ),
+        ''
+      ) COLLATE "C" ${direction}`,
+      `lower(doc.sequence_number) ${direction} NULLS LAST`,
+      'doc.id ASC',
+    ].join(', ');
+  }
+  const sortExpression = SORT_EXPRESSIONS[sort];
+  return `${sortExpression} ${direction} NULLS LAST, doc.id ASC`;
+}
 
 interface DocumentListRow {
   id: string;
@@ -206,15 +235,14 @@ export async function listDocuments(
     params,
   );
 
-  const sortExpression = SORT_EXPRESSIONS[filters.sort];
-  const direction = filters.order === 'asc' ? 'ASC' : 'DESC';
+  const orderBy = buildOrderBy(filters.sort, filters.order);
   const limit = addParam(filters.pageSize);
   const offset = addParam((filters.page - 1) * filters.pageSize);
 
   const { rows } = await pool.query<DocumentListRow>(
     `${LIST_SELECT}
      ${where}
-     ORDER BY ${sortExpression} ${direction} NULLS LAST, doc.id ASC
+     ORDER BY ${orderBy}
      LIMIT ${limit} OFFSET ${offset}`,
     params,
   );

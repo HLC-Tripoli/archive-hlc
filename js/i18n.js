@@ -132,8 +132,8 @@
       sort_created_desc: "تاريخ التسجيل (الأحدث)",
       sort_updated_desc: "آخر تعديل",
       sort_ref_asc: "الرقم الاشاري",
-      sort_seq_asc: "رقم التسلسل (من A إلى Z)",
-      sort_seq_desc: "رقم التسلسل (من Z إلى A)",
+      sort_seq_asc: "رقم التسلسل (تصاعدي)",
+      sort_seq_desc: "رقم التسلسل (تنازلي)",
       sort_title_asc: "موضوع الرسالة",
       show_deleted: "إظهار المحذوفة",
 
@@ -669,8 +669,8 @@
       sort_created_desc: "Registration Date (Newest)",
       sort_updated_desc: "Last Modified",
       sort_ref_asc: "Reference Number",
-      sort_seq_asc: "Sequence Number (A to Z)",
-      sort_seq_desc: "Sequence Number (Z to A)",
+      sort_seq_asc: "Sequence Number (Ascending)",
+      sort_seq_desc: "Sequence Number (Descending)",
       sort_title_asc: "Subject",
       show_deleted: "Show Deleted",
 

@@ -263,6 +263,30 @@ test('sequence number is optional text and survives create/edit/read/search/sort
     date: '2026-02-04',
   });
 
+  await createDocument({
+    reference: 'SEQ-011',
+    sequenceNumber: '2',
+    title: 'رقم غير مسبوق بأصفار 2',
+    type: 'incoming',
+    date: '2026-02-05',
+  });
+
+  await createDocument({
+    reference: 'SEQ-012',
+    sequenceNumber: '10',
+    title: 'رقم غير مسبوق بأصفار 10',
+    type: 'incoming',
+    date: '2026-02-06',
+  });
+
+  await createDocument({
+    reference: 'SEQ-013',
+    sequenceNumber: '136',
+    title: 'رقم غير مسبوق بأصفار 136',
+    type: 'outgoing',
+    date: '2026-02-07',
+  });
+
   const bySequence = await apiRequest(context.app, employeeClient, 'GET', '/documents?q=0012');
   const bySequenceBody = bySequence.json() as { items: Array<{ reference: string }>; total: number };
   assert.equal(bySequenceBody.total, 1);
@@ -279,8 +303,12 @@ test('sequence number is optional text and survives create/edit/read/search/sort
   );
   const sortedBody = sorted.json() as { items: Array<{ reference: string; sequenceNumber: string | null }> };
   assert.deepEqual(
+    sortedBody.items.map((item) => item.sequenceNumber),
+    ['2', '0007', '10', '0012/A', '136', null],
+  );
+  assert.deepEqual(
     sortedBody.items.map((item) => item.reference),
-    ['SEQ-010', 'SEQ-001', 'SEQ-002'],
+    ['SEQ-011', 'SEQ-010', 'SEQ-012', 'SEQ-001', 'SEQ-013', 'SEQ-002'],
   );
 
   const sortedDesc = await apiRequest(
@@ -293,8 +321,12 @@ test('sequence number is optional text and survives create/edit/read/search/sort
     items: Array<{ reference: string; sequenceNumber: string | null }>;
   };
   assert.deepEqual(
+    sortedDescBody.items.map((item) => item.sequenceNumber),
+    ['136', '0012/A', '10', '0007', '2', null],
+  );
+  assert.deepEqual(
     sortedDescBody.items.map((item) => item.reference),
-    ['SEQ-001', 'SEQ-010', 'SEQ-002'],
+    ['SEQ-013', 'SEQ-001', 'SEQ-012', 'SEQ-010', 'SEQ-011', 'SEQ-002'],
   );
 
   const cleared = await apiRequest(context.app, employeeClient, 'PATCH', `/documents/${padded.id}`, {
